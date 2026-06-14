@@ -7,21 +7,28 @@ from fpdf import FPDF
 
 
 def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
+    import os
     FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
+    USE_UNICODE = os.path.exists(FONT_PATH)
 
     def _s(v):
-        return str(v or "").replace("—", "-").replace("–", "-").replace("—", "-")
+        text = str(v or "").replace("—", "-").replace("–", "-").replace("—", "-")
+        if not USE_UNICODE:
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+        return text
 
     pdf = FPDF()
-    pdf.add_font("Arial", "", FONT_PATH)
-    pdf.add_font("Arial", "B", FONT_PATH)
+    if USE_UNICODE:
+        pdf.add_font("Arial", "", FONT_PATH)
+        pdf.add_font("Arial", "B", FONT_PATH)
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
+    FNORM = "Arial" if USE_UNICODE else "Helvetica"
     titulo = "PEDIDO SIMPLIFICADO" if simplificado else "PEDIDO DE COMPRA"
-    pdf.set_font("Arial", "B", 14)
+    pdf.set_font(FNORM, "B", 14)
     pdf.cell(0, 8, titulo, ln=True, align="C")
-    pdf.set_font("Arial", "", 10)
+    pdf.set_font(FNORM, "", 10)
     pdf.cell(0, 6, f"Fornecedor: {_s(fornecedor)}    Data: {data_ped}", ln=True, align="C")
     pdf.ln(4)
 
@@ -34,13 +41,13 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
         heads  = ["Fornecedor", "Produto", "Variacao", "Obs.", "Qtd", "Custo", "Total"]
         widths = [28, 48, 38, 28, 12, 18, 18]
 
-    pdf.set_font("Arial", "B", 9)
+    pdf.set_font(FNORM, "B", 9)
     pdf.set_fill_color(220, 220, 220)
     for h, w in zip(heads, widths):
         pdf.cell(w, 7, h, border=1, fill=True)
     pdf.ln()
 
-    pdf.set_font("Arial", "", 8)
+    pdf.set_font(FNORM, "", 8)
     fill = False
     pdf.set_fill_color(245, 245, 245)
     for _, row in df_ped.iterrows():
@@ -57,7 +64,7 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 
     if not simplificado:
         total_geral = df_ped["total"].sum()
-        pdf.set_font("Arial", "B", 9)
+        pdf.set_font(FNORM, "B", 9)
         pdf.cell(0, 7,
                  f"TOTAL ESTIMADO: R${total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
                  ln=True, align="R")
