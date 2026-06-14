@@ -1,0 +1,6 @@
+cache_produtos*.json
+disponibilidade_lojas.json
+custos_tipo.json
+listas/
+.streamlit/secrets.toml
+__pycache__/
