@@ -74,6 +74,87 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 st.set_page_config(page_title="Sistema de Estoque", page_icon="📦", layout="wide")
 
 # ──────────────────────────────────────────────
+# CSS Global
+# ──────────────────────────────────────────────
+st.markdown("""
+<style>
+/* ── fonte base menor em mobile ── */
+html, body, [class*="css"] { font-size: 14px; }
+
+/* ── título principal compacto ── */
+h1 { font-size: 1.4rem !important; margin-bottom: 0.2rem !important; }
+h2 { font-size: 1.15rem !important; }
+h3 { font-size: 1rem !important; }
+
+/* ── tabs: fonte menor, sem overflow horizontal ── */
+.stTabs [data-baseweb="tab-list"] { flex-wrap: wrap; gap: 2px; }
+.stTabs [data-baseweb="tab"] {
+    font-size: 0.72rem !important;
+    padding: 6px 10px !important;
+    white-space: nowrap;
+}
+
+/* ── botões menores ── */
+.stButton > button {
+    font-size: 0.8rem !important;
+    padding: 0.3rem 0.8rem !important;
+    border-radius: 6px !important;
+}
+
+/* ── inputs e selects compactos ── */
+.stTextInput input, .stSelectbox select,
+.stNumberInput input, .stTextArea textarea {
+    font-size: 0.82rem !important;
+    padding: 0.3rem 0.5rem !important;
+}
+
+/* ── dataframe: fonte menor, scroll horizontal ── */
+.stDataFrame { overflow-x: auto; }
+.stDataFrame table { font-size: 0.75rem !important; }
+
+/* ── sidebar compacta ── */
+[data-testid="stSidebar"] { min-width: 200px !important; }
+[data-testid="stSidebar"] .stButton > button { font-size: 0.75rem !important; padding: 0.25rem 0.5rem !important; }
+
+/* ── cards de métrica ── */
+[data-testid="stMetric"] {
+    background: #1e2130;
+    border-radius: 8px;
+    padding: 10px 14px !important;
+}
+
+/* ── login card ── */
+.login-card {
+    background: #1e2130;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 360px;
+    margin: 4rem auto;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+.login-logo {
+    text-align: center;
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+.login-titulo {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #cdd6f4;
+}
+
+/* ── mobile: esconde sidebar por padrão nos pequenos ── */
+@media (max-width: 640px) {
+    h1 { font-size: 1.1rem !important; }
+    .stTabs [data-baseweb="tab"] { font-size: 0.65rem !important; padding: 5px 7px !important; }
+    .stButton > button { font-size: 0.72rem !important; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
 # Login
 # ──────────────────────────────────────────────
 TODAS_ABAS = [
@@ -92,14 +173,17 @@ if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
 if st.session_state.usuario_logado is None:
-    st.title("📦 Sistema de Estoque — Loja de Acessórios")
-    st.divider()
-    col_login, _, _ = st.columns([1, 1, 1])
+    st.markdown("""
+    <div class="login-card">
+      <div class="login-logo">📦</div>
+      <div class="login-titulo">Sistema de Estoque</div>
+    </div>
+    """, unsafe_allow_html=True)
+    _, col_login, _ = st.columns([1, 1.2, 1])
     with col_login:
-        st.subheader("🔐 Login")
         with st.form("form_login"):
-            usuario_input = st.text_input("Usuário")
-            senha_input   = st.text_input("Senha", type="password")
+            usuario_input = st.text_input("👤 Usuário")
+            senha_input   = st.text_input("🔒 Senha", type="password")
             entrar = st.form_submit_button("Entrar", use_container_width=True)
         if entrar:
             u = usuario_input.strip().lower()
@@ -119,20 +203,21 @@ _abas_permitidas = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
 _nome_usuario    = _user_data.get("nome", _user)
 _is_admin        = _setor == "admin"
 
-st.title("📦 Sistema de Estoque — Loja de Acessórios")
+setor_label = api.SETORES.get(_setor, {}).get("label", _setor)
+col_titulo, col_user = st.columns([5, 1])
+col_titulo.markdown("### 📦 Sistema de Estoque")
+col_user.markdown(f"<div style='text-align:right;font-size:0.78rem;padding-top:6px'>👤 {_nome_usuario}<br><span style='color:#888'>{setor_label}</span></div>", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
 # Sidebar
 # ──────────────────────────────────────────────
 with st.sidebar:
-    setor_label = api.SETORES.get(_setor, {}).get("label", _setor)
-    st.markdown(f"👤 **{_nome_usuario}**")
-    st.caption(f"Setor: {setor_label}")
+    st.markdown(f"**{_nome_usuario}** · `{setor_label}`")
     if st.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
     st.divider()
-    st.header("🏪 Loja ativa")
+    st.markdown("**🏪 Loja ativa**")
     loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
     loja_sel_nome = st.selectbox("Selecionar loja:", list(loja_opcoes.keys()), key="loja_ativa")
     loja_id = loja_opcoes[loja_sel_nome]
