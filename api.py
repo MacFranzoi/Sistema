@@ -82,6 +82,8 @@ _SETORES_PADRAO = {
 }
 
 def carregar_setores():
+    if not os.path.exists(SETORES_FILE):
+        _gh_baixar_arquivo("setores.json", SETORES_FILE)
     if os.path.exists(SETORES_FILE):
         try:
             with open(SETORES_FILE, encoding="utf-8") as f:
@@ -91,8 +93,10 @@ def carregar_setores():
     return json.loads(json.dumps(_SETORES_PADRAO))
 
 def salvar_setores(setores):
+    conteudo = json.dumps(setores, ensure_ascii=False, indent=2)
     with open(SETORES_FILE, "w", encoding="utf-8") as f:
-        json.dump(setores, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    _gh_push_arquivo("setores.json", conteudo, "Atualiza setores")
 
 SETORES = carregar_setores()
 
@@ -146,6 +150,9 @@ def revogar_sessao(token):
     _salvar_sessoes(sessoes)
 
 def carregar_usuarios():
+    # Tenta puxar do GitHub se o arquivo local não existe
+    if not os.path.exists(USUARIOS_FILE):
+        _gh_baixar_arquivo("usuarios.json", USUARIOS_FILE)
     if os.path.exists(USUARIOS_FILE):
         with open(USUARIOS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -153,8 +160,10 @@ def carregar_usuarios():
     return dict(USUARIOS_PADRAO)
 
 def salvar_usuarios(usuarios):
+    conteudo = json.dumps(usuarios, ensure_ascii=False, indent=2)
     with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
-        json.dump(usuarios, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",
@@ -448,20 +457,23 @@ def _gh_listar_listas():
         pass
     return []
 
-def _gh_baixar_lista(nome_arquivo):
-    """Baixa conteúdo de uma lista do GitHub e salva localmente."""
+def _gh_baixar_arquivo(gh_path, destino_local):
+    """Baixa qualquer arquivo do GitHub e salva localmente."""
     try:
-        r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/listas/{nome_arquivo}",
+        r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
                          headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
         if r.status_code == 200:
             conteudo = base64.b64decode(r.json()["content"]).decode()
-            destino = os.path.join(DIR_LISTAS, nome_arquivo)
-            with open(destino, "w", encoding="utf-8") as f:
+            with open(destino_local, "w", encoding="utf-8") as f:
                 f.write(conteudo)
             return True
     except Exception:
         pass
     return False
+
+def _gh_baixar_lista(nome_arquivo):
+    """Baixa conteúdo de uma lista do GitHub e salva localmente."""
+    return _gh_baixar_arquivo(f"listas/{nome_arquivo}", os.path.join(DIR_LISTAS, nome_arquivo))
 
 def sincronizar_listas_do_github():
     """Puxa do GitHub todos os arquivos de lista que não existem localmente (ou são mais antigos)."""
