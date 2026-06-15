@@ -1775,7 +1775,8 @@ if _pg == "pedido":
     }
     # Kits que não têm cores predefinidas → viram avulso com descrição "Aparelho / Kit"
     _WPP_KITS_AVULSO = {"carteira", "película", "pelicula", "couro", "clear", "transparente",
-                         "vidro", "anti-impacto", "anti impacto", "capinha", "outro"}
+                         "vidro", "anti-impacto", "anti impacto", "capinha", "strass",
+                         "avulso cor", "outro"}
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
         st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
@@ -1795,6 +1796,54 @@ if _pg == "pedido":
                 with st.spinner("Analisando com IA…"):
                     import json as _json, re as _re, os as _os
 
+                    # ── Pré-processamento do texto do WhatsApp ──────────
+                    def _preprocessar_wpp(txt):
+                        """Remove timestamps/nomes e anota contexto de seção."""
+                        linhas_proc = []
+                        _secao = ""  # marca seção atual (Space, Transparente, Motorola, Apple…)
+                        for _ln in txt.splitlines():
+                            _ln = _ln.strip()
+                            if not _ln:
+                                continue
+                            # Remove "[dd/mm/aaaa, hh:mm:ss] Nome:" do início
+                            _ln = _re.sub(r'^\[\d{1,2}/\d{1,2}/\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*[^:]+:\s*', '', _ln).strip()
+                            if not _ln:
+                                continue
+                            # Detecta cabeçalho de seção (linha sem "-" ou "/" que seja só marca/tipo)
+                            _ln_low = _ln.lower().strip().rstrip(':')
+                            if _ln_low in ("motorola","samsung","apple","iphone","xiaomi","poco","realme","space","space 2","transparente","transparente básica","transparente basica"):
+                                _secao = _ln_low
+                                linhas_proc.append(f"[SEÇÃO: {_ln}]")
+                                continue
+                            # Expande modelos com barra: "A36/56" → duas linhas
+                            _slash_m = _re.match(r'^([A-Za-z]+)(\d+)/(\d+)(.*)$', _ln)
+                            if _slash_m:
+                                _pfx, _n1, _n2, _rest = _slash_m.groups()
+                                linhas_proc.append(f"{_pfx}{_n1}{_rest}")
+                                linhas_proc.append(f"{_pfx}{_n2}{_rest}")
+                                continue
+                            # Expande "Edge 60 / 60 fusion" → duas linhas
+                            _edge_m = _re.match(r'^(Edge\s*\d+)\s*/\s*(\d+\s*\w*)(.*)$', _ln, _re.I)
+                            if _edge_m:
+                                _e1, _e2, _rest = _edge_m.groups()
+                                linhas_proc.append(f"{_e1}{_rest}")
+                                linhas_proc.append(f"Edge {_e2}{_rest}")
+                                continue
+                            # Prefixo de seção nas linhas (ajuda a IA)
+                            if _secao in ("space","space 2"):
+                                linhas_proc.append(f"[Space] {_ln}")
+                            elif _secao in ("transparente","transparente básica","transparente basica"):
+                                linhas_proc.append(f"[Transparente] {_ln}")
+                            elif _secao == "motorola":
+                                linhas_proc.append(f"[Motorola] {_ln}")
+                            elif _secao in ("apple","iphone"):
+                                linhas_proc.append(f"[Apple] {_ln}")
+                            else:
+                                linhas_proc.append(_ln)
+                        return "\n".join(linhas_proc)
+
+                    _texto_proc = _preprocessar_wpp(wpp_texto)
+
                     _prods_all = cache.get("produtos", [])
                     _catalogo_txt = "\n".join(
                         f"{_p.get('codigo_interno','')} | {_p.get('nome','')}"
@@ -1806,13 +1855,22 @@ if _pg == "pedido":
                     _prompt = f"""Você é assistente de compras de uma loja de capas para celular no Brasil.
 As pessoas anotam os modelos com abreviações e erros de digitação. Seu trabalho é identificar o modelo correto.
 
-Pedido recebido no WhatsApp:
-{wpp_texto}
+Pedido recebido (pré-processado — timestamps e nomes removidos, modelos com barra já expandidos):
+{_texto_proc}
 
 Catálogo de aparelhos (cod_interno | nome):
 {_catalogo_txt}
 
 Kits disponíveis: {_kits_disponiveis}
+
+SEÇÕES ESPECIAIS — linhas prefixadas pelo pré-processador:
+- "[Space] modelo +N" → kit="brilho", quantidade=N (ex: "[Space] 15 +5" = iPhone 15, brilho, qtd 5)
+- "[Space] modelo +N" sem marca → iPhone
+- "[Transparente] modelo N" → kit="transparente", quantidade=N (ex: "[Transparente] A07 5" = Samsung A07, transparente, qtd 5)
+- "[Motorola] modelo kits" → prefixe o modelo com "Motorola" se não tiver marca
+- "[Apple] modelo kits" → é iPhone
+- "[SEÇÃO: X]" → linha de cabeçalho, ignore (não gere entrada)
+- Cores específicas mencionadas isoladas (ex: "laranja", "azul marinho", "branca com prata", "strass") → kit="avulso cor" com a cor na descrição
 
 ABREVIAÇÕES DE MODELOS — decodifique antes de buscar:
 Motorola EDGE: "Ed"/"ED"/"edge" + número = EDGE [número]. Exemplos:
@@ -1846,10 +1904,12 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "magsafe/mag safe/ms" → "magsafe"
   "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
   "div masc/diversos masc/dm" → "diversos masculino"
-  "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (será criado como avulso)
+  "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (avulso)
   "película/pelicula/peliculas/pel" → "película"  (avulso)
   "couro/leather" → "couro"  (avulso)
-  "clear/transparente/cristal" → "clear"  (avulso)
+  "clear/transparente/cristal/básica/basica/transparente básica" → "transparente"  (avulso)
+  "strass/pedras/brilhinho" → "strass"  (avulso)
+  Cor específica isolada (ex: "laranja", "azul marinho", "branca com prata") → kit="avulso cor", use a cor na descrição
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
@@ -1868,8 +1928,10 @@ POSTURA — REGRA ABSOLUTA:
 - Kit ambíguo → prefira "masculino".
 - Nunca escreva justificativas — apenas processe.
 
+Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
+
 Retorne SOMENTE JSON válido, sem markdown:
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
 
                     try:
                         _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -1931,9 +1993,10 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
                                 _kit  = (_entry.get("kit") or "").lower()
                                 _conf = _entry.get("confianca", "baixa")
-                                _excluir = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
-                                _nao_comp = _entry.get("nao_compreendido", False)
-                                _motivo   = _entry.get("motivo", "")
+                                _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
+                                _qtd_fixa  = _entry.get("quantidade_fixa")
+                                _nao_comp  = _entry.get("nao_compreendido", False)
+                                _motivo    = _entry.get("motivo", "")
 
                                 if _nao_comp or not _kit:
                                     _nao_compreendidos.append(
@@ -1955,7 +2018,8 @@ Retorne SOMENTE JSON válido, sem markdown:
                                         "_custo": 0.0,
                                         "Aparelho": _nome_av, "Kit": _kit.title(),
                                         "Variação": f"⚠ {_desc_av}",
-                                        "Qtd": 1, "Status": "⚠",
+                                        "Qtd": int(_qtd_fixa) if _qtd_fixa else 1,
+                                        "Status": "⚠",
                                         "_desc_avulso": _desc_av,
                                     })
                                     continue
@@ -1982,6 +2046,9 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 _nome = _prod_obj.get("nome", _nome)
 
                                 for _cor, _qtd in _cores_kit:
+                                    # quantidade_fixa sobrepõe a qtd do kit (ex: Space +5)
+                                    if _qtd_fixa:
+                                        _qtd = int(_qtd_fixa)
                                     # Aplica exclusões ("menos preta" → pula "preto"/"preta")
                                     _cor_lower = (_cor if isinstance(_cor, str) else " ".join(_cor)).lower()
                                     if any(_ex in _cor_lower or _cor_lower in _ex for _ex in _excluir):
