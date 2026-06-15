@@ -1827,10 +1827,13 @@ Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
-POSTURA: seja agressivo na interpretação. Tente SEMPRE encontrar o modelo e o kit mais provável.
-Só marque nao_compreendido: true se for absolutamente impossível identificar (linha em branco, spam, emoji isolado).
-Quando o kit for ambíguo, prefira "masculino". Quando o modelo for ambíguo, escolha o mais próximo do catálogo e use confianca "media".
-NUNCA deixe de processar uma linha por falta de certeza — adivinhe com confianca "baixa" se necessário.
+POSTURA — REGRA ABSOLUTA: NUNCA marque nao_compreendido: true por falta de certeza sobre o modelo.
+- Se o modelo não existir exatamente no catálogo, use o cod_interno mais próximo disponível e coloque confianca "baixa".
+- "Realme C85" não existe → use REALMEC75 (mais próximo) com confianca "baixa". É melhor errar e o usuário corrigir do que omitir.
+- "F7" não reconhecido → tente variações: Moto G F7, Galaxy F7, ou qualquer F7 no catálogo. Se não houver nenhum F7, use o modelo mais parecido e confianca "baixa".
+- Kit ambíguo → prefira "masculino" com confianca "baixa".
+- nao_compreendido: true SOMENTE para linhas completamente ilegíveis (ex: "asdfgh", emoji puro, linha em branco).
+- Nunca escreva justificativas ou peça confirmação — apenas escolha o mais próximo e processe.
 
 Retorne SOMENTE JSON válido, sem markdown:
 [{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
