@@ -178,20 +178,22 @@ a, button {{ transition: all 0.15s ease !important; }}
 }}
 .sb-logo-text {{ font-size: 0.9rem; font-weight: 700; color: {TXT}; }}
 
-/* selectbox loja — força cor no dark */
-[data-testid="stSidebar"] [data-testid="stSelectbox"] {{
-    margin: 0 !important; padding: 0 !important; flex-shrink: 0;
-}}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div,
-[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div > div {{
-    border-radius: 0 !important; border: none !important;
-    border-bottom: 1px solid {BOR} !important;
+/* botão toggle da loja ativa */
+[data-testid="stSidebar"] button[data-testid="baseButton-secondary"][key="loja_toggle"] {{
     background: {SB2} !important;
-    padding: 8px 16px !important;
-    font-size: 0.82rem !important; font-weight: 500 !important;
+    border: none !important; border-bottom: 1px solid {BOR} !important;
+    border-radius: 0 !important; width: 100% !important;
+    padding: 9px 14px !important; text-align: left !important;
+    font-size: 0.84rem !important; font-weight: 600 !important;
     color: {TXT} !important;
 }}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] svg {{ color: {TXT2} !important; fill: {TXT2} !important; }}
+/* opções da loja — levemente indentadas */
+[data-testid="stSidebar"] button[key^="loja_opt_"] {{
+    font-size: 0.82rem !important; font-weight: 500 !important;
+    color: {TXT2} !important; padding: 6px 20px !important;
+    border-radius: 6px !important; margin: 1px 6px !important;
+    width: calc(100% - 12px) !important;
+}}
 
 /* todos os botões da sidebar */
 [data-testid="stSidebar"] .stButton > button {{
@@ -599,10 +601,42 @@ with st.sidebar:
         st.session_state.pagina = "dashboard"
         st.rerun()
 
-    # Seletor de loja
-    loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
-    loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
-    loja_id = loja_opcoes[loja_sel_nome]
+    # Seletor de loja — botões inline
+    if "loja_ativa_id" not in st.session_state:
+        st.session_state.loja_ativa_id = None   # None = todas
+    loja_id = st.session_state.loja_ativa_id
+    loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Todas as lojas")
+
+    # card da loja atual — abre/fecha o picker
+    if "loja_picker" not in st.session_state:
+        st.session_state.loja_picker = False
+
+    _icon_loja = "🏪"
+    st.markdown(f"""
+    <div style="border-bottom:1px solid {BOR};padding:8px 14px 6px">
+      <div style="font-size:0.58rem;font-weight:600;letter-spacing:1px;
+                  text-transform:uppercase;color:{TXT2};margin-bottom:4px">Loja ativa</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button(f"{_icon_loja}  {loja_sel_nome}  {'▴' if st.session_state.loja_picker else '▾'}",
+                 key="loja_toggle", use_container_width=True):
+        st.session_state.loja_picker = not st.session_state.loja_picker
+        st.rerun()
+
+    if st.session_state.loja_picker:
+        opcoes = [("Todas as lojas", None)] + [(n, lid) for lid, n in api.LOJAS.items()]
+        for nome_op, lid_op in opcoes:
+            ativo_op = loja_id == lid_op
+            if st.button(
+                f"{'●' if ativo_op else '○'}  {nome_op}",
+                key=f"loja_opt_{lid_op or 'all'}",
+                use_container_width=True
+            ):
+                st.session_state.loja_ativa_id = lid_op
+                st.session_state.loja_picker = False
+                st.rerun()
+        st.markdown(f"<hr style='margin:4px 0;border-color:{BOR}'>", unsafe_allow_html=True)
 
     # ── Menu colapsável ──
     _pg_ativo = st.session_state.pagina
@@ -664,6 +698,9 @@ with st.sidebar:
           padding-left:9px!important;border-radius:6px!important;`;
         return;
       }}
+      // botão loja toggle ou opção — não mexe
+      if (t.includes('▴') || t.includes('▾') && t.includes('●') === false && t[0] !== '▾') return;
+      if (t.startsWith('●') || t.startsWith('○')) return;
       // item normal — limpa override anterior
       if (btn.style.cssText && !btn.closest('[data-testid="stForm"]')) {{
         btn.style.cssText = '';
