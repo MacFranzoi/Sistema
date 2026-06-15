@@ -3841,34 +3841,37 @@ if _pg == "listas":
 
     # ── Mesclar ─────────────────────────────────────────────────────────
     st.markdown("---")
-    with st.expander("💥 Mesclar duas listas em uma nova"):
-        if len(_gl_todas) < 2:
-            st.info("Precisa de pelo menos 2 listas para mesclar.")
-        else:
-            _mc1, _mc2 = st.columns(2)
-            _gl_ma_i = _mc1.selectbox(
-                "Lista A:", range(len(_gl_todas)),
-                format_func=lambda i: f"{_TIPOS_BADGE.get(_gl_todas[i].get('tipo',''), '📋')} {_gl_todas[i]['nome']}",
-                key="gl_mescla_a"
-            )
-            _gl_mb_i = _mc2.selectbox(
-                "Lista B:", range(len(_gl_todas)),
-                format_func=lambda i: f"{_TIPOS_BADGE.get(_gl_todas[i].get('tipo',''), '📋')} {_gl_todas[i]['nome']}",
-                key="gl_mescla_b"
-            )
-            _gl_nome_mescla = st.text_input("Nome da nova lista:", key="gl_mescla_nome", placeholder="ex: Pedido completo 15/06")
-            if st.button("💥 Mesclar", key="gl_mescla_btn"):
-                if _gl_ma_i == _gl_mb_i:
-                    st.error("Selecione duas listas diferentes.")
-                elif not _gl_nome_mescla.strip():
-                    st.error("Digite um nome para a nova lista.")
-                else:
-                    _gl_la = _gl_todas[_gl_ma_i]
-                    _gl_lb = _gl_todas[_gl_mb_i]
-                    api.mesclar_listas(_gl_la["_arquivo"], _gl_lb["_arquivo"], _gl_nome_mescla.strip())
-                    _tot = len(_gl_la.get("itens", [])) + len(_gl_lb.get("itens", []))
-                    st.success(f"✅ **{_gl_nome_mescla}** criada com {_tot} itens!")
-                    st.rerun()
+    st.markdown("### 💥 Criar nova lista a partir de outras")
+    if len(_gl_todas) < 2:
+        st.info("Precisa de pelo menos 2 listas para mesclar.")
+    else:
+        _gl_opcoes_mescla = [
+            f"{_TIPOS_BADGE.get(l.get('tipo',''), '📋')} {l['nome']} ({len(l.get('itens',[]))} itens)"
+            for l in _gl_todas
+        ]
+        _gl_selecionadas = st.multiselect(
+            "Selecione 2 ou mais listas para combinar:",
+            options=range(len(_gl_todas)),
+            format_func=lambda i: _gl_opcoes_mescla[i],
+            key="gl_mescla_sel"
+        )
+        _gl_nome_mescla = st.text_input("Nome da nova lista:", key="gl_mescla_nome", placeholder="ex: Pedido completo 15/06")
+        _total_itens = sum(len(_gl_todas[i].get("itens", [])) for i in _gl_selecionadas)
+        if _gl_selecionadas:
+            st.caption(f"Total: **{_total_itens} itens** de {len(_gl_selecionadas)} lista(s)")
+        if st.button("💥 Criar lista combinada", key="gl_mescla_btn", type="primary"):
+            if len(_gl_selecionadas) < 2:
+                st.error("Selecione pelo menos 2 listas.")
+            elif not _gl_nome_mescla.strip():
+                st.error("Digite um nome para a nova lista.")
+            else:
+                _itens_combinados = []
+                for _i in _gl_selecionadas:
+                    _itens_combinados += _gl_todas[_i].get("itens", [])
+                _tipo_base = _gl_todas[_gl_selecionadas[0]].get("tipo", "pedido")
+                api.salvar_lista(_gl_nome_mescla.strip(), _tipo_base, _itens_combinados)
+                st.success(f"✅ **{_gl_nome_mescla}** criada com {len(_itens_combinados)} itens!")
+                st.rerun()
 
 
 # ══════════════════════════════════════════════
