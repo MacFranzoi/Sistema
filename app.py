@@ -1797,52 +1797,102 @@ if _pg == "pedido":
                     import json as _json, re as _re, os as _os
 
                     # ── Pré-processamento do texto do WhatsApp ──────────
-                    def _preprocessar_wpp(txt):
-                        """Remove timestamps/nomes e anota contexto de seção."""
-                        linhas_proc = []
-                        _secao = ""  # marca seção atual (Space, Transparente, Motorola, Apple…)
-                        for _ln in txt.splitlines():
-                            _ln = _ln.strip()
-                            if not _ln:
-                                continue
-                            # Remove "[dd/mm/aaaa, hh:mm:ss] Nome:" do início
-                            _ln = _re.sub(r'^\[\d{1,2}/\d{1,2}/\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*[^:]+:\s*', '', _ln).strip()
-                            if not _ln:
-                                continue
-                            # Detecta cabeçalho de seção (linha sem "-" ou "/" que seja só marca/tipo)
-                            _ln_low = _ln.lower().strip().rstrip(':')
-                            if _ln_low in ("motorola","samsung","apple","iphone","xiaomi","poco","realme","space","space 2","transparente","transparente básica","transparente basica"):
-                                _secao = _ln_low
-                                linhas_proc.append(f"[SEÇÃO: {_ln}]")
-                                continue
-                            # Expande modelos com barra: "A36/56" → duas linhas
-                            _slash_m = _re.match(r'^([A-Za-z]+)(\d+)/(\d+)(.*)$', _ln)
-                            if _slash_m:
-                                _pfx, _n1, _n2, _rest = _slash_m.groups()
-                                linhas_proc.append(f"{_pfx}{_n1}{_rest}")
-                                linhas_proc.append(f"{_pfx}{_n2}{_rest}")
-                                continue
-                            # Expande "Edge 60 / 60 fusion" → duas linhas
-                            _edge_m = _re.match(r'^(Edge\s*\d+)\s*/\s*(\d+\s*\w*)(.*)$', _ln, _re.I)
-                            if _edge_m:
-                                _e1, _e2, _rest = _edge_m.groups()
-                                linhas_proc.append(f"{_e1}{_rest}")
-                                linhas_proc.append(f"Edge {_e2}{_rest}")
-                                continue
-                            # Prefixo de seção nas linhas (ajuda a IA)
-                            if _secao in ("space","space 2"):
-                                linhas_proc.append(f"[Space] {_ln}")
-                            elif _secao in ("transparente","transparente básica","transparente basica"):
-                                linhas_proc.append(f"[Transparente] {_ln}")
-                            elif _secao == "motorola":
-                                linhas_proc.append(f"[Motorola] {_ln}")
-                            elif _secao in ("apple","iphone"):
-                                linhas_proc.append(f"[Apple] {_ln}")
-                            else:
-                                linhas_proc.append(_ln)
-                        return "\n".join(linhas_proc)
+                    _SECOES_MARCA   = {"motorola","samsung","apple","iphone","xiaomi","poco","realme"}
+                    _SECOES_SPACE   = {"space","space 2"}
+                    _SECOES_TRANSP  = {"transparente","transparente básica","transparente basica",
+                                       "transparente básica pedido","transparente basica pedido"}
 
-                    _texto_proc = _preprocessar_wpp(wpp_texto)
+                    def _strip_wpp_linha(ln):
+                        """Remove timestamp e nome do WhatsApp."""
+                        return _re.sub(
+                            r'^\[\d{1,2}/\d{1,2}/\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*[^:]+:\s*',
+                            '', ln
+                        ).strip()
+
+                    def _expandir_barra(ln, marca=""):
+                        """Expande 'A36/56 kits' → ['A36 kits','A56 kits']; 'Edge 60 / 60 fusion...' → duas."""
+                        # "Edge 60 / 60 fusion" ou "Edge 60/60fusion"
+                        m = _re.match(r'^(Edge\s*\d+)\s*/\s*(\d+\s*\w*)(.*)$', ln, _re.I)
+                        if m:
+                            e1, e2, rest = m.groups()
+                            return [f"{e1.strip()}{rest}", f"Edge {e2.strip()}{rest}"]
+                        # "A36/56", "G67/77", "7/8" etc.
+                        m = _re.match(r'^([A-Za-z]*)(\d+)/(\d+)(.*)$', ln)
+                        if m:
+                            pfx, n1, n2, rest = m.groups()
+                            p = marca + " " if marca else pfx
+                            return [f"{pfx or marca}{n1}{rest}", f"{pfx or marca}{n2}{rest}"]
+                        return [ln]
+
+                    # Resultado separado: linhas para IA vs avulsos diretos (space/transparente)
+                    _linhas_ia      = []   # vão para o prompt da IA
+                    _avulsos_diretos = []  # criados diretamente sem IA
+
+                    _secao    = ""
+                    _marca    = ""  # Samsung / Motorola / Apple etc.
+
+                    for _ln_raw in wpp_texto.splitlines():
+                        _ln = _strip_wpp_linha(_ln_raw).strip()
+                        if not _ln:
+                            continue
+
+                        _ln_low = _ln.lower().strip().rstrip(':').strip()
+
+                        # Detecta seção
+                        if _ln_low in _SECOES_MARCA:
+                            _secao = "marca"; _marca = _ln_low; continue
+                        if _ln_low in _SECOES_SPACE:
+                            _secao = "space"; continue
+                        if _ln_low in _SECOES_TRANSP:
+                            _secao = "transparente"; continue
+                        # Linha que começa com marca como cabeçalho
+                        if _ln_low in ("motorola","samsung","apple","iphone"):
+                            _secao = "marca"; _marca = _ln_low; continue
+
+                        # ── Seção SPACE: "modelo +N" → brilho avulso direto ──
+                        if _secao == "space":
+                            for _exp in _expandir_barra(_ln):
+                                _m_sp = _re.match(r'^(.+?)\s*\+\s*(\d+)\s*$', _exp.strip())
+                                if _m_sp:
+                                    _mod_sp, _qtd_sp = _m_sp.group(1).strip(), int(_m_sp.group(2))
+                                    # Infere marca: se não tem letra → iPhone
+                                    _nome_sp = _mod_sp if _re.search(r'[A-Za-z]', _mod_sp) else f"iPhone {_mod_sp}"
+                                    _avulsos_diretos.append({
+                                        "desc": f"{_nome_sp} / Space 2",
+                                        "qtd":  _qtd_sp,
+                                        "kit":  "space 2",
+                                    })
+                            continue
+
+                        # ── Seção TRANSPARENTE: "modelo N" → transparente avulso direto ──
+                        if _secao == "transparente":
+                            for _exp in _expandir_barra(_ln, _marca):
+                                _m_tr = _re.match(r'^(.+?)\s+(\d+)\s*$', _exp.strip())
+                                if _m_tr:
+                                    _mod_tr, _qtd_tr = _m_tr.group(1).strip(), int(_m_tr.group(2))
+                                    # Adiciona marca se não tiver
+                                    if _marca == "motorola" and not _re.search(r'edge|moto', _mod_tr, _re.I):
+                                        _mod_tr = f"Motorola {_mod_tr}"
+                                    elif _marca == "apple" and not _re.search(r'ip|iphone', _mod_tr, _re.I):
+                                        _mod_tr = f"iPhone {_mod_tr}"
+                                    _avulsos_diretos.append({
+                                        "desc": f"{_mod_tr} / Transparente",
+                                        "qtd":  _qtd_tr,
+                                        "kit":  "transparente",
+                                    })
+                            continue
+
+                        # ── Seção normal: expande barras e envia para IA ──
+                        _expandidas = _expandir_barra(_ln)
+                        for _exp in _expandidas:
+                            if _marca in ("motorola",) and not _re.search(r'edge|moto|motorola', _exp, _re.I):
+                                _linhas_ia.append(f"[Motorola] {_exp}")
+                            elif _marca in ("apple","iphone") and not _re.search(r'ip|iphone|apple', _exp, _re.I):
+                                _linhas_ia.append(f"[Apple] {_exp}")
+                            else:
+                                _linhas_ia.append(_exp)
+
+                    _texto_proc = "\n".join(_linhas_ia)
 
                     _prods_all = cache.get("produtos", [])
                     _catalogo_txt = "\n".join(
@@ -2086,6 +2136,22 @@ Retorne SOMENTE JSON válido, sem markdown:
                                         "Qtd":      _qtd,
                                         "Status":   "✓" if _encontrado else "⚠",
                                     })
+
+                            # Injeta avulsos diretos (Space / Transparente) parseados sem IA
+                            for _av in _avulsos_diretos:
+                                _linhas_expandidas.append({
+                                    "✓": False,
+                                    "_cod": "", "_nome": _av["desc"],
+                                    "_kit": _av["kit"], "_conf": "alta",
+                                    "_achado": False, "_avulso_auto": True, "_obs": "",
+                                    "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                    "Aparelho": _av["desc"],
+                                    "Kit": _av["kit"].title(),
+                                    "Variação": f"⚠ {_av['desc']}",
+                                    "Qtd": _av["qtd"],
+                                    "Status": "⚠",
+                                    "_desc_avulso": _av["desc"],
+                                })
 
                             st.session_state["wpp_expandido"]      = _linhas_expandidas
                             st.session_state["wpp_nao_comp"] = _nao_compreendidos
