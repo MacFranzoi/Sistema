@@ -2705,6 +2705,92 @@ Retorne SOMENTE JSON válido, sem markdown:
                     st.success(f"✅ Lista atualizada!")
             painel_salvar(todos_itens_ped, "pedido", key_suffix="ped")
 
+            # ── Exportação filtrada por tipo de variação ───────────────
+            with st.expander("🔽 Exportar por tipo de variação", expanded=False):
+                # Detecta tipos a partir das variações presentes no pedido
+                def _tipo_variacao(nome_var):
+                    """Classifica a variação em tipo (para filtro de exportação)."""
+                    v = (nome_var or "").lower()
+                    if "very rio" in v or ("silicone" in v and "magsafe" not in v and "119" not in v):
+                        return "Very Rio / Silicone"
+                    if "aveludada" in v:
+                        return "Aveludada"
+                    if "magsafe" in v or "119" in v:
+                        return "MagSafe"
+                    if "brilho" in v or ("diversos" in v and "59" in v):
+                        return "Brilho / Diversos"
+                    if "diversos" in v:
+                        return "Diversos"
+                    if "carteira" in v:
+                        return "Carteira"
+                    if "transparente" in v:
+                        return "Transparente"
+                    if "película" in v or "pelicula" in v or "vidro" in v:
+                        return "Película / Vidro"
+                    if "strass" in v:
+                        return "Strass"
+                    if "couro" in v:
+                        return "Couro"
+                    if "clear" in v:
+                        return "Clear"
+                    if "space" in v:
+                        return "Space"
+                    if not nome_var or nome_var.strip() == "":
+                        return "Avulso / Sem tipo"
+                    return "Outros"
+
+                _df_ped_tipos = df_ped.copy()
+                _df_ped_tipos["_tipo_var"] = _df_ped_tipos["variacao_nome"].apply(_tipo_variacao)
+                _tipos_presentes = sorted(_df_ped_tipos["_tipo_var"].unique().tolist())
+
+                _tipos_selecionados = st.multiselect(
+                    "Tipos de variação para exportar:",
+                    options=_tipos_presentes,
+                    default=_tipos_presentes,
+                    key="export_tipos",
+                )
+
+                _df_filtrado = _df_ped_tipos[_df_ped_tipos["_tipo_var"].isin(_tipos_selecionados)].drop(columns=["_tipo_var"])
+                st.caption(f"{len(_df_filtrado)} de {len(df_ped)} itens selecionados")
+
+                _col_ex1, _col_ex2, _col_ex3 = st.columns(3)
+                with _col_ex1:
+                    _buf_filt = io.BytesIO()
+                    for _c, _dv in [("estoque_atual", 0), ("observacao", ""), ("fornecedor", "—"),
+                                    ("variacao_nome", ""), ("valor_custo", "0.00")]:
+                        if _c not in _df_filtrado.columns:
+                            _df_filtrado[_c] = _dv
+                    _df_exp_filt = _df_filtrado[["fornecedor", "cod_interno", "produto_nome", "variacao_nome",
+                                                  "observacao", "estoque_atual", "quantidade", "valor_custo", "total"]].copy()
+                    _df_exp_filt.columns = ["Fornecedor", "Cód.", "Produto", "Variação",
+                                             "Obs.", "Estoque", "Pedir", "Custo Unit.", "Total Est."]
+                    with pd.ExcelWriter(_buf_filt, engine="openpyxl") as _wr:
+                        _df_exp_filt.to_excel(_wr, index=False, sheet_name="Pedido")
+                    _buf_filt.seek(0)
+                    st.download_button("📥 Excel filtrado", data=_buf_filt,
+                                       file_name=f"pedido_filtrado_{data_pedido}.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True, key="dl_filt_excel")
+                with _col_ex2:
+                    _buf_filt_s = io.BytesIO()
+                    _df_simp_filt = _df_filtrado[["produto_nome", "variacao_nome", "observacao", "quantidade"]].copy()
+                    _df_simp_filt.columns = ["Produto", "Variação", "Obs.", "Qtd"]
+                    with pd.ExcelWriter(_buf_filt_s, engine="openpyxl") as _wr:
+                        _df_simp_filt.to_excel(_wr, index=False, sheet_name="Pedido")
+                    _buf_filt_s.seek(0)
+                    st.download_button("📄 Excel simples filtrado", data=_buf_filt_s,
+                                       file_name=f"pedido_simples_filtrado_{data_pedido}.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True, key="dl_filt_simples")
+                with _col_ex3:
+                    if st.button("📋 Texto filtrado", use_container_width=True, key="txt_filt"):
+                        _linhas_f = [f"PEDIDO FILTRADO — {fornecedor_global or '—'} — {data_pedido}", "=" * 50]
+                        for _, _r in _df_filtrado.iterrows():
+                            _obs_f = str(_r.get("observacao", "")).strip()
+                            _obs_s = f" | {_obs_f}" if _obs_f else ""
+                            _linhas_f.append(f"{_r['produto_nome']} | {_r['variacao_nome']}{_obs_s} | {int(_r['quantidade'])} un")
+                        st.text_area("Copie:", "\n".join(_linhas_f), height=180, key="txt_filt_area")
+
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
             # linha de exportação simplificada (produto / variação / qtd)
             col_s1, col_s2, col_s3, col_s4 = st.columns(4)
