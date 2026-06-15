@@ -3671,7 +3671,7 @@ if _pg == "usuarios":
         st.markdown(f"**Editando:** {_setor_obj['label']}")
 
         _c_nome, _c_del = st.columns([4, 1])
-        _novo_label = _c_nome.text_input("Nome do setor", value=_setor_obj["label"], key="setor_label_edit")
+        _novo_label = _c_nome.text_input("Nome do setor", value=_setor_obj["label"], key=f"setor_label_{_setor_sel_key}")
 
         # Excluir setor (não admin)
         if _setor_sel_key != "admin":
