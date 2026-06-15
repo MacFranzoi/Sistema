@@ -1731,6 +1731,138 @@ if _pg == "etiquetas":
 if _pg == "pedido":
     st.subheader("Pedido de Compra ao Fornecedor")
 
+    # ── Importação via WhatsApp + IA ──────────────────────────────
+    with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Cole abaixo o texto copiado do WhatsApp com os modelos e tipos de capa. A IA vai gerar um pré-pedido para revisão.</p>", unsafe_allow_html=True)
+        wpp_texto = st.text_area(
+            "Texto do WhatsApp",
+            placeholder="Poco x3 - masculino e brilho\nX6- brilho\nNote13pro4g- feminino e masculino",
+            height=160, key="wpp_input", label_visibility="collapsed"
+        )
+        col_ia1, col_ia2 = st.columns([3, 1])
+        qtd_padrao = col_ia1.number_input("Qtd padrão por variação", min_value=1, max_value=99, value=1, key="wpp_qtd")
+        gerar = col_ia2.button("✨ Gerar pré-pedido", type="primary", use_container_width=True, key="wpp_gerar")
+
+        if gerar and wpp_texto.strip():
+            if not cache:
+                st.warning("Sincronize os produtos primeiro.")
+            else:
+                with st.spinner("Analisando com IA…"):
+                    # Monta catálogo resumido para contexto
+                    prods = cache.get("produtos", [])
+                    linhas_cat = []
+                    for p in prods[:300]:  # limita contexto
+                        cod = p.get("codigo_interno", "")
+                        nome = p.get("nome", "")
+                        variacoes = [v.get("variacao", v).get("nome", "") for v in p.get("variacoes", [])]
+                        linhas_cat.append(f"{cod} | {nome} | vars: {', '.join(variacoes[:6])}")
+                    catalogo_txt = "\n".join(linhas_cat)
+
+                    try:
+                        import os as _os
+                        _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
+                        if not _ant_key:
+                            st.error("Configure a variável ANTHROPIC_API_KEY nos secrets do Streamlit.")
+                        else:
+                            import anthropic as _ant
+                            _client = _ant.Anthropic(api_key=_ant_key)
+                            _prompt = f"""Você é assistente de compras de loja de capinhas/acessórios.
+
+Texto colado do WhatsApp (modelo - tipos):
+{wpp_texto}
+
+Catálogo disponível (cod_interno | nome | variações):
+{catalogo_txt}
+
+Retorne SOMENTE um array JSON:
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","variacoes":["masculino","brilho"],"confianca":"alta|media|baixa"}}]
+
+Regras:
+- Encontre o produto mais parecido pelo nome do aparelho (ignore erros de digitação)
+- variacoes = lista dos tipos pedidos na linha
+- cod_interno = o código exato do catálogo se encontrado, senão null
+- Retorne apenas JSON puro sem markdown"""
+                            _msg = _client.messages.create(
+                                model="claude-haiku-4-5-20251001",
+                                max_tokens=2048,
+                                messages=[{"role": "user", "content": _prompt}]
+                            )
+                            import json as _json, re as _re
+                            _raw = _msg.content[0].text.strip()
+                            _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
+                            _parsed = _json.loads(_m.group() if _m else _raw)
+                            st.session_state["wpp_resultado"] = _parsed
+                    except Exception as e:
+                        st.error(f"Erro na IA: {e}")
+
+        # Exibe e permite revisar o pré-pedido gerado
+        if "wpp_resultado" in st.session_state and st.session_state.wpp_resultado:
+            resultado = st.session_state.wpp_resultado
+            st.markdown(f"<div style='font-weight:600;margin:10px 0 6px'>Pré-pedido gerado — revise antes de adicionar</div>", unsafe_allow_html=True)
+
+            prods_map = {p.get("codigo_interno"): p for p in (cache.get("produtos", []) if cache else [])}
+            itens_gerados = []
+            for item in resultado:
+                cod = item.get("cod_interno")
+                nome = item.get("nome_produto") or item.get("modelo_digitado", "")
+                variacoes = item.get("variacoes", [])
+                conf = item.get("confianca", "baixa")
+                badge_cor = GRN if conf == "alta" else (ACC if conf == "media" else RED)
+                badge = f'<span style="background:{badge_cor}22;color:{badge_cor};border:1px solid {badge_cor}44;border-radius:4px;font-size:0.65rem;font-weight:600;padding:1px 6px">{conf}</span>'
+
+                st.markdown(f"""
+                <div style="background:{CARD};border:1px solid {BOR};border-radius:8px;padding:10px 14px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:600;font-size:0.88rem">{nome}</div>
+                    <div style="color:{TXT2};font-size:0.75rem">digitado: <i>{item.get('modelo_digitado','')}</i> · cód: {cod or '—'}</div>
+                    <div style="margin-top:4px">{"".join(f'<span style="background:{SB2};color:{TXT};border:1px solid {BOR};border-radius:4px;font-size:0.72rem;padding:1px 7px;margin-right:4px">{v}</span>' for v in variacoes)}</div>
+                  </div>
+                  <div>{badge}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # prepara para adicionar ao pedido
+                if cod and cod in prods_map:
+                    prod_obj = prods_map[cod]
+                    for var_tipo in variacoes:
+                        for v in prod_obj.get("variacoes", []):
+                            vd = v.get("variacao", v)
+                            vnome = vd.get("nome", "").lower()
+                            if var_tipo.lower() in vnome or any(p in vnome for p in var_tipo.lower().split()):
+                                itens_gerados.append({
+                                    "produto_id":  prod_obj.get("id", ""),
+                                    "produto_nome": prod_obj.get("nome", nome),
+                                    "variacao_id":  vd.get("id", ""),
+                                    "variacao_nome":vd.get("nome", var_tipo),
+                                    "cod_interno":  cod,
+                                    "variacao_cod": vd.get("codigo", ""),
+                                    "Qtd a Pedir":  int(qtd_padrao),
+                                    "fornecedor":   "",
+                                    "custo":        float(prod_obj.get("valor_custo") or 0),
+                                })
+                else:
+                    # produto não encontrado — adiciona como avulso
+                    for var_tipo in variacoes:
+                        itens_gerados.append({
+                            "produto_id": "", "produto_nome": nome,
+                            "variacao_id": "", "variacao_nome": var_tipo,
+                            "cod_interno": cod or "", "variacao_cod": "",
+                            "Qtd a Pedir": int(qtd_padrao), "fornecedor": "", "custo": 0.0,
+                        })
+
+            if itens_gerados:
+                st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin:6px 0'>{len(itens_gerados)} variação(ões) identificada(s)</div>", unsafe_allow_html=True)
+                if st.button("➕ Adicionar ao pedido", type="primary", key="wpp_add", use_container_width=True):
+                    if "pedido_itens" not in st.session_state:
+                        st.session_state.pedido_itens = []
+                    st.session_state.pedido_itens.extend(itens_gerados)
+                    del st.session_state["wpp_resultado"]
+                    st.session_state["wpp_input"] = ""
+                    st.success(f"✅ {len(itens_gerados)} itens adicionados ao pedido!")
+                    st.rerun()
+
+    st.divider()
+
     if not cache:
         st.warning("Sincronize os produtos primeiro.")
     else:
