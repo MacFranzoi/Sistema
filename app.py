@@ -2015,6 +2015,7 @@ Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quan
 Retorne SOMENTE JSON válido, sem markdown:
 [{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
 
+                    st.session_state.pop("wpp_truncado_resto", None)
                     try:
                         _parsed = []  # preenchido pela IA se houver texto WPP
                         if _texto_proc.strip():
@@ -2043,7 +2044,22 @@ Retorne SOMENTE JSON válido, sem markdown:
                                     if _ultimo_ok > 0:
                                         _json_rec = _json_str[:_ultimo_ok + 1] + ']'
                                         _parsed = _json.loads(_json_rec)
-                                        st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas. Cole o restante do texto e gere novamente.")
+                                        # Descobre quais linhas do texto original NÃO foram processadas
+                                        _modelos_proc = {
+                                            (e.get("modelo_digitado") or "").strip().lower()
+                                            for e in _parsed
+                                        }
+                                        _linhas_orig = [l for l in _texto_proc.splitlines() if l.strip()]
+                                        _resto = []
+                                        _encontrados = 0
+                                        for _lo in reversed(_linhas_orig):
+                                            if _lo.strip().lower() in _modelos_proc and _encontrados < len(_parsed):
+                                                _encontrados += 1
+                                            else:
+                                                _resto.insert(0, _lo)
+                                        _resto_txt = "\n".join(_resto) if _resto else ""
+                                        st.session_state["wpp_truncado_resto"] = _resto_txt
+                                        st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas.")
                                     else:
                                         raise
 
@@ -2201,6 +2217,15 @@ Retorne SOMENTE JSON válido, sem markdown:
                         st.session_state["wpp_nao_comp"] = _nao_compreendidos
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
+
+        # ── Resto truncado — cole novamente ───────────────────────
+        if st.session_state.get("wpp_truncado_resto"):
+            _resto_wpp = st.session_state["wpp_truncado_resto"]
+            st.warning(f"⚠ Resposta da IA foi truncada — as linhas abaixo não foram processadas. Copie, cole no campo acima e gere novamente.")
+            st.text_area("Resto não processado (copie e cole acima):", value=_resto_wpp, height=120, key="wpp_resto_area")
+            if st.button("🗑 Limpar aviso de truncamento", key="wpp_limpar_resto"):
+                del st.session_state["wpp_truncado_resto"]
+                st.rerun()
 
         # ── Itens não compreendidos ────────────────────────────────
         if st.session_state.get("wpp_nao_comp"):
