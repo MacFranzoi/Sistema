@@ -3,3 +3,4 @@ pandas
 openpyxl
 requests
 fpdf2
+anthropic
