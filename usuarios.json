@@ -1,0 +1,12 @@
+{
+  "gustavo": {
+    "nome": "Gustavo",
+    "senha": "admin",
+    "setor": "admin"
+  },
+  "fernando": {
+    "nome": "Fernando Franzoi",
+    "senha": "fer123",
+    "setor": "gerencia"
+  }
+}

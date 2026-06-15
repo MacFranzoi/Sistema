@@ -587,3 +587,57 @@ def buscar_contas_pagar(data_ini=None, data_fim=None, pagina=1, limite=50):
     if data_fim:  params["data_fim"]    = data_fim
     r = _get("contaspagar", params=params)
     return r.get("data", r) if isinstance(r, dict) else []
+
+
+# ──────────────────────────────────────────────
+# Parse de pedido via IA (Claude)
+# ──────────────────────────────────────────────
+def parse_pedido_whatsapp(texto: str, catalogo_resumo: str) -> list[dict]:
+    """
+    Envia o texto colado do WhatsApp para o Claude e retorna
+    lista de dicts: [{modelo, variacao, quantidade, observacao}]
+    """
+    import anthropic as _ant
+    client = _ant.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+    prompt = f"""Você é um assistente de compras de uma loja de capinhas e acessórios para celular.
+
+O usuário colou um texto do WhatsApp com pedidos de reposição. Cada linha tem:
+  [modelo do aparelho] - [tipo(s) de capa]
+
+Tipos comuns: masculino, feminino, brilho, silicone, anti-impacto, carteira, transparente, magsafe
+
+Catálogo disponível (cod_interno | nome do produto):
+{catalogo_resumo}
+
+Texto colado:
+{texto}
+
+Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
+[
+  {{
+    "modelo_digitado": "texto original do modelo",
+    "cod_interno": "código do produto mais próximo no catálogo ou null",
+    "nome_produto": "nome do produto mais próximo ou null",
+    "variacoes": ["masculino", "brilho"],
+    "quantidade": 1,
+    "confianca": "alta|media|baixa"
+  }}
+]
+
+- quantidade padrão = 1 por variação
+- se o modelo não existir no catálogo, deixe cod_interno e nome_produto como null
+- retorne apenas o JSON, sem explicações"""
+
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    import json, re
+    raw = msg.content[0].text
+    # extrai JSON do output
+    m = re.search(r'\[.*\]', raw, re.DOTALL)
+    if m:
+        return json.loads(m.group())
+    return json.loads(raw)

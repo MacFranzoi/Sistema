@@ -1,0 +1,35 @@
+{
+  "nome": "Centro iPhone 1",
+  "tipo": "pedido",
+  "loja_id": null,
+  "loja_nome": "Todas as lojas",
+  "criado_em": "2026-06-14T20:23:08.338702",
+  "itens": [
+    {
+      "fornecedor": "Centro",
+      "produto_id": "82868138",
+      "produto_nome": "iPhone 17 Pro Max",
+      "cod_interno": "iPhone17ProMax",
+      "variacao_id": "141541452",
+      "variacao_cod": "iPhone17ProMax0075",
+      "variacao_nome": "R$119,99 / MagSafe",
+      "estoque_atual": -4,
+      "quantidade": 3,
+      "valor_custo": "0.00",
+      "observacao": "MagSafe Brilho"
+    },
+    {
+      "fornecedor": "Centro",
+      "produto_id": "82868138",
+      "produto_nome": "iPhone 17 Pro Max",
+      "cod_interno": "iPhone17ProMax",
+      "variacao_id": "141541555",
+      "variacao_cod": "iPhone17ProMax0100",
+      "variacao_nome": "R$59,99 / Diversos",
+      "estoque_atual": -8,
+      "quantidade": 3,
+      "valor_custo": "0.00",
+      "observacao": "Diversos Brilho"
+    }
+  ]
+}
