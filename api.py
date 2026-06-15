@@ -2,8 +2,9 @@ import requests
 import json
 import os
 import time
+import secrets
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 ACCESS_TOKEN = "998d6e5bed008c2023d5c5bc062ac9311e05c045"
 SECRET_TOKEN = "884b009905a80a147cea7172f25c83700c097166"
@@ -42,6 +43,51 @@ SETORES = {
 USUARIOS_PADRAO = {
     "gustavo": {"nome": "Gustavo", "senha": "admin", "setor": "admin"},
 }
+
+SESSOES_FILE = os.path.join(DIR, "sessoes.json")
+SESSAO_DIAS  = 30  # dias até expirar o token
+
+def _carregar_sessoes():
+    if os.path.exists(SESSOES_FILE):
+        with open(SESSOES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def _salvar_sessoes(s):
+    with open(SESSOES_FILE, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, indent=2)
+
+def criar_sessao(usuario):
+    token = secrets.token_urlsafe(32)
+    sessoes = _carregar_sessoes()
+    sessoes[token] = {
+        "usuario": usuario,
+        "expira":  (datetime.now() + timedelta(days=SESSAO_DIAS)).isoformat()
+    }
+    # limpa tokens expirados
+    agora = datetime.now().isoformat()
+    sessoes = {t: v for t, v in sessoes.items() if v["expira"] > agora}
+    sessoes[token] = {"usuario": usuario, "expira": (datetime.now() + timedelta(days=SESSAO_DIAS)).isoformat()}
+    _salvar_sessoes(sessoes)
+    return token
+
+def validar_sessao(token):
+    if not token:
+        return None
+    sessoes = _carregar_sessoes()
+    s = sessoes.get(token)
+    if not s:
+        return None
+    if s["expira"] < datetime.now().isoformat():
+        sessoes.pop(token, None)
+        _salvar_sessoes(sessoes)
+        return None
+    return s["usuario"]
+
+def revogar_sessao(token):
+    sessoes = _carregar_sessoes()
+    sessoes.pop(token, None)
+    _salvar_sessoes(sessoes)
 
 def carregar_usuarios():
     if os.path.exists(USUARIOS_FILE):

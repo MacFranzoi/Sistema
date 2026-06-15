@@ -435,6 +435,15 @@ TODAS_ABAS = [
 if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
+# ── Auto-login por token salvo na URL ──
+if st.session_state.usuario_logado is None:
+    _token_url = st.query_params.get("t", "")
+    if _token_url:
+        _usr_token = api.validar_sessao(_token_url)
+        if _usr_token:
+            st.session_state.usuario_logado = _usr_token
+            st.session_state["_sessao_token"] = _token_url
+
 if st.session_state.usuario_logado is None:
     _, col_login, _ = st.columns([1, 1, 1])
     with col_login:
@@ -495,6 +504,9 @@ if st.session_state.usuario_logado is None:
             _udb = api.carregar_usuarios()
             if u in _udb and _udb[u]["senha"] == senha_input:
                 st.session_state.usuario_logado = u
+                _tok = api.criar_sessao(u)
+                st.session_state["_sessao_token"] = _tok
+                st.query_params["t"] = _tok
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
@@ -624,7 +636,9 @@ with _c3:
 
 with _c4:
     if st.button("Sair", key="btn_sair", use_container_width=True):
+        api.revogar_sessao(st.session_state.get("_sessao_token", ""))
         st.session_state.usuario_logado = None
+        st.query_params.clear()
         st.rerun()
 
 # ── Carrega cache e clip ──
@@ -2781,13 +2795,16 @@ Retorne SOMENTE JSON válido, sem markdown:
                 _df_filtrado = _df_ped_tipos[_df_ped_tipos["_tipo_var"].isin(_tipos_selecionados)].drop(columns=["_tipo_var"])
                 st.caption(f"{len(_df_filtrado)} de {len(df_ped)} itens selecionados")
 
-                _col_ex1, _col_ex2, _col_ex3 = st.columns(3)
+                for _c, _dv in [("estoque_atual", 0), ("observacao", ""), ("fornecedor", "—"),
+                                ("variacao_nome", ""), ("valor_custo", "0.00")]:
+                    if _c not in _df_filtrado.columns:
+                        _df_filtrado[_c] = _dv
+                if "total" not in _df_filtrado.columns:
+                    _df_filtrado["total"] = _df_filtrado["quantidade"] * pd.to_numeric(_df_filtrado["valor_custo"], errors="coerce").fillna(0)
+
+                _col_ex1, _col_ex2, _col_ex3, _col_ex4 = st.columns(4)
                 with _col_ex1:
                     _buf_filt = io.BytesIO()
-                    for _c, _dv in [("estoque_atual", 0), ("observacao", ""), ("fornecedor", "—"),
-                                    ("variacao_nome", ""), ("valor_custo", "0.00")]:
-                        if _c not in _df_filtrado.columns:
-                            _df_filtrado[_c] = _dv
                     _df_exp_filt = _df_filtrado[["fornecedor", "cod_interno", "produto_nome", "variacao_nome",
                                                   "observacao", "estoque_atual", "quantidade", "valor_custo", "total"]].copy()
                     _df_exp_filt.columns = ["Fornecedor", "Cód.", "Produto", "Variação",
@@ -2795,7 +2812,7 @@ Retorne SOMENTE JSON válido, sem markdown:
                     with pd.ExcelWriter(_buf_filt, engine="openpyxl") as _wr:
                         _df_exp_filt.to_excel(_wr, index=False, sheet_name="Pedido")
                     _buf_filt.seek(0)
-                    st.download_button("📥 Excel filtrado", data=_buf_filt,
+                    st.download_button("📥 Excel completo", data=_buf_filt,
                                        file_name=f"pedido_filtrado_{data_pedido}.xlsx",
                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                        use_container_width=True, key="dl_filt_excel")
@@ -2806,18 +2823,22 @@ Retorne SOMENTE JSON válido, sem markdown:
                     with pd.ExcelWriter(_buf_filt_s, engine="openpyxl") as _wr:
                         _df_simp_filt.to_excel(_wr, index=False, sheet_name="Pedido")
                     _buf_filt_s.seek(0)
-                    st.download_button("📄 Excel simples filtrado", data=_buf_filt_s,
+                    st.download_button("📄 Excel simples", data=_buf_filt_s,
                                        file_name=f"pedido_simples_filtrado_{data_pedido}.xlsx",
                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                        use_container_width=True, key="dl_filt_simples")
                 with _col_ex3:
-                    if st.button("📋 Texto filtrado", use_container_width=True, key="txt_filt"):
-                        _linhas_f = [f"PEDIDO FILTRADO — {fornecedor_global or '—'} — {data_pedido}", "=" * 50]
-                        for _, _r in _df_filtrado.iterrows():
-                            _obs_f = str(_r.get("observacao", "")).strip()
-                            _obs_s = f" | {_obs_f}" if _obs_f else ""
-                            _linhas_f.append(f"{_r['produto_nome']} | {_r['variacao_nome']}{_obs_s} | {int(_r['quantidade'])} un")
-                        st.text_area("Copie:", "\n".join(_linhas_f), height=180, key="txt_filt_area")
+                    _pdf_filt = gerar_pdf_pedido(_df_filtrado, fornecedor_global or "—", str(data_pedido), simplificado=True)
+                    st.download_button("📑 PDF simples", data=_pdf_filt,
+                                       file_name=f"pedido_simples_filtrado_{data_pedido}.pdf",
+                                       mime="application/pdf",
+                                       use_container_width=True, key="dl_filt_pdf_s")
+                with _col_ex4:
+                    _pdf_filt_c = gerar_pdf_pedido(_df_filtrado, fornecedor_global or "—", str(data_pedido), simplificado=False)
+                    st.download_button("📑 PDF completo", data=_pdf_filt_c,
+                                       file_name=f"pedido_completo_filtrado_{data_pedido}.pdf",
+                                       mime="application/pdf",
+                                       use_container_width=True, key="dl_filt_pdf_c")
 
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
             # linha de exportação simplificada (produto / variação / qtd)
