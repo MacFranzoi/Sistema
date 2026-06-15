@@ -562,6 +562,7 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
+/* Header mínimo mas visível — mantém o toggle nativo */
 [data-testid="stHeader"] {{
     background: {SB} !important;
     height: 40px !important;
@@ -579,6 +580,8 @@ st.markdown(f"""
     padding-top: 22px !important; padding-bottom: 40px !important;
     max-width: 100% !important;
 }}
+/* Esconde o botão de FECHAR dentro da sidebar — impede fechamento acidental */
+[data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
 </style>
 """, unsafe_allow_html=True)
 
