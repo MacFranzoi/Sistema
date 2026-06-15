@@ -562,34 +562,106 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* Header mínimo — mantém toggle da sidebar */
-[data-testid="stHeader"] {{
-    background: {SB} !important; height: 40px !important;
-    min-height: 40px !important; border-bottom: 1px solid {BOR} !important;
-}}
-[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
-    color: {TXT2} !important; fill: {TXT2} !important;
-}}
+/* Esconde o header padrão do Streamlit e toolbar */
+[data-testid="stHeader"] {{ display: none !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
 [data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
-    padding-top: 40px !important;
+    padding-top: 0 !important;
 }}
 .main .block-container {{
     padding-top: 22px !important; padding-bottom: 40px !important;
     max-width: 100% !important;
 }}
+
+/* Botão flutuante de toggle da sidebar */
+#plug-sidebar-toggle {{
+    position: fixed;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    z-index: 99999;
+    background: {ACCENT};
+    color: #fff;
+    border: none;
+    border-radius: 0 8px 8px 0;
+    width: 22px;
+    height: 56px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    box-shadow: 2px 0 8px rgba(0,0,0,.25);
+    transition: width .15s, background .15s;
+    padding: 0;
+    line-height: 1;
+}}
+#plug-sidebar-toggle:hover {{
+    width: 28px;
+    background: {ACCENT}dd;
+}}
+/* Quando a sidebar está aberta o botão fica colado na borda dela */
+[data-testid="stSidebar"][aria-expanded="true"] ~ * #plug-sidebar-toggle,
+body.sb-open #plug-sidebar-toggle {{
+    left: 0;
+}}
 </style>
+
+<button id="plug-sidebar-toggle" title="Abrir/fechar menu" onclick="plugToggleSidebar()">&#9776;</button>
+
 <script>
+function plugToggleSidebar() {{
+  const sb = document.querySelector('[data-testid="stSidebar"]');
+  // tenta o botão nativo do Streamlit (pode estar em lugares diferentes por versão)
+  const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
+              document.querySelector('[data-testid="stBaseButton-headerNoPadding"]') ||
+              document.querySelector('button[aria-controls*="sidebar"]') ||
+              document.querySelector('[data-testid="collapsedControl"] button');
+  if (btn) {{ btn.click(); return; }}
+  // fallback: força aria-expanded
+  if (sb) {{
+    const expanded = sb.getAttribute('aria-expanded') === 'true';
+    sb.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+  }}
+}}
+
+// Abre a sidebar ao carregar se estiver fechada
 (function() {{
-  function openSidebar() {{
+  function tryOpen() {{
     const sb = document.querySelector('[data-testid="stSidebar"]');
-    if (sb && sb.getAttribute('aria-expanded') === 'false') {{
-      const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
-                  document.querySelector('button[aria-controls*="sidebar"]');
-      if (btn) btn.click();
+    if (!sb) {{ setTimeout(tryOpen, 200); return; }}
+    if (sb.getAttribute('aria-expanded') === 'false') {{
+      plugToggleSidebar();
+    }}
+    // Ajusta posição do botão quando sidebar abre/fecha
+    const obs = new MutationObserver(function() {{
+      const expanded = sb.getAttribute('aria-expanded') === 'true';
+      const toggleBtn = document.getElementById('plug-sidebar-toggle');
+      if (!toggleBtn) return;
+      if (expanded) {{
+        const w = sb.offsetWidth || 300;
+        toggleBtn.style.left = w + 'px';
+        toggleBtn.innerHTML = '&#8249;';
+      }} else {{
+        toggleBtn.style.left = '0';
+        toggleBtn.innerHTML = '&#9776;';
+      }}
+    }});
+    obs.observe(sb, {{ attributes: true, attributeFilter: ['aria-expanded'] }});
+    // Estado inicial
+    const expanded = sb.getAttribute('aria-expanded') === 'true';
+    const toggleBtn = document.getElementById('plug-sidebar-toggle');
+    if (toggleBtn) {{
+      if (expanded) {{
+        toggleBtn.style.left = (sb.offsetWidth || 300) + 'px';
+        toggleBtn.innerHTML = '&#8249;';
+      }} else {{
+        toggleBtn.style.left = '0';
+        toggleBtn.innerHTML = '&#9776;';
+      }}
     }}
   }}
-  setTimeout(openSidebar, 300);
+  setTimeout(tryOpen, 400);
 }})();
 </script>
 """, unsafe_allow_html=True)
