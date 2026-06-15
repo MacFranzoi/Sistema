@@ -2117,24 +2117,26 @@ Retorne SOMENTE JSON válido, sem markdown:
                                     _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
                                     _obs_kit = ("Very Rio" if _kit.startswith("vr ") else
                                                 ("MagSafe" if _kit == "magsafe" else ""))
+                                    _desc_av_var = f"{_nome} / {_kit.title()} / {'/'.join(_termos)}"
                                     _linhas_expandidas.append({
-                                        "✓":        _encontrado,
-                                        "_cod":     _cod,
-                                        "_nome":    _nome,
-                                        "_kit":     _kit,
-                                        "_conf":    _conf,
-                                        "_achado":  _encontrado,
-                                        "_obs":     _obs_kit,
-                                        "_var_id":  _var_match.get("id", "") if _var_match else "",
-                                        "_var_cod": _var_match.get("codigo", "") if _var_match else "",
-                                        "_prod_id": _prod_obj.get("id", "") if _prod_obj else "",
-                                        "_custo":   float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
-                                        "Aparelho": _nome,
-                                        "Kit":      _kit.title(),
-                                        # nome EXATO do catálogo — nunca o texto do WhatsApp
-                                        "Variação": _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
-                                        "Qtd":      _qtd,
-                                        "Status":   "✓" if _encontrado else "⚠",
+                                        "✓":           _encontrado,
+                                        "_cod":        _cod,
+                                        "_nome":       _nome,
+                                        "_kit":        _kit,
+                                        "_conf":       _conf,
+                                        "_achado":     _encontrado,
+                                        "_avulso_auto": not _encontrado,
+                                        "_obs":        _obs_kit,
+                                        "_var_id":     _var_match.get("id", "") if _var_match else "",
+                                        "_var_cod":    _var_match.get("codigo", "") if _var_match else "",
+                                        "_prod_id":    _prod_obj.get("id", "") if _prod_obj else "",
+                                        "_custo":      float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
+                                        "Aparelho":    _nome,
+                                        "Kit":         _kit.title(),
+                                        "Variação":    _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
+                                        "Qtd":         _qtd,
+                                        "Status":      "✓" if _encontrado else "⚠",
+                                        "_desc_avulso": _desc_av_var,
                                     })
 
                             # Injeta avulsos diretos (Space / Transparente) parseados sem IA
