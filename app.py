@@ -73,246 +73,284 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 
 st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
-# ──────────────────────────────────────────────
-# Tema (dark/light)
-# ──────────────────────────────────────────────
+# ── Tema ──
 if "tema" not in st.session_state:
     st.session_state.tema = "dark"
-
 _dark = st.session_state.tema == "dark"
 
-# paleta
-_C = {
-    "bg":       "#0d0d0d" if _dark else "#f5f5f5",
-    "sidebar":  "#141414" if _dark else "#ffffff",
-    "card":     "#1a1a1a" if _dark else "#ffffff",
-    "border":   "#2a2a2a" if _dark else "#e0e0e0",
-    "text":     "#f0f0f0" if _dark else "#111111",
-    "muted":    "#888888",
-    "yellow":   "#FFD600",
-    "yellow2":  "#FFE566",
-    "white":    "#ffffff",
-    "danger":   "#e05555",
-    "success":  "#4caf7d",
-}
+BG      = "#111111" if _dark else "#f2f3f5"
+SB      = "#0a0a0a" if _dark else "#ffffff"
+SB2     = "#1a1a1a" if _dark else "#f8f8f8"
+CARD    = "#1a1a1a" if _dark else "#ffffff"
+BOR     = "#2a2a2a" if _dark else "#e3e3e3"
+TXT     = "#f0f0f0" if _dark else "#1a1a1a"
+TXT2    = "#999999"
+YEL     = "#FFD600"
+YEL_BG  = "rgba(255,214,0,0.10)"
+TOPBAR  = "#000000" if _dark else "#000000"
 
 st.markdown(f"""
 <style>
-/* ── reset & base ── */
-html, body, [class*="css"], .main {{ background-color: {_C["bg"]} !important; color: {_C["text"]} !important; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; }}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ── sidebar ── */
+/* RESET */
+*, *::before, *::after {{ box-sizing: border-box; }}
+html, body, [class*="css"] {{
+    font-family: 'Inter', 'Segoe UI', sans-serif !important;
+    font-size: 13px;
+    background: {BG} !important;
+    color: {TXT} !important;
+}}
+.main .block-container {{ padding: 0 !important; max-width: 100% !important; }}
+
+/* ── TOPBAR preta ── */
+[data-testid="stHeader"] {{
+    background: {TOPBAR} !important;
+    height: 52px !important;
+    border-bottom: 1px solid #222 !important;
+}}
+[data-testid="stHeader"] button {{ color: #fff !important; }}
+[data-testid="stToolbar"] {{ display: none !important; }}
+
+/* ── SIDEBAR ── */
 [data-testid="stSidebar"] {{
-    background: {_C["sidebar"]} !important;
-    border-right: 1px solid {_C["border"]};
-    padding-top: 0 !important;
+    background: {SB} !important;
+    border-right: 1px solid {BOR} !important;
+    width: 220px !important;
+    min-width: 220px !important;
+    padding: 0 !important;
 }}
-[data-testid="stSidebar"] * {{ color: {_C["text"]} !important; }}
+[data-testid="stSidebar"] > div:first-child {{ padding: 0 !important; }}
 
-/* ── logo area ── */
-.erp-logo {{
+/* ── Topbar da sidebar: logo ── */
+.sb-logo {{
     display: flex; align-items: center; gap: 10px;
-    padding: 18px 16px 12px;
-    border-bottom: 2px solid {_C["yellow"]};
-    margin-bottom: 8px;
+    padding: 0 14px;
+    height: 52px;
+    background: #000;
+    border-bottom: 1px solid #222;
+    position: sticky; top: 0; z-index: 10;
 }}
-.erp-logo-icon {{
-    font-size: 1.6rem; line-height: 1;
-    background: {_C["yellow"]}; color: #000;
-    width: 36px; height: 36px; border-radius: 8px;
+.sb-logo-mark {{
+    background: {YEL}; color: #000;
+    width: 30px; height: 30px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 1rem; letter-spacing: -1px;
+    flex-shrink: 0;
 }}
-.erp-logo-name {{ font-size: 1rem; font-weight: 700; color: {_C["yellow"]} !important; letter-spacing: 0.5px; }}
-.erp-logo-sub  {{ font-size: 0.65rem; color: {_C["muted"]} !important; }}
+.sb-logo-text {{ font-size: 1rem; font-weight: 700; color: {YEL}; letter-spacing: 0.3px; }}
 
-/* ── nav section labels ── */
-.nav-section {{
-    font-size: 0.6rem; font-weight: 700; letter-spacing: 1.5px;
-    text-transform: uppercase; color: {_C["muted"]} !important;
-    padding: 12px 16px 4px; margin: 0;
+/* ── empresa selecionada ── */
+.sb-empresa {{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    background: {SB2};
+    border-bottom: 1px solid {BOR};
+    cursor: pointer;
+}}
+.sb-empresa-name {{ font-size: 0.78rem; font-weight: 600; }}
+.sb-empresa-cnpj {{ font-size: 0.62rem; color: {TXT2}; margin-top: 1px; }}
+.sb-empresa-arrow {{ color: {TXT2}; font-size: 0.65rem; }}
+
+/* ── nav group label ── */
+.nav-group {{
+    font-size: 0.58rem; font-weight: 700; letter-spacing: 1.8px;
+    text-transform: uppercase; color: {TXT2};
+    padding: 14px 14px 4px;
 }}
 
-/* ── nav item buttons ── */
+/* ── nav item ── */
 [data-testid="stSidebar"] .stButton > button {{
     width: 100% !important;
     background: transparent !important;
     border: none !important;
-    border-radius: 6px !important;
+    border-radius: 0 !important;
     text-align: left !important;
-    padding: 8px 16px !important;
+    padding: 8px 14px 8px 16px !important;
     font-size: 0.8rem !important;
-    color: {_C["text"]} !important;
-    margin: 1px 0 !important;
-    transition: background 0.15s;
+    color: {TXT} !important;
+    margin: 0 !important;
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.1s, color 0.1s;
+    border-left: 3px solid transparent !important;
 }}
 [data-testid="stSidebar"] .stButton > button:hover {{
-    background: {_C["border"]} !important;
-    color: {_C["yellow"]} !important;
+    background: {YEL_BG} !important;
+    color: {YEL} !important;
+    border-left-color: {YEL}88 !important;
 }}
-
-/* ── nav item ativo ── */
-.nav-ativo button {{
-    background: {_C["yellow"]}22 !important;
-    border-left: 3px solid {_C["yellow"]} !important;
-    color: {_C["yellow"]} !important;
+.nav-active [data-testid="stSidebar"] .stButton > button,
+.nav-active .stButton > button {{
+    background: {YEL_BG} !important;
+    color: {YEL} !important;
     font-weight: 600 !important;
-    padding-left: 13px !important;
+    border-left: 3px solid {YEL} !important;
 }}
 
-/* ── user card na sidebar ── */
-.erp-usercard {{
-    margin: 8px 12px;
-    padding: 10px 12px;
-    background: {_C["border"]};
+/* ── user footer ── */
+.sb-footer {{
+    padding: 10px 14px;
+    border-top: 1px solid {BOR};
+    background: {SB};
+    display: flex; gap: 8px; align-items: center;
+}}
+.sb-avatar {{
+    width: 30px; height: 30px; border-radius: 50%;
+    background: {YEL}; color: #000;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+}}
+.sb-user-name  {{ font-size: 0.76rem; font-weight: 600; line-height: 1.2; }}
+.sb-user-role  {{ font-size: 0.62rem; color: {TXT2}; }}
+
+/* ── PAGE wrapper ── */
+.page-wrap {{
+    padding: 20px 24px;
+    background: {BG};
+    min-height: calc(100vh - 52px);
+}}
+
+/* ── page header ── */
+.page-header {{
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid {BOR};
+}}
+.page-title {{ font-size: 1.25rem; font-weight: 700; color: {TXT}; }}
+.page-breadcrumb {{
+    font-size: 0.68rem; color: {TXT2};
+    margin-bottom: 3px;
+    display: flex; align-items: center; gap: 4px;
+}}
+.page-breadcrumb span {{ color: {YEL}; }}
+
+/* ── CARDS ── */
+.card {{
+    background: {CARD};
+    border: 1px solid {BOR};
     border-radius: 8px;
-    display: flex; gap: 10px; align-items: center;
+    padding: 16px 18px;
+    margin-bottom: 14px;
 }}
-.erp-usercard-avatar {{
-    width: 32px; height: 32px; border-radius: 50%;
-    background: {_C["yellow"]}; color: #000;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
-}}
-.erp-usercard-name  {{ font-size: 0.78rem; font-weight: 600; }}
-.erp-usercard-setor {{ font-size: 0.65rem; color: {_C["muted"]} !important; }}
-
-/* ── header principal ── */
-.erp-header {{
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 0 14px;
-    border-bottom: 1px solid {_C["border"]};
-    margin-bottom: 16px;
-}}
-.erp-breadcrumb {{ font-size: 0.72rem; color: {_C["muted"]}; }}
-.erp-page-title  {{ font-size: 1.2rem; font-weight: 700; margin-top: 2px; }}
-.erp-page-title span {{ color: {_C["yellow"]}; }}
-
-/* ── card ── */
-.erp-card {{
-    background: {_C["card"]};
-    border: 1px solid {_C["border"]};
-    border-radius: 10px;
-    padding: 16px;
+.card-header {{
+    font-size: 0.82rem; font-weight: 600;
+    color: {TXT};
     margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid {BOR};
+    display: flex; align-items: center; gap: 6px;
 }}
 
-/* ── badge ── */
-.erp-badge {{
-    display: inline-block;
-    background: {_C["yellow"]}22;
-    color: {_C["yellow"]};
-    border: 1px solid {_C["yellow"]}55;
-    border-radius: 20px;
-    font-size: 0.65rem; font-weight: 600;
-    padding: 2px 8px;
-}}
-
-/* ── stat cards ── */
-.stat-card {{
-    background: {_C["card"]};
-    border: 1px solid {_C["border"]};
-    border-radius: 10px;
+/* ── STAT CARDS ── */
+.stat-grid {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }}
+.stat-box {{
+    flex: 1; min-width: 120px;
+    background: {CARD};
+    border: 1px solid {BOR};
+    border-radius: 8px;
     padding: 14px 16px;
-    border-top: 3px solid {_C["yellow"]};
+    border-top: 3px solid {YEL};
 }}
-.stat-value {{ font-size: 1.6rem; font-weight: 700; color: {_C["yellow"]}; }}
-.stat-label {{ font-size: 0.72rem; color: {_C["muted"]}; margin-top: 2px; }}
+.stat-val {{ font-size: 1.5rem; font-weight: 700; color: {YEL}; line-height: 1.1; }}
+.stat-lbl {{ font-size: 0.68rem; color: {TXT2}; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }}
 
-/* ── tabelas ── */
-.stDataFrame {{ overflow-x: auto; border-radius: 8px; }}
-.stDataFrame thead th {{ background: {_C["border"]} !important; font-size: 0.72rem !important; }}
-.stDataFrame tbody td {{ font-size: 0.75rem !important; }}
+/* ── BADGE ── */
+.badge {{
+    display: inline-flex; align-items: center; gap: 3px;
+    background: {YEL_BG}; color: {YEL};
+    border: 1px solid {YEL}55;
+    border-radius: 4px;
+    font-size: 0.62rem; font-weight: 600;
+    padding: 2px 7px;
+}}
+.badge-green {{ background: rgba(76,175,80,0.12); color: #66bb6a; border-color: #66bb6a55; }}
+.badge-red   {{ background: rgba(244,67,54,0.12); color: #ef5350; border-color: #ef535055; }}
 
-/* ── inputs ── */
+/* ── TABELA ── */
+.stDataFrame {{ border-radius: 8px !important; overflow: hidden; }}
+.stDataFrame [data-testid="stDataFrameResizable"] {{ border: 1px solid {BOR} !important; border-radius: 8px !important; }}
+.stDataFrame th {{ background: {SB2} !important; font-size: 0.7rem !important; font-weight: 600 !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.5px; }}
+.stDataFrame td {{ font-size: 0.76rem !important; color: {TXT} !important; }}
+
+/* ── INPUTS ── */
+.stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label {{
+    font-size: 0.75rem !important; font-weight: 500 !important; color: {TXT2} !important;
+    text-transform: uppercase; letter-spacing: 0.4px;
+}}
 .stTextInput input, .stNumberInput input, .stTextArea textarea {{
-    background: {_C["card"]} !important;
-    border: 1px solid {_C["border"]} !important;
-    color: {_C["text"]} !important;
-    border-radius: 6px !important;
-    font-size: 0.82rem !important;
+    background: {CARD} !important; border: 1px solid {BOR} !important;
+    color: {TXT} !important; border-radius: 6px !important; font-size: 0.82rem !important;
+    padding: 7px 10px !important;
 }}
-.stTextInput input:focus, .stNumberInput input:focus {{
-    border-color: {_C["yellow"]} !important;
-    box-shadow: 0 0 0 2px {_C["yellow"]}33 !important;
-}}
-.stSelectbox > div > div {{
-    background: {_C["card"]} !important;
-    border-color: {_C["border"]} !important;
-    font-size: 0.82rem !important;
-}}
+.stTextInput input:focus, .stNumberInput input:focus {{ border-color: {YEL} !important; box-shadow: 0 0 0 2px {YEL}22 !important; }}
+.stSelectbox > div > div {{ background: {CARD} !important; border-color: {BOR} !important; font-size: 0.82rem !important; border-radius: 6px !important; }}
 
-/* ── botões principais ── */
-.main .stButton > button {{
-    font-size: 0.8rem !important;
-    padding: 0.35rem 1rem !important;
-    border-radius: 6px !important;
-    border: 1px solid {_C["border"]} !important;
-    background: {_C["card"]} !important;
-    color: {_C["text"]} !important;
+/* ── BUTTONS ── */
+.main .stButton > button, .stFormSubmitButton > button {{
+    font-size: 0.78rem !important; padding: 0.38rem 1rem !important;
+    border-radius: 6px !important; border: 1px solid {BOR} !important;
+    background: {CARD} !important; color: {TXT} !important;
+    font-weight: 500 !important; transition: all 0.15s !important;
 }}
-.main .stButton > button[kind="primary"],
-.main .stFormSubmitButton > button {{
-    background: {_C["yellow"]} !important;
-    color: #000 !important;
-    border-color: {_C["yellow"]} !important;
-    font-weight: 600 !important;
+.main .stButton > button[kind="primary"], .stFormSubmitButton > button {{
+    background: {YEL} !important; color: #000 !important;
+    border-color: {YEL} !important; font-weight: 600 !important;
 }}
-.main .stButton > button:hover {{
-    border-color: {_C["yellow"]} !important;
-    color: {_C["yellow"]} !important;
-}}
+.main .stButton > button:hover {{ border-color: {YEL} !important; color: {YEL} !important; }}
+.main .stButton > button[kind="primary"]:hover {{ background: #ffe033 !important; color: #000 !important; }}
 
-/* ── divider ── */
-hr {{ border-color: {_C["border"]} !important; }}
+/* ── EXPANDER ── */
+.stExpander {{ border: 1px solid {BOR} !important; border-radius: 8px !important; background: {CARD} !important; }}
+.stExpander summary {{ font-size: 0.8rem !important; color: {TXT} !important; }}
 
-/* ── expander ── */
-.stExpander {{ border: 1px solid {_C["border"]} !important; border-radius: 8px !important; }}
-.stExpander summary {{ font-size: 0.82rem !important; }}
-
-/* ── tabs dentro de páginas ── */
-.stTabs [data-baseweb="tab-list"] {{ border-bottom: 2px solid {_C["border"]}; gap: 0; }}
+/* ── TABS internas ── */
+.stTabs [data-baseweb="tab-list"] {{ border-bottom: 1px solid {BOR}; background: transparent; gap: 0; }}
 .stTabs [data-baseweb="tab"] {{
-    font-size: 0.78rem !important; padding: 8px 14px !important;
-    border-radius: 0 !important; border-bottom: 2px solid transparent !important;
-    margin-bottom: -2px;
+    font-size: 0.78rem !important; padding: 8px 16px !important;
+    color: {TXT2} !important; border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
 }}
-.stTabs [aria-selected="true"] {{
-    border-bottom-color: {_C["yellow"]} !important;
-    color: {_C["yellow"]} !important;
-    font-weight: 600 !important;
-}}
+.stTabs [aria-selected="true"] {{ color: {YEL} !important; border-bottom-color: {YEL} !important; font-weight: 600 !important; }}
 
-/* ── login ── */
-.login-wrap {{
-    min-height: 85vh; display: flex; align-items: center; justify-content: center;
+/* ── DIVIDER ── */
+hr {{ border-color: {BOR} !important; margin: 12px 0 !important; }}
+
+/* ── LOGIN ── */
+.login-page {{
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 80vh;
 }}
-.login-box {{
-    background: {_C["card"]};
-    border: 1px solid {_C["border"]};
-    border-top: 4px solid {_C["yellow"]};
-    border-radius: 14px;
-    padding: 2.5rem 2rem;
-    width: 100%; max-width: 360px;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+.login-card {{
+    background: {CARD}; border: 1px solid {BOR};
+    border-top: 3px solid {YEL};
+    border-radius: 10px; padding: 2.2rem 2rem;
+    width: 100%; max-width: 340px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.4);
 }}
-.login-logo-wrap {{
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    margin-bottom: 1.8rem;
-}}
-.login-icon {{
-    width: 56px; height: 56px; border-radius: 14px;
-    background: {_C["yellow"]}; color: #000;
+.login-logo {{ display: flex; align-items: center; gap: 10px; margin-bottom: 1.6rem; }}
+.login-logo-mark {{
+    width: 38px; height: 38px; border-radius: 8px;
+    background: {YEL}; color: #000;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.8rem;
+    font-weight: 900; font-size: 1.1rem;
 }}
-.login-brand  {{ font-size: 1.2rem; font-weight: 800; color: {_C["yellow"]}; letter-spacing: 0.5px; }}
-.login-sub    {{ font-size: 0.7rem; color: {_C["muted"]}; }}
+.login-brand {{ font-size: 1.1rem; font-weight: 800; color: {YEL}; }}
+.login-sub   {{ font-size: 0.68rem; color: {TXT2}; }}
 
-/* ── mobile ── */
+/* ── MISC ── */
+.stAlert {{ border-radius: 6px !important; font-size: 0.8rem !important; }}
+[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {BOR}; border-radius: 8px; padding: 10px 14px !important; }}
+p {{ color: {TXT} !important; font-size: 0.82rem !important; }}
+caption {{ color: {TXT2} !important; font-size: 0.72rem !important; }}
+small {{ color: {TXT2} !important; }}
+
+/* MOBILE */
 @media (max-width: 640px) {{
-    .erp-page-title {{ font-size: 1rem !important; }}
-    .stat-value {{ font-size: 1.2rem !important; }}
-    .main .stButton > button {{ font-size: 0.72rem !important; padding: 0.28rem 0.6rem !important; }}
+    .page-wrap {{ padding: 12px 14px; }}
+    .page-title {{ font-size: 1rem; }}
+    .stat-val {{ font-size: 1.1rem; }}
+    .stButton > button {{ font-size: 0.72rem !important; }}
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -321,164 +359,182 @@ hr {{ border-color: {_C["border"]} !important; }}
 # Login
 # ──────────────────────────────────────────────
 TODAS_ABAS = [
-    "📦 Entrada de Mercadoria",
-    "📊 Acerto de Estoque",
-    "🏷️ Etiquetas",
-    "🛒 Pedido de Compra",
-    "🏪 Estoque por Loja",
-    "🔘 Disponibilidade por Loja",
-    "💰 Preços",
-    "➕ Novo Modelo",
-    "🔁 Clonar Modelo",
+    "📦 Entrada de Mercadoria", "📊 Acerto de Estoque", "🏷️ Etiquetas",
+    "🛒 Pedido de Compra", "🏪 Estoque por Loja", "🔘 Disponibilidade por Loja",
+    "💰 Preços", "➕ Novo Modelo", "🔁 Clonar Modelo",
 ]
 
 if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
 if st.session_state.usuario_logado is None:
-    st.markdown("""
-    <div class="login-wrap">
-      <div class="login-box">
-        <div class="login-logo-wrap">
-          <div class="login-icon">⚡</div>
-          <div class="login-brand">PLUG ERP</div>
-          <div class="login-sub">Sistema de Gestão de Estoque</div>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
     _, col_login, _ = st.columns([1, 1.1, 1])
     with col_login:
+        st.markdown(f"""
+        <div class="login-page">
+          <div class="login-card">
+            <div class="login-logo">
+              <div class="login-logo-mark">⚡</div>
+              <div>
+                <div class="login-brand">PLUG ERP</div>
+                <div class="login-sub">Sistema de Gestão</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
         with st.form("form_login"):
             usuario_input = st.text_input("Usuário")
             senha_input   = st.text_input("Senha", type="password")
-            entrar = st.form_submit_button("Entrar", use_container_width=True)
+            entrar = st.form_submit_button("Entrar →", use_container_width=True)
         if entrar:
             u = usuario_input.strip().lower()
-            _usuarios = api.carregar_usuarios()
-            if u in _usuarios and _usuarios[u]["senha"] == senha_input:
+            _udb = api.carregar_usuarios()
+            if u in _udb and _udb[u]["senha"] == senha_input:
                 st.session_state.usuario_logado = u
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
     st.stop()
 
+# ── Dados do usuário ──
 _user        = st.session_state.usuario_logado
 _usuarios_db = api.carregar_usuarios()
 _user_data   = _usuarios_db.get(_user, {})
 _setor       = _user_data.get("setor", "vendas")
-_abas_permitidas = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
-_nome_usuario    = _user_data.get("nome", _user)
-_is_admin        = _setor == "admin"
-setor_label = api.SETORES.get(_setor, {}).get("label", _setor)
+_abas_perm   = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
+_nome_usr    = _user_data.get("nome", _user)
+_is_admin    = _setor == "admin"
+_setor_lbl   = api.SETORES.get(_setor, {}).get("label", _setor)
 
-# ── mapa de páginas: id → (ícone, label, categoria, aba_idx ou None) ──
-_MENU = [
-    # (id,                 icon, label,                 categoria,  aba_idx)
-    ("dashboard",          "🏠", "Dashboard",           "GERAL",    None),
-    ("entrada",            "📥", "Entrada de Mercadoria","ESTOQUE",  0),
-    ("acerto",             "🔧", "Acerto de Estoque",   "ESTOQUE",  1),
-    ("estoque_loja",       "🏪", "Estoque por Loja",    "ESTOQUE",  4),
-    ("disponibilidade",    "🔘", "Disponibilidade",     "ESTOQUE",  5),
-    ("pedido",             "🛒", "Pedido de Compra",    "COMPRAS",  3),
-    ("etiquetas",          "🏷️", "Etiquetas",           "OPERAÇÕES",2),
-    ("precos",             "💰", "Preços",              "FINANCEIRO",6),
-    ("novo_modelo",        "➕", "Novo Modelo",         "CATÁLOGO", 7),
-    ("clonar_modelo",      "🔁", "Clonar Modelo",       "CATÁLOGO", 8),
-    ("usuarios",           "👥", "Usuários",            "ADMIN",    None),
-    ("sincronizacao",      "🔄", "Sincronização",       "ADMIN",    None),
+# ── Menu estruturado (como GestaoClick) ──
+# (id, icon, label, grupo, aba_idx_ou_None, placeholder)
+_MENU_FULL = [
+    # GERAL
+    ("dashboard",       "🏠", "Dashboard",           "GERAL",       None,  False),
+    # CADASTROS
+    ("clientes",        "👥", "Clientes",             "CADASTROS",   None,  True),
+    ("fornecedores",    "🏭", "Fornecedores",         "CADASTROS",   None,  True),
+    # ITENS
+    ("novo_modelo",     "➕", "Novo Produto",         "ITENS",       7,     False),
+    ("clonar_modelo",   "🔁", "Clonar Produto",       "ITENS",       8,     False),
+    ("precos",          "💰", "Tabela de Preços",     "ITENS",       6,     False),
+    # VENDAS
+    ("vendas",          "🧾", "Vendas",               "VENDAS",      None,  True),
+    ("orcamentos",      "📋", "Orçamentos",           "VENDAS",      None,  True),
+    # ESTOQUE
+    ("entrada",         "📥", "Entrada",              "ESTOQUE",     0,     False),
+    ("acerto",          "🔧", "Acerto",               "ESTOQUE",     1,     False),
+    ("estoque_loja",    "🏪", "Por Loja",             "ESTOQUE",     4,     False),
+    ("disponibilidade", "🔘", "Disponibilidade",      "ESTOQUE",     5,     False),
+    ("etiquetas",       "🏷️", "Etiquetas",            "ESTOQUE",     2,     False),
+    # COMPRAS
+    ("pedido",          "🛒", "Pedido de Compra",     "COMPRAS",     3,     False),
+    ("compras_hist",    "📦", "Histórico de Compras", "COMPRAS",     None,  True),
+    # FINANCEIRO
+    ("financeiro",      "💳", "Financeiro",           "FINANCEIRO",  None,  True),
+    # RELATÓRIOS
+    ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",  None,  True),
+    # CONFIG
+    ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None, False),
+    ("usuarios",        "👤", "Usuários",             "CONFIGURAÇÕES",None, False),
 ]
 
-# filtra pelo setor
-def _pode(aba_idx):
-    if aba_idx is None:
-        return True
-    return aba_idx in _abas_permitidas
+def _pode_ver(aba_idx, is_placeholder):
+    if is_placeholder: return False   # futuro
+    if aba_idx is None: return True
+    return aba_idx in _abas_perm
 
-_MENU_VISIVEL = [m for m in _MENU if m[0] not in ("usuarios", "sincronizacao") and _pode(m[4])]
-if _is_admin:
-    _MENU_VISIVEL += [m for m in _MENU if m[0] in ("usuarios", "sincronizacao")]
+_MENU_VISIVEL = [
+    m for m in _MENU_FULL
+    if _pode_ver(m[4], m[5])
+    and (m[0] not in ("usuarios","sincronizacao") or _is_admin)
+]
 
-if "pagina" not in st.session_state:
+if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for m in _MENU_VISIVEL]:
     st.session_state.pagina = _MENU_VISIVEL[0][0]
 
-# ──────────────────────────────────────────────
-# Sidebar — navegação ERP
-# ──────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────
+# SIDEBAR
+# ────────────────────────────────────────────────────────────
 with st.sidebar:
-    # Logo
-    st.markdown("""
-    <div class="erp-logo">
-      <div class="erp-logo-icon">⚡</div>
+    # Logo / topbar
+    loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
+    loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
+    loja_id  = loja_opcoes[loja_sel_nome]
+
+    st.markdown(f"""
+    <div class="sb-logo">
+      <div class="sb-logo-mark">⚡</div>
+      <div class="sb-logo-text">PLUG ERP</div>
+    </div>
+    <div class="sb-empresa">
       <div>
-        <div class="erp-logo-name">PLUG ERP</div>
-        <div class="erp-logo-sub">Gestão de Estoque</div>
+        <div class="sb-empresa-name">{loja_sel_nome}</div>
+        <div class="sb-empresa-cnpj">Loja ativa</div>
       </div>
+      <div class="sb-empresa-arrow">▼</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Loja ativa
-    loja_opcoes = {"Todas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
-    loja_sel_nome = st.selectbox("🏪 Loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
-    loja_id = loja_opcoes[loja_sel_nome]
-    loja_label = loja_sel_nome if loja_sel_nome != "Todas" else "Todas as lojas"
-    st.markdown(f'<div style="text-align:center;padding:2px 0 8px"><span class="erp-badge">📍 {loja_label}</span></div>', unsafe_allow_html=True)
-
-    # Navegação
-    _cat_atual = None
-    for pid, icon, label, cat, aba_idx in _MENU_VISIVEL:
-        if cat != _cat_atual:
-            st.markdown(f'<p class="nav-section">{cat}</p>', unsafe_allow_html=True)
-            _cat_atual = cat
+    # Menu
+    _grp = None
+    for pid, icon, label, grupo, aba_idx, _ in _MENU_VISIVEL:
+        if grupo != _grp:
+            st.markdown(f'<div class="nav-group">{grupo}</div>', unsafe_allow_html=True)
+            _grp = grupo
         ativo = st.session_state.pagina == pid
-        container = st.container()
         if ativo:
-            container.markdown('<div class="nav-ativo">', unsafe_allow_html=True)
-        if container.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
+            st.markdown('<div class="nav-active">', unsafe_allow_html=True)
+        if st.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
             st.session_state.pagina = pid
             st.rerun()
         if ativo:
-            container.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    # User card + tema + sair
-    st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
-    st.divider()
-    inicial = (_nome_usuario[0] if _nome_usuario else "U").upper()
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+
+    # Tema + Sair
+    c1, c2 = st.columns(2)
+    if c1.button("☀️" if _dark else "🌙", use_container_width=True, key="btn_tema"):
+        st.session_state.tema = "light" if _dark else "dark"
+        st.rerun()
+    if c2.button("Sair", use_container_width=True, key="btn_sair"):
+        st.session_state.usuario_logado = None
+        st.rerun()
+
+    # User footer
+    ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
-    <div class="erp-usercard">
-      <div class="erp-usercard-avatar">{inicial}</div>
+    <div class="sb-footer">
+      <div class="sb-avatar">{ini}</div>
       <div>
-        <div class="erp-usercard-name">{_nome_usuario}</div>
-        <div class="erp-usercard-setor">{setor_label}</div>
+        <div class="sb-user-name">{_nome_usr}</div>
+        <div class="sb-user-role">{_setor_lbl}</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    tema_icon = "☀️" if _dark else "🌙"
-    if c1.button(f"{tema_icon} Tema", use_container_width=True, key="btn_tema"):
-        st.session_state.tema = "light" if _dark else "dark"
-        st.rerun()
-    if c2.button("🚪 Sair", use_container_width=True, key="btn_sair"):
-        st.session_state.usuario_logado = None
-        st.rerun()
-
-# ── cache e clipboard (ainda necessários nas páginas) ──
+# ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
 clip  = st.session_state.get("clipboard")
 
-# ── header da página ──
-_pag_atual = next((m for m in _MENU_VISIVEL if m[0] == st.session_state.pagina), _MENU_VISIVEL[0])
+# ── Cabeçalho da página ──
+_pg_info = next((m for m in _MENU_VISIVEL if m[0] == st.session_state.pagina), _MENU_VISIVEL[0])
 st.markdown(f"""
-<div class="erp-header">
+<div class="page-wrap" style="padding-bottom:0">
+<div class="page-header">
   <div>
-    <div class="erp-breadcrumb">{_pag_atual[3]} › {_pag_atual[2]}</div>
-    <div class="erp-page-title">{_pag_atual[1]}  <span>{_pag_atual[2]}</span></div>
+    <div class="page-breadcrumb">{_pg_info[3]} <span>›</span> {_pg_info[2]}</div>
+    <div class="page-title">{_pg_info[1]}  {_pg_info[2]}</div>
   </div>
+</div>
 </div>
 """, unsafe_allow_html=True)
 
 _pg = st.session_state.pagina
+
+
 
 
 # ──────────────────────────────────────────────
@@ -664,28 +720,53 @@ aba_usuarios  = _guard("usuarios")
 # ══════════════════════════════════════════════
 if _pg == "dashboard":
     total_cache = cache.get("total", 0) if cache else 0
-    sync_em = cache.get("sincronizado_em", "")[:16].replace("T", " às ") if cache else "—"
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(f'<div class="stat-card"><div class="stat-value">{total_cache}</div><div class="stat-label">Produtos em cache</div></div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="stat-card"><div class="stat-value">{len(api.LOJAS)}</div><div class="stat-label">Lojas ativas</div></div>', unsafe_allow_html=True)
-    c3.markdown(f'<div class="stat-card"><div class="stat-value">{len(_usuarios_db)}</div><div class="stat-label">Usuários</div></div>', unsafe_allow_html=True)
-    c4.markdown(f'<div class="stat-card"><div class="stat-value">{sync_em}</div><div class="stat-label">Última sincronização</div></div>', unsafe_allow_html=True)
+    sync_em = cache.get("sincronizado_em", "")[:10] if cache else "—"
+    hora_nm = _nome_usr.split()[0] if _nome_usr else "você"
+    st.markdown(f"<p style='font-size:1rem;margin-bottom:16px'>Olá, <b>{hora_nm}</b> 👋</p>", unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<div class="erp-card">', unsafe_allow_html=True)
-    st.markdown("**📍 Lojas**")
-    for lid, lnome in api.LOJAS.items():
+    # Stats
+    c1, c2, c3, c4 = st.columns(4)
+    for col, val, lbl in [
+        (c1, total_cache,        "Produtos no catálogo"),
+        (c2, len(api.LOJAS),     "Lojas ativas"),
+        (c3, len(_usuarios_db),  "Usuários"),
+        (c4, sync_em,            "Última sincronização"),
+    ]:
+        col.markdown(f'<div class="stat-box"><div class="stat-val">{val}</div><div class="stat-lbl">{lbl}</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+
+    # Status das lojas
+    cols_lojas = st.columns(len(api.LOJAS))
+    for col, (lid, lnome) in zip(cols_lojas, api.LOJAS.items()):
         c = api.carregar_cache(lid)
         t = c.get("total", 0) if c else 0
-        s = c.get("sincronizado_em", "")[:10] if c else "não sincronizado"
-        st.markdown(f"• **{lnome}** — {t} produtos · sync {s}")
-    st.markdown('</div>', unsafe_allow_html=True)
+        s = c.get("sincronizado_em", "")[:10] if c else "—"
+        badge = '<span class="badge badge-green">● Online</span>' if c else '<span class="badge badge-red">● Sem cache</span>'
+        col.markdown(f"""
+        <div class="card">
+          <div class="card-header">🏪 {lnome}</div>
+          <div class="stat-val" style="font-size:1.3rem">{t}</div>
+          <div class="stat-lbl">produtos</div>
+          <div style="margin-top:8px">{badge}</div>
+          <div class="stat-lbl" style="margin-top:4px">sync {s}</div>
+        </div>""", unsafe_allow_html=True)
 
     if clip:
-        st.info(f"📋 Transferência pendente: **{clip['tipo']}** — {len(clip['itens'])} itens  ·  origem: {clip.get('origem','—')}")
-        if st.button("🗑️ Limpar", key="dash_clip"):
+        st.info(f"📋 Área de transferência: **{clip['tipo']}** — {len(clip['itens'])} itens · de: {clip.get('origem','—')}")
+        if st.button("🗑️ Limpar transferência", key="dash_clip"):
             del st.session_state["clipboard"]
             st.rerun()
+
+# ── páginas futuras (placeholder) ──
+for _pid in ("clientes", "fornecedores", "vendas", "orcamentos", "compras_hist", "financeiro", "relatorios"):
+    if _pg == _pid:
+        st.markdown(f"""
+        <div class="card" style="text-align:center;padding:3rem 2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">🚧</div>
+          <div style="font-size:1rem;font-weight:600;margin-bottom:6px">Em desenvolvimento</div>
+          <div style="color:{TXT2};font-size:0.82rem">Esta seção será integrada em breve com a API do GestaoClick.</div>
+        </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════
 # SINCRONIZAÇÃO
@@ -735,7 +816,7 @@ if _pg == "sincronizacao":
 # ══════════════════════════════════════════════
 # ABA 1 — ENTRADA DE MERCADORIA (SOMA)
 # ══════════════════════════════════════════════
-with _guard(aba1):
+if _pg == "entrada":
     st.subheader("Entrada de Mercadoria")
     st.caption("Soma as quantidades ao estoque atual.")
 
@@ -847,7 +928,7 @@ with _guard(aba1):
 # ══════════════════════════════════════════════
 # ABA 2 — ACERTO DE ESTOQUE (SET ABSOLUTO)
 # ══════════════════════════════════════════════
-with _guard(aba2):
+if _pg == "acerto":
     st.subheader("Acerto de Estoque")
     st.caption("Define o valor absoluto do estoque (substitui o atual). Use para inventário ou correção.")
 
@@ -954,7 +1035,7 @@ with _guard(aba2):
 # ══════════════════════════════════════════════
 # ABA 3 — ETIQUETAS
 # ══════════════════════════════════════════════
-with _guard(aba3):
+if _pg == "etiquetas":
     st.subheader("Gerar Etiquetas")
     st.caption("Monte uma lista de variações + quantidades e gere o link de impressão.")
 
@@ -1026,7 +1107,7 @@ with _guard(aba3):
 # ══════════════════════════════════════════════
 # ABA 4 — PEDIDO DE COMPRA
 # ══════════════════════════════════════════════
-with _guard(aba4):
+if _pg == "pedido":
     st.subheader("Pedido de Compra ao Fornecedor")
 
     if not cache:
@@ -1529,7 +1610,7 @@ with _guard(aba4):
 # ══════════════════════════════════════════════
 # ABA 5 — ESTOQUE POR LOJA
 # ══════════════════════════════════════════════
-with _guard(aba5):
+if _pg == "estoque_loja":
 
     st.subheader("Estoque por Loja")
     st.caption("Consulte e edite o estoque de um produto em todas as lojas.")
@@ -1641,7 +1722,7 @@ with _guard(aba5):
 # ══════════════════════════════════════════════
 # ABA 6 — DISPONIBILIDADE POR LOJA
 # ══════════════════════════════════════════════
-with _guard(aba6):
+if _pg == "disponibilidade":
     st.subheader("Disponibilidade por Loja")
     st.caption("Controle em quais lojas cada produto está ativo. Selecionar um grupo pai inclui todos os subgrupos.")
 
@@ -1783,7 +1864,7 @@ with _guard(aba6):
 # ══════════════════════════════════════════════
 # ABA 7 — PREÇOS
 # ══════════════════════════════════════════════
-with _guard(aba7):
+if _pg == "precos":
     st.subheader("Atualização de Preços")
     st.caption("Edite em lote, reajuste por %, copie um preço e aplique a toda a categoria.")
 
@@ -1945,7 +2026,7 @@ with _guard(aba7):
 # ══════════════════════════════════════════════
 # ABA 8 — NOVO MODELO
 # ══════════════════════════════════════════════
-with _guard(aba8):
+if _pg == "novo_modelo":
     st.subheader("Novo Modelo")
 
     if not cache:
@@ -2044,7 +2125,7 @@ with _guard(aba8):
 # ══════════════════════════════════════════════
 # ABA 9 — CLONAR MODELO
 # ══════════════════════════════════════════════
-with _guard(aba9):
+if _pg == "clonar_modelo":
     st.subheader("Clonar Modelo")
 
     if not cache:
@@ -2089,7 +2170,7 @@ with _guard(aba9):
 # ══════════════════════════════════════════════
 # ABA USUÁRIOS — somente admin
 # ══════════════════════════════════════════════
-with _guard(aba_usuarios):
+if _pg == "usuarios":
     st.subheader("👥 Gerenciamento de Usuários")
 
     _usuarios_db = api.carregar_usuarios()
