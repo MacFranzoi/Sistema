@@ -555,32 +555,22 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* sidebar: logo e footer fixos, meio rolável */
-[data-testid="stSidebar"] > div:first-child {{
+/* ── SIDEBAR SCROLL: o container real de scroll do Streamlit ── */
+[data-testid="stSidebar"] {{
+    overflow: hidden !important;
+}}
+/* O div interno que o Streamlit usa para conteúdo */
+[data-testid="stSidebar"] > div {{
+    height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
     display: flex !important;
     flex-direction: column !important;
-    height: 100vh !important;
-    overflow: hidden !important;
     padding: 0 !important;
 }}
-.sb-logo {{
-    flex-shrink: 0;
-}}
-.sb-loja-wrap {{
-    flex-shrink: 0;
-}}
-.sb-nav-scroll {{
-    flex: 1 1 auto;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-bottom: 4px;
-}}
-.sb-nav-scroll::-webkit-scrollbar {{ width: 3px; }}
-.sb-nav-scroll::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
-.sb-footer {{
-    flex-shrink: 0;
-    margin-top: auto;
-}}
+[data-testid="stSidebar"] > div::-webkit-scrollbar {{ width: 3px; }}
+[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
+
 /* selectbox sem margens */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] {{
     margin: 0 !important; padding: 0 !important;
@@ -593,18 +583,19 @@ st.markdown(f"""
     font-size: 0.82rem !important; font-weight: 500 !important;
     color: {TXT} !important;
 }}
-/* remove gaps internos do streamlit na sidebar */
+/* remove gaps do Streamlit na sidebar */
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {{
     margin: 0 !important; padding: 0 !important; gap: 0 !important;
 }}
 [data-testid="stSidebar"] .stButton {{ margin: 0 !important; }}
-/* nav-group header */
+
+/* nav-group label */
 .nav-group {{
     font-size: 0.62rem; font-weight: 600; letter-spacing: 1.2px;
     text-transform: uppercase; color: {TXT2};
     padding: 14px 18px 4px; user-select: none;
 }}
-/* nav buttons base */
+/* nav buttons */
 [data-testid="stSidebar"] .stButton > button {{
     width: calc(100% - 16px) !important;
     background: transparent !important;
@@ -614,31 +605,47 @@ st.markdown(f"""
     font-size: 0.85rem !important; font-weight: 400 !important;
     color: {TXT2} !important;
     transition: background 0.15s ease, color 0.12s ease !important;
-    display: block !important;
 }}
 [data-testid="stSidebar"] .stButton > button:hover {{
     background: {SB2} !important; color: {TXT} !important;
 }}
-/* página: sempre começa no topo, sem padding-top extra */
-section[data-testid="stMain"] {{
+
+/* ── PÁGINA: alinha ao topo sem espaço em branco ── */
+/* Streamlit injeta padding-top = altura do header no stMain */
+[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
     padding-top: 0 !important;
+    margin-top: 0 !important;
 }}
 .main .block-container {{
-    padding-top: 22px !important;
+    padding-top: 20px !important;
     padding-bottom: 40px !important;
     margin-top: 0 !important;
+    max-width: 100% !important;
 }}
-/* remove o espaço que o stHeader empurra o conteúdo */
-[data-testid="stMain"] > div:first-child {{
-    margin-top: 0 !important;
-    padding-top: 0 !important;
+/* Oculta o header nativo para eliminar o espaço reservado */
+[data-testid="stHeader"] {{
+    display: none !important;
 }}
 </style>
+<script>
+// Força sidebar expandida após login
+(function() {{
+    const check = setInterval(() => {{
+        const sb = document.querySelector('[data-testid="stSidebar"]');
+        if (sb && sb.getAttribute('aria-expanded') === 'false') {{
+            const btn = document.querySelector('button[aria-controls="stSidebar"]') ||
+                        document.querySelector('[data-testid="stSidebarNavToggleButton"] button');
+            if (btn) btn.click();
+        }}
+        if (sb) clearInterval(check);
+    }}, 200);
+}})();
+</script>
 """, unsafe_allow_html=True)
 
 # ── Sidebar ──
 with st.sidebar:
-    # 1) Logo — fixa no topo
+    # Logo
     st.markdown(f"""
     <div class="sb-logo">
       <div class="sb-logo-mark">⚡</div>
@@ -646,69 +653,91 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # 2) Seletor de loja — fixo abaixo do logo
-    st.markdown('<div class="sb-loja-wrap">', unsafe_allow_html=True)
+    # Seletor de loja
     loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
     loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
     loja_id = loja_opcoes[loja_sel_nome]
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3) Área de nav rolável
-    st.markdown('<div class="sb-nav-scroll">', unsafe_allow_html=True)
+    # Menu agrupado
     _grp = None
     _pg_ativo = st.session_state.pagina
-
-    # Monta CSS ativo para o item selecionado
-    _ativo_css = "".join(f"""
-    [data-testid="stSidebar"] div[data-testid="stButton"]:nth-of-type({i+1}) button {{
-        background: {ACC_LT} !important; color: {ACC} !important;
-        font-weight: 600 !important;
-    }}""" if m[0] == _pg_ativo else ""
-        for i, m in enumerate(_MENU_VISIVEL))
-
-    # CSS numérico não é confiável — usamos abordagem por key via JS
-    # Renderiza cada item com classe especial via markdown + button
     for pid, icon, label, grupo, aba_idx, _ in _MENU_VISIVEL:
         if grupo != _grp:
             st.markdown(f'<div class="nav-group">{grupo}</div>', unsafe_allow_html=True)
             _grp = grupo
-        ativo = _pg_ativo == pid
-        if ativo:
-            st.markdown(f"""<style>
-            [data-testid="stSidebar"] div[data-testid="element-container"]:has(button[key="nav_{pid}"]) button,
-            [data-testid="stSidebar"] div:has(> div > button[aria-label*="{label}"]) button {{
-                background: {ACC_LT} !important; color: {ACC} !important;
-                font-weight: 600 !important; border-left: 3px solid {ACC} !important;
-                padding-left: 10px !important;
-            }}
-            </style>""", unsafe_allow_html=True)
         if st.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
             st.session_state.pagina = pid
             st.rerun()
 
-    st.markdown('</div>', unsafe_allow_html=True)  # fecha sb-nav-scroll
+    # JS: colore o botão ativo por texto exato + garante sidebar expandida
+    _pg_label = next((f"{m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
+    st.markdown(f"""
+    <script>
+    (function() {{
+      function applyActive() {{
+        // remove ativo anterior
+        document.querySelectorAll('[data-testid="stSidebar"] button.__nav_active')
+          .forEach(b => {{
+            b.classList.remove('__nav_active');
+            b.style.cssText = '';
+          }});
+        // aplica no item correto pelo texto
+        const label = {repr(_pg_label)};
+        document.querySelectorAll('[data-testid="stSidebar"] button').forEach(b => {{
+          if (b.innerText.trim() === label) {{
+            b.classList.add('__nav_active');
+            b.style.background = '{ACC_LT}';
+            b.style.color = '{ACC}';
+            b.style.fontWeight = '600';
+            b.style.borderLeft = '3px solid {ACC}';
+            b.style.paddingLeft = '9px';
+          }}
+        }});
+      }}
+      // Sidebar sempre aberta
+      function openSidebar() {{
+        const sb = document.querySelector('[data-testid="stSidebar"]');
+        if (sb && sb.getAttribute('aria-expanded') === 'false') {{
+          const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
+                      document.querySelector('button[aria-controls*="sidebar"]');
+          if (btn) btn.click();
+        }}
+      }}
+      if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', () => {{ applyActive(); openSidebar(); }});
+      }} else {{
+        applyActive(); openSidebar();
+      }}
+      // re-aplica após reruns do Streamlit
+      const obs = new MutationObserver(() => {{ applyActive(); openSidebar(); }});
+      obs.observe(document.body, {{ childList: true, subtree: true }});
+    }})();
+    </script>
+    """, unsafe_allow_html=True)
 
-    # 4) Footer fixo — tema + avatar
+    st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
+
+    # Footer
     ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
-    <div class="sb-footer" style="padding:10px 16px;border-top:1px solid {BOR};
-         background:{SB};display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <div style="border-top:1px solid {BOR};padding:10px 16px;background:{SB};
+         display:flex;align-items:center;justify-content:space-between;gap:8px">
       <div style="display:flex;align-items:center;gap:9px;min-width:0">
         <div class="sb-avatar">{ini}</div>
-        <div style="min-width:0;overflow:hidden">
-          <div class="sb-user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{_nome_usr}</div>
+        <div style="min-width:0">
+          <div class="sb-user-name">{_nome_usr}</div>
           <div class="sb-user-role">{_setor_lbl}</div>
         </div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
+    </div>
     """, unsafe_allow_html=True)
-    if st.button("☀️" if _dark else "🌙", key="btn_tema", help="Alternar tema"):
+    col_t, col_s = st.columns(2)
+    if col_t.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
         st.session_state.tema = "light" if _dark else "dark"
         st.rerun()
-    if st.button("→", key="btn_sair", help="Sair"):
+    if col_s.button("Sair", key="btn_sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
-    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
