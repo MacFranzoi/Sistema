@@ -1768,7 +1768,8 @@ if _pg == "pedido":
 
                     _kits_disponiveis = list(_WPP_KITS.keys())
 
-                    _prompt = f"""Você é assistente de compras de uma loja de capas para celular.
+                    _prompt = f"""Você é assistente de compras de uma loja de capas para celular no Brasil.
+As pessoas anotam os modelos com abreviações e erros de digitação. Seu trabalho é identificar o modelo correto.
 
 Pedido recebido no WhatsApp:
 {wpp_texto}
@@ -1778,19 +1779,28 @@ Catálogo de aparelhos (cod_interno | nome):
 
 Kits disponíveis: {_kits_disponiveis}
 
-Instruções:
-- Para cada linha do pedido, identifique o aparelho e os kits pedidos.
-- Normalize SEMPRE antes de mapear:
-  "masculinas/masculinos/masc/male" → "masculino"
-  "femininas/femininos/fem/female" → "feminino"
-  "pacote masc/pacote masculino" → "pacote masculino"
-  "pacote fem/pacote feminino" → "pacote feminino"
-  "brilho/brilhos/glitter" → "masculino" (kit padrão para brilho)
-- Encontre o cod_interno no catálogo (ignore erros de digitação e abreviações).
-- Gere UMA entrada por kit por aparelho.
+REGRAS DE ABREVIAÇÃO — decodifique ANTES de buscar no catálogo:
+- "Ed" ou "ED" = "EDGE" (série Motorola). Ex: Ed20=EDGE 20, Ed30=EDGE 30, Ed30fusion=EDGE 30 Fusion, Ed30neo=EDGE 30 Neo, Ed40neo=EDGE 40 Neo, Ed50=EDGE 50, Ed50neo=EDGE 50 Neo, Ed50fusion=EDGE 50 Fusion, Ed5050=EDGE 50, Ed60=EDGE 60, Ed60pro=EDGE 60 Pro, Ed70=EDGE 70, Ed70ultra=EDGE 70 Ultra
+- "pró/pro/pró" = "Pro", "ultra/ul" = "Ultra", "neo" = "Neo", "fusion/fus" = "Fusion"
+- Números colados à letra: Ed30neo = EDGE 30 Neo
+- Marcas comuns: G23/G32/G53/G54 = Motorola G série; A01/A02/A03... = Samsung A série; Note = Samsung Note; X6/X6pro = Poco X6/X6 Pro; Redmi = Xiaomi Redmi
+- Se não tiver certeza do modelo exato, use o nome mais próximo do catálogo
+
+REGRAS DE KIT:
+- "masculinas/masculinos/masc" → kit "masculino"
+- "femininas/femininos/fem" → kit "feminino"
+- "pacote masc" → kit "pacote masculino"
+- "pacote fem" → kit "pacote feminino"
+- "brilho/brilhos/glitter" → kit "masculino" (brilho segue kit masculino)
+- Se pedir 2 kits em uma linha, gere 2 entradas separadas para o mesmo aparelho
+
+EXCLUSÕES: se a linha contiver "menos [cor]" ou "exceto [cor]" ou "sem [cor]", inclua essas cores em "excluir_cores".
+Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
+
+- Encontre o cod_interno exato no catálogo para cada aparelho.
 - Retorne SOMENTE JSON válido sem markdown:
 
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"nome_do_kit","confianca":"alta|media|baixa"}}]"""
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"nome_do_kit","excluir_cores":[],"confianca":"alta|media|baixa"}}]"""
 
                     try:
                         _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -1816,10 +1826,15 @@ Instruções:
                                 _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
                                 _kit  = _entry.get("kit", "").lower()
                                 _conf = _entry.get("confianca", "baixa")
+                                _excluir = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
                                 _cores_kit = _WPP_KITS.get(_kit, [])
                                 _prod_obj  = _prods_map.get(_cod)
 
                                 for _cor, _qtd in _cores_kit:
+                                    # Aplica exclusões ("menos preta" → pula "preto"/"preta")
+                                    _cor_lower = (_cor if isinstance(_cor, str) else " ".join(_cor)).lower()
+                                    if any(_ex in _cor_lower or _cor_lower in _ex for _ex in _excluir):
+                                        continue
                                     _termos = [_cor] if isinstance(_cor, str) else _cor
                                     # Busca a variação EXATA no catálogo pelo nome
                                     _var_match = None
