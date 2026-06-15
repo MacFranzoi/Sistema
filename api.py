@@ -924,6 +924,183 @@ def atualizar_precos_lote(entradas, loja_id=None, progress_callback=None):
     return resultados
 
 
+# ──────────────────────────────────────────────
+# Importação / exportação de planilhas
+# ──────────────────────────────────────────────
+
+def gerar_template_excel(tipo):
+    """Retorna BytesIO com planilha-modelo para importação (tipo='pedido'|'etiquetas')."""
+    import io, pandas as pd
+
+    if tipo == "pedido":
+        cols = ["Produto", "Variação", "Quantidade", "Fornecedor", "Custo Unit.", "Observação"]
+        exemplos = [
+            ["Capinha iPhone 15", "Preta", 10, "Distribuidora XYZ", 5.50, ""],
+            ["Capinha Samsung A55", "Azul", 5, "Distribuidora XYZ", 4.80, "urgente"],
+        ]
+    else:  # etiquetas
+        cols = ["Produto", "Variação", "Quantidade"]
+        exemplos = [
+            ["Capinha iPhone 15", "Preta", 10],
+            ["Capinha Samsung A55", "Azul", 5],
+        ]
+
+    df = pd.DataFrame(exemplos, columns=cols)
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Importação")
+        ws = writer.sheets["Importação"]
+        for col in ws.columns:
+            ws.column_dimensions[col[0].column_letter].width = max(
+                len(str(col[0].value or "")), max(len(str(c.value or "")) for c in col)
+            ) + 4
+    buf.seek(0)
+    return buf
+
+
+def importar_excel_itens(arquivo_bytes, tipo, cache):
+    """
+    Lê uma planilha Excel e tenta casar cada linha com produtos do cache.
+    Retorna (itens_ok, itens_sem_match).
+    itens_ok: lista de dicts prontos para uso em pedido_itens/etiq_itens.
+    itens_sem_match: lista de dicts com os dados originais da planilha.
+    """
+    import io, pandas as pd
+
+    df = pd.read_excel(io.BytesIO(arquivo_bytes))
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    # Mapeamento flexível de nomes de coluna
+    _alias = {
+        "produto": ["produto", "product", "nome", "name", "modelo"],
+        "variacao": ["variação", "variacao", "variation", "cor", "color", "tamanho", "size"],
+        "quantidade": ["quantidade", "qtd", "qty", "quantity", "qntd"],
+        "fornecedor": ["fornecedor", "supplier", "vendor", "forncedor"],
+        "custo": ["custo unit.", "custo", "valor_custo", "cost", "price", "preco", "preço"],
+        "observacao": ["observação", "observacao", "obs", "observation", "note", "notas"],
+    }
+
+    def _col(chave):
+        for alias in _alias[chave]:
+            if alias in df.columns:
+                return alias
+        return None
+
+    col_prod = _col("produto")
+    col_var = _col("variacao")
+    col_qtd = _col("quantidade")
+
+    if not col_prod or not col_qtd:
+        raise ValueError("Planilha deve ter colunas 'Produto' e 'Quantidade'.")
+
+    produtos_cache = cache.get("produtos", [])
+
+    def _buscar(nome_prod, nome_var):
+        nome_prod_l = (nome_prod or "").lower().strip()
+        nome_var_l = (nome_var or "").lower().strip()
+        # Tokenização: todos os tokens do nome do produto devem aparecer
+        tokens = [t for t in nome_prod_l.split() if len(t) > 2]
+        candidatos = []
+        for p in produtos_cache:
+            p_nome_l = (p.get("nome") or "").lower()
+            if not all(t in p_nome_l for t in tokens):
+                continue
+            for v in p.get("variacoes", []):
+                vd = v["variacao"]
+                v_nome_l = (vd.get("nome") or "").lower()
+                score = sum(t in p_nome_l for t in tokens)
+                if nome_var_l:
+                    var_tokens = [t for t in nome_var_l.split() if len(t) > 1]
+                    score += sum(t in v_nome_l for t in var_tokens) * 2
+                candidatos.append((score, p, vd))
+        if not candidatos:
+            return None, None
+        candidatos.sort(key=lambda x: -x[0])
+        _, p_best, v_best = candidatos[0]
+        return p_best, v_best
+
+    itens_ok = []
+    itens_sem_match = []
+
+    col_forn = _col("fornecedor")
+    col_custo = _col("custo")
+    col_obs = _col("observacao")
+
+    for _, row in df.iterrows():
+        nome_prod = str(row.get(col_prod, "") or "").strip()
+        nome_var = str(row.get(col_var, "") or "").strip() if col_var else ""
+        try:
+            qtd = int(float(row[col_qtd]))
+        except (TypeError, ValueError):
+            qtd = 0
+        if not nome_prod or qtd <= 0:
+            continue
+
+        prod, var = _buscar(nome_prod, nome_var)
+
+        base = {
+            "_prod_original": nome_prod,
+            "_var_original": nome_var,
+            "quantidade": qtd,
+            "fornecedor": str(row.get(col_forn, "") or "").strip() if col_forn else "",
+            "valor_custo": str(row.get(col_custo, "") or "").strip() if col_custo else "",
+            "observacao": str(row.get(col_obs, "") or "").strip() if col_obs else "",
+        }
+
+        if prod and var:
+            item = {
+                "produto_id": prod["id"],
+                "produto_nome": prod["nome"],
+                "cod_interno": prod.get("codigo_interno", ""),
+                "variacao_id": var["id"],
+                "variacao_nome": var.get("nome", ""),
+                "variacao_cod": var.get("codigo", ""),
+                "nome": f"{prod['nome']} / {var.get('nome','')}",
+                **base,
+            }
+            itens_ok.append(item)
+        else:
+            itens_sem_match.append({**base, "produto_nome": nome_prod, "variacao_nome": nome_var})
+
+    return itens_ok, itens_sem_match
+
+
+def calcular_capas_restantes(pedido_itens, recebidos_itens):
+    """
+    Subtrai as quantidades recebidas do pedido original.
+    Retorna lista de itens com quantidade > 0 após subtração.
+    """
+    # Indexa recebidos por variacao_id (prioritário) e por nome normalizado
+    recebidos_por_id = {}
+    recebidos_por_nome = {}
+    for r in recebidos_itens:
+        vid = str(r.get("variacao_id", "")).strip()
+        nome = (r.get("variacao_nome") or r.get("nome") or "").lower().strip()
+        qtd = int(r.get("quantidade", 0))
+        if vid:
+            recebidos_por_id[vid] = recebidos_por_id.get(vid, 0) + qtd
+        if nome:
+            recebidos_por_nome[nome] = recebidos_por_nome.get(nome, 0) + qtd
+
+    restantes = []
+    for item in pedido_itens:
+        vid = str(item.get("variacao_id", "")).strip()
+        nome = (item.get("variacao_nome") or item.get("nome") or "").lower().strip()
+        qtd_pedido = int(item.get("quantidade", 0))
+
+        qtd_rec = 0
+        if vid and vid in recebidos_por_id:
+            qtd_rec = recebidos_por_id[vid]
+        elif nome and nome in recebidos_por_nome:
+            qtd_rec = recebidos_por_nome[nome]
+
+        qtd_restante = max(0, qtd_pedido - qtd_rec)
+        if qtd_restante > 0:
+            restantes.append({**item, "quantidade": qtd_restante})
+
+    return restantes
+
+
 def clonar_produto(produto_id, novo_nome, novo_codigo, loja_id=None):
     produto = _get(f"produtos/{produto_id}", loja_id=loja_id)
     origem = produto.get("data", produto)

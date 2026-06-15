@@ -1775,6 +1775,27 @@ if _pg == "etiquetas":
             st.session_state.etiq_itens = itens_etiq_load
             st.rerun()
 
+        with st.expander("📥 Importar planilha de etiquetas"):
+            _tpl_etiq = api.gerar_template_excel("etiquetas")
+            st.download_button("⬇️ Baixar planilha-modelo", _tpl_etiq,
+                               file_name="modelo_etiquetas.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True, key="dl_tpl_etiq")
+            _arq_etiq = st.file_uploader("Selecione a planilha", type=["xlsx", "xls"], key="up_etiq")
+            if _arq_etiq and st.button("📥 Importar", use_container_width=True, key="btn_imp_etiq"):
+                try:
+                    _ok_e, _sem_e = api.importar_excel_itens(_arq_etiq.read(), "etiquetas", cache)
+                    if _ok_e:
+                        st.session_state.etiq_itens.extend(_ok_e)
+                        st.success(f"✅ {len(_ok_e)} item(ns) importado(s).")
+                    if _sem_e:
+                        st.warning(f"⚠️ {len(_sem_e)} linha(s) sem correspondência no sistema:")
+                        for _s in _sem_e:
+                            st.caption(f"• {_s['_prod_original']} / {_s['_var_original']}")
+                    st.rerun()
+                except Exception as _ex_e:
+                    st.error(f"Erro ao importar: {_ex_e}")
+
         prod2, ed2 = busca_produto_ui("etiq", cache, col_qtd="Quantidade")
 
         if prod2 and ed2 is not None:
@@ -2596,6 +2617,60 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     api._gh_push_arquivo(f"listas/{_arq_ped_aberto}", _sv_str, f"Salva lista: {_nome_lista_sv}")
                     st.success(f"✅ **{_nome_lista_sv}** salva!")
                     st.rerun()
+
+        with st.expander("📥 Importar planilha de capinhas"):
+            _tpl_ped = api.gerar_template_excel("pedido")
+            st.download_button("⬇️ Baixar planilha-modelo", _tpl_ped,
+                               file_name="modelo_pedido.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True, key="dl_tpl_ped")
+            _arq_imp = st.file_uploader("Selecione a planilha", type=["xlsx", "xls"], key="up_ped_imp")
+            if _arq_imp and st.button("📥 Importar", use_container_width=True, key="btn_imp_ped"):
+                try:
+                    _ok_p, _sem_p = api.importar_excel_itens(_arq_imp.read(), "pedido", cache)
+                    if _ok_p:
+                        _pedido_snapshot()
+                        st.session_state.pedido_itens.extend(_ok_p)
+                        st.success(f"✅ {len(_ok_p)} item(ns) importado(s).")
+                    if _sem_p:
+                        st.warning(f"⚠️ {len(_sem_p)} linha(s) sem correspondência — adicionadas como avulsos:")
+                        for _sp in _sem_p:
+                            st.session_state.pedido_avulsos.append({
+                                "produto_nome": _sp["_prod_original"],
+                                "variacao_nome": _sp["_var_original"],
+                                "quantidade": _sp["quantidade"],
+                                "fornecedor": _sp.get("fornecedor", ""),
+                                "valor_custo": _sp.get("valor_custo", ""),
+                                "observacao": _sp.get("observacao", ""),
+                            })
+                    st.rerun()
+                except Exception as _ex_p:
+                    st.error(f"Erro ao importar: {_ex_p}")
+
+        with st.expander("🔄 Gerar pedido de capas restantes"):
+            st.caption("Importe a planilha das capinhas já recebidas. O sistema calcula a diferença e cria um novo pedido.")
+            _arq_rec = st.file_uploader("Planilha de recebidos", type=["xlsx", "xls"], key="up_ped_rec")
+            if _arq_rec and st.button("🔄 Calcular restantes", use_container_width=True, key="btn_cap_rest"):
+                try:
+                    _rec_ok, _rec_sem = api.importar_excel_itens(_arq_rec.read(), "pedido", cache)
+                    _pedido_atual = (
+                        st.session_state.get("pedido_itens", []) +
+                        st.session_state.get("pedido_avulsos", [])
+                    )
+                    if not _pedido_atual:
+                        st.warning("Monte um pedido antes de calcular os restantes.")
+                    else:
+                        _restantes = api.calcular_capas_restantes(_pedido_atual, _rec_ok + _rec_sem)
+                        if _restantes:
+                            import json as _jr
+                            _nome_rest = f"Restantes {datetime.now().strftime('%d/%m %H:%M')}"
+                            api.salvar_lista(_nome_rest, "pedido", _restantes)
+                            st.success(f"✅ Pedido **{_nome_rest}** criado com {len(_restantes)} item(ns) restantes!")
+                            st.rerun()
+                        else:
+                            st.success("🎉 Todos os itens do pedido foram recebidos!")
+                except Exception as _ex_r:
+                    st.error(f"Erro ao calcular restantes: {_ex_r}")
 
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
