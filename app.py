@@ -2057,11 +2057,14 @@ COMO DISTINGUIR COR DE KIT:
 TRANSCRIÇÃO DE VOZ / DITADO — fala contínua sem pontuação:
 1. Modelos podem ter espaço: "a 06"=A06, "a 07"=A07, "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo
 2. Um bloco pode ter MÚLTIPLOS modelos em sequência — ao detectar novo modelo, inicie entradas para ele
-3. Números por extenso = quantidade: "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
+3. Números por extenso = quantidade SEMPRE — nunca artigo neste contexto:
+   "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
+   IMPORTANTE: "uma preta", "um brilho", "uma verde militar" → "uma/um" é quantidade 1, NÃO artigo.
 4. [número] + [cor] → avulso cor, quantidade_fixa=número
 5. [número] + [kit] → kit, quantidade_fixa=número
-6. Cor ou kit sem número antes → quantidade_fixa=1
+6. Cor ou kit sem NENHUM número antes → quantidade_fixa=1
 7. Uma entrada JSON por par modelo+cor ou modelo+kit
+8. Não precisa de palavra-chave para iniciar o ditado — o formato é livre
 
 Exemplo: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
 → A06 | kit="avulso cor" descricao_avulso="preta" qtd=2
