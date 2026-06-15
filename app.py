@@ -2007,11 +2007,11 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "fem/feminina/femininas/femininos/f" → "feminino"
   "pac masc/pacote masc/pm" → "pacote masculino"
   "pac fem/pacote fem/pf" → "pacote feminino"
-  "sl masc/silicone masc/slm" → "sl masculino"
-  "sl fem/silicone fem/slf" → "sl feminino"
-  "sl pac masc/slpm" → "sl pacote masculino"
-  "sl pac fem/slpf" → "sl pacote feminino"
-  "sl" sozinho (sem masc/fem) → gere 2 entradas: "sl pacote masculino" + "sl pacote feminino"
+  "sl masc/silicone masc/slm/silicone liquido masc/silicone líquido masc" → "sl masculino"
+  "sl fem/silicone fem/slf/silicone liquido fem/silicone líquido fem" → "sl feminino"
+  "sl pac masc/slpm/silicone liquido pac masc" → "sl pacote masculino"
+  "sl pac fem/slpf/silicone liquido pac fem" → "sl pacote feminino"
+  "sl/silicone/silicone liquido/silicone líquido" sozinho (sem masc/fem) → gere 2 entradas: "sl pacote masculino" + "sl pacote feminino"
   "very rio masc/vr masc/vrm" → "vr masculino"
   "very rio fem/vr fem/vrf" → "vr feminino"
   "vr pac masc/vrpm" → "vr pacote masculino"
@@ -2028,54 +2028,31 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
-CORES E KITS NO DITADO — regra absoluta:
-O ditado mistura cores e kits livremente. Você deve identificar cada palavra/expressão como:
-  A) COR → kit="avulso cor", descricao_avulso=cor normalizada no SINGULAR FEMININO
-  B) KIT → kit=nome do kit
+REGRA SOBRE CORES — válida sempre, inclusive em texto normal:
+Palavras de cor (preta, preto, branca, verde, lilás, rosa, vinho, nude, dourada, vermelha, etc.)
+NUNCA são kits. São SEMPRE kit="avulso cor" com descricao_avulso=a cor.
+Cores NUNCA viram "masculino" ou "feminino". A regra "kit ambíguo → masculino" não se aplica a cores.
 
-NORMALIZAÇÃO DE COR — seja tolerante com gênero e plural:
-  pretas/pretos/preta/preto → "preta"
-  brancas/brancos/branca/branco → "branca"
-  rosas/rosa → "rosa"
-  lilases/lilás/lilas → "lilás"
-  verdes militares/verde militar → "verde militar"
-  vinhos/vinho → "vinho"
-  nudes/nude → "nude"
-  douradas/dourados/dourada/dourado → "dourada"
-  azuis/azul → "azul"
-  vermelhas/vermelhos/vermelha/vermelho → "vermelha"
-  cinzas/cinza → "cinza"
-  Qualquer outra cor: normalize para singular e use como descricao_avulso
-
-COMO DISTINGUIR COR DE KIT:
-  - É KIT: masculino, feminino, brilho, very rio, vr, sl, magsafe, carteira, película, couro, strass, pacote
-  - É COR: qualquer palavra que descreve uma tonalidade (preta, verde, lilás, rose, nude, vinho, etc.)
-  - "masculino"/"feminino" NUNCA são cores — são kits
-  - Cores NUNCA são kits — não tente mapear cor para masculino/feminino
-  - A regra "kit ambíguo → masculino" aplica-se APENAS a palavras ambíguas entre kits, nunca a cores
-
-TRANSCRIÇÃO DE VOZ / DITADO — fala contínua sem pontuação:
-1. DETECTAR MODELO: "a" + número = Samsung A[número]. "a 06"=A06, "a 07"=A07, "a 53"=A53.
-   O "a" aqui é SEMPRE prefixo de modelo Samsung, NUNCA artigo.
-   Outros: "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo, "g 54"=Moto G54.
-2. MÚLTIPLOS MODELOS: quando aparecer um novo modelo no meio do texto, todas as cores/kits
-   seguintes pertencem a ele. Não misture itens de modelos diferentes.
-3. QUANTIDADES — números por extenso são sempre quantidade, nunca artigo:
+TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuação:
+1. MODELO: "a" + número = Samsung A[número] ("a 06"=A06, "a 53"=A53). Nunca artigo.
+   Outros: "iphone 15"=iPhone 15, "edge 30"=Edge 30, "g 54"=Moto G54.
+2. MÚLTIPLOS MODELOS em sequência: ao detectar novo modelo, inicia entradas para ele.
+3. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-   "uma preta" → preta qtd=1 | "um brilho" → brilho qtd=1 (NUNCA trate como artigo)
-4. Kit ou cor SEM número antes → quantidade_fixa=1
-5. [número] + [cor] → kit="avulso cor", descricao_avulso=cor normalizada, quantidade_fixa=número
-6. [número] + [kit] → kit=nome, quantidade_fixa=número
+4. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
+   Normalize gênero/plural: pretas→"preta", brancos→"branca", vermelhas→"vermelha", lilases→"lilás"
+5. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
+6. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
 7. Uma entrada JSON por par modelo+cor ou modelo+kit
 
-Exemplo A: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
+Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
 → A07 | kit="diversos masculino" | qtd=1
 → A06 | kit="brilho" | qtd=1
 → A53 | kit="avulso cor" descricao_avulso="preta" | qtd=1
 → A53 | kit="avulso cor" descricao_avulso="vermelha" | qtd=2
 → A53 | kit="avulso cor" descricao_avulso="vinho" | qtd=1
 
-Exemplo B: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
+Exemplo B — só cores: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
 → A06 | kit="avulso cor" descricao_avulso="preta" | qtd=2
 → A06 | kit="avulso cor" descricao_avulso="verde militar" | qtd=1
 → A06 | kit="avulso cor" descricao_avulso="lilás" | qtd=2
