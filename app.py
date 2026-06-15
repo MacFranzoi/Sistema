@@ -1732,15 +1732,25 @@ if _pg == "pedido":
     st.subheader("Pedido de Compra ao Fornecedor")
 
     # ── Importação via WhatsApp + IA ──────────────────────────────
+    # Kits predefinidos (mesmos do painel manual abaixo)
+    _WPP_KITS = {
+        "masculino":        [("preto", 2), ("marrom", 1), ("azul marinho", 1), ("cinza chumbo", 1)],
+        "feminino":         [("lilás", 1), ("marsala", 1), ("marrom", 1)],
+        "pacote masculino": [("preto", 3), ("azul marinho", 2), ("verde militar", 1),
+                             ("marrom", 1), ("cinza chumbo", 2)],
+        "pacote feminino":  [("lilás", 2), ("pink", 1), ("rosa", 1), ("marsala", 2),
+                             ("vinho", 1), ("roxo", 1), ("marrom", 1), ("nude", 1)],
+    }
+
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp com os modelos e tipos pedidos. A IA interpreta e busca as variações reais no catálogo.</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
         wpp_texto = st.text_area(
             "Texto do WhatsApp",
-            placeholder="Poco x3 - masculino e brilho\nX6- brilho\nNote13pro4g- feminino e masculino",
+            placeholder="Poco x3 - masculino e brilho\nX6- femininas\nNote13pro4g- masculinas e femininas",
             height=160, key="wpp_input", label_visibility="collapsed"
         )
         col_ia1, col_ia2 = st.columns([3, 1])
-        qtd_padrao = col_ia1.number_input("Qtd padrão por variação", min_value=1, max_value=99, value=1, key="wpp_qtd")
+        fornecedor_wpp = col_ia1.text_input("Fornecedor (opcional)", placeholder="ex: Distribuidora ABC", key="wpp_forn")
         gerar = col_ia2.button("✨ Gerar pré-pedido", type="primary", use_container_width=True, key="wpp_gerar")
 
         if gerar and wpp_texto.strip():
@@ -1751,48 +1761,41 @@ if _pg == "pedido":
                     import json as _json, re as _re, os as _os
 
                     _prods_all = cache.get("produtos", [])
-
-                    # Tipos únicos do catálogo (sufixo após "/")
-                    _tipos_set = set()
-                    for _p in _prods_all:
-                        for _v in _p.get("variacoes", []):
-                            _vn = _v.get("variacao", {}).get("nome", "")
-                            _tipos_set.add(_vn.split("/")[-1].strip() if "/" in _vn else _vn.strip())
-                    _tipos_lista = sorted(t for t in _tipos_set if t)
-
-                    # Catálogo resumido (cod | nome)
                     _catalogo_txt = "\n".join(
                         f"{_p.get('codigo_interno','')} | {_p.get('nome','')}"
                         for _p in _prods_all if _p.get("codigo_interno") and _p.get("nome")
                     )[:12000]
+
+                    _kits_disponiveis = list(_WPP_KITS.keys())
 
                     _prompt = f"""Você é assistente de compras de uma loja de capas para celular.
 
 Pedido recebido no WhatsApp:
 {wpp_texto}
 
-Catálogo (cod_interno | nome do aparelho):
+Catálogo de aparelhos (cod_interno | nome):
 {_catalogo_txt}
 
-Tipos de variação existentes no sistema: {", ".join(_tipos_lista)}
+Kits disponíveis: {_kits_disponiveis}
 
 Instruções:
-- Para cada linha identifique: aparelho, tipos/estilos pedidos e quantidade (se mencionada, senão null).
-- Normalize plurais e variações de gênero ANTES de mapear: "masculinas/masculinos/masc" = "masculino", "femininas/femininos/fem" = "feminino", "brilhos" = "brilho", etc.
-- Mapeie os termos normalizados para os tipos reais da lista acima:
-  "feminino" → estilo feminino (ex: Aveludada)
-  "masculino" → estilo masculino (ex: Silicone, Couro, Space 2)
-  "brilho/glitter" → brilhoso (ex: Space 2, Vidro)
-  Se não houver correspondência clara use o termo normalizado.
-- Gere UMA entrada por tipo por aparelho (não expanda cores).
+- Para cada linha do pedido, identifique o aparelho e os kits pedidos.
+- Normalize SEMPRE antes de mapear:
+  "masculinas/masculinos/masc/male" → "masculino"
+  "femininas/femininos/fem/female" → "feminino"
+  "pacote masc/pacote masculino" → "pacote masculino"
+  "pacote fem/pacote feminino" → "pacote feminino"
+  "brilho/brilhos/glitter" → "masculino" (kit padrão para brilho)
+- Encontre o cod_interno no catálogo (ignore erros de digitação e abreviações).
+- Gere UMA entrada por kit por aparelho.
 - Retorne SOMENTE JSON válido sem markdown:
 
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","tipo_pedido":"TipoReal","quantidade":null,"confianca":"alta|media|baixa"}}]"""
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"nome_do_kit","confianca":"alta|media|baixa"}}]"""
 
                     try:
                         _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
                         if not _ant_key:
-                            st.error("Configure a variável ANTHROPIC_API_KEY nos secrets do Streamlit.")
+                            st.error("Configure ANTHROPIC_API_KEY nos secrets do Streamlit.")
                         else:
                             import anthropic as _ant
                             _client = _ant.Anthropic(api_key=_ant_key)
@@ -1804,54 +1807,71 @@ Instruções:
                             _raw = _msg.content[0].text.strip()
                             _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
                             _parsed = _json.loads(_m.group() if _m else _raw)
-                            # Inicializa seleção: todos marcados
-                            st.session_state["wpp_resultado"] = _parsed
-                            st.session_state["wpp_sel"] = [True] * len(_parsed)
-                            st.session_state["wpp_qtd_usada"] = int(qtd_padrao)
+
+                            # Expande cada entrada nos itens reais (cor × qtd) usando os kits
+                            _prods_map = {p.get("codigo_interno"): p for p in _prods_all}
+                            _linhas_expandidas = []
+                            for _entry in _parsed:
+                                _cod  = _entry.get("cod_interno") or ""
+                                _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                                _kit  = _entry.get("kit", "").lower()
+                                _conf = _entry.get("confianca", "baixa")
+                                _cores_kit = _WPP_KITS.get(_kit, [])
+                                _prod_obj  = _prods_map.get(_cod)
+
+                                for _cor, _qtd in _cores_kit:
+                                    _termos = [_cor] if isinstance(_cor, str) else _cor
+                                    # Tenta encontrar a variação real no produto
+                                    _var_match = None
+                                    if _prod_obj:
+                                        for _v in _prod_obj.get("variacoes", []):
+                                            _vd = _v.get("variacao", {})
+                                            _vn = _vd.get("nome", "").lower()
+                                            if all(t.lower() in _vn for t in _termos):
+                                                _var_match = _vd
+                                                break
+
+                                    _linhas_expandidas.append({
+                                        "✓": True,
+                                        "_cod":        _cod,
+                                        "_nome":       _nome,
+                                        "_kit":        _kit,
+                                        "_conf":       _conf,
+                                        "_var_id":     _var_match.get("id", "") if _var_match else "",
+                                        "_var_cod":    _var_match.get("codigo", "") if _var_match else "",
+                                        "_prod_id":    _prod_obj.get("id", "") if _prod_obj else "",
+                                        "_custo":      float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
+                                        "Aparelho":    _nome,
+                                        "Kit":         _kit.title(),
+                                        "Cor":         _var_match.get("nome", _cor.title()) if _var_match else _cor.title(),
+                                        "Qtd":         _qtd,
+                                        "Cód":         _cod or "⚠ não encontrado",
+                                        "Conf":        _conf,
+                                    })
+
+                            st.session_state["wpp_expandido"] = _linhas_expandidas
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
 
         # ── Tabela de revisão com seleção ──────────────────────────
-        if "wpp_resultado" in st.session_state and st.session_state.wpp_resultado:
+        if "wpp_expandido" in st.session_state and st.session_state.wpp_expandido:
             import pandas as _pd
-            _resultado  = st.session_state.wpp_resultado
-            _qtd_padrao = st.session_state.get("wpp_qtd_usada", 1)
-            _prods_map  = {p.get("codigo_interno"): p for p in cache.get("produtos", []) if cache}
+            _linhas = st.session_state.wpp_expandido
 
-            st.markdown(f"<div style='font-weight:700;font-size:0.95rem;margin:14px 0 6px'>Pré-pedido gerado — selecione e ajuste as quantidades</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-weight:700;font-size:0.95rem;margin:14px 0 6px'>Pré-pedido gerado — selecione e ajuste</div>", unsafe_allow_html=True)
 
-            # Monta dataframe para edição
-            _rows = []
-            for _item in _resultado:
-                _cod  = _item.get("cod_interno") or ""
-                _nome = _item.get("nome_produto") or _item.get("modelo_digitado", "")
-                _tipo = _item.get("tipo_pedido", "")
-                _qtd  = _item.get("quantidade") or _qtd_padrao
-                _conf = _item.get("confianca", "baixa")
+            _cols_visiveis = ["✓", "Aparelho", "Kit", "Cor", "Qtd", "Cód", "Conf"]
+            _df_edit = _pd.DataFrame(_linhas)[_cols_visiveis + ["_cod","_nome","_kit","_conf","_var_id","_var_cod","_prod_id","_custo"]]
 
-                # Verifica se existe no catálogo
-                _existe = "✓" if (_cod and _cod in _prods_map) else "⚠"
-
-                _rows.append({
-                    "✓": True,
-                    "Aparelho": _nome,
-                    "Tipo": _tipo,
-                    "Qtd": int(_qtd),
-                    "Cód": _cod,
-                    "OK": _existe,
-                    "Conf": _conf,
-                })
-
-            _df = _pd.DataFrame(_rows)
             _edited = st.data_editor(
-                _df,
+                _df_edit[_cols_visiveis],
                 column_config={
                     "✓":       st.column_config.CheckboxColumn("✓", width="small"),
                     "Aparelho":st.column_config.TextColumn("Aparelho", width="medium", disabled=True),
-                    "Tipo":    st.column_config.TextColumn("Tipo", width="small", disabled=True),
+                    "Kit":     st.column_config.TextColumn("Kit", width="small", disabled=True),
+                    "Cor":     st.column_config.TextColumn("Cor / Variação", width="medium", disabled=True),
                     "Qtd":     st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
                     "Cód":     st.column_config.TextColumn("Cód", width="small", disabled=True),
-                    "OK":      st.column_config.TextColumn("", width="small", disabled=True),
                     "Conf":    st.column_config.TextColumn("Conf", width="small", disabled=True),
                 },
                 hide_index=True,
@@ -1859,61 +1879,34 @@ Instruções:
                 key="wpp_editor",
             )
 
-            _selecionados = _edited[_edited["✓"] == True]
-            _n_sel = len(_selecionados)
-
+            _n_sel = int(_edited["✓"].sum())
             col_wpp1, col_wpp2 = st.columns([2, 1])
-            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} de {len(_edited)} item(ns) selecionado(s)</div>", unsafe_allow_html=True)
+            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} de {len(_edited)} cor(es) selecionada(s)</div>", unsafe_allow_html=True)
             if col_wpp2.button("🗑 Limpar", key="wpp_clear", use_container_width=True):
-                del st.session_state["wpp_resultado"]
+                del st.session_state["wpp_expandido"]
                 st.rerun()
 
             if _n_sel and st.button("➕ Adicionar selecionados ao pedido", type="primary", key="wpp_add", use_container_width=True):
                 if "pedido_itens" not in st.session_state:
                     st.session_state.pedido_itens = []
-
+                _forn = fornecedor_wpp.strip() or st.session_state.get("fornecedor_global", "") or "—"
                 _adicionados = 0
-                for _, _row in _selecionados.iterrows():
-                    _cod  = _row["Cód"]
-                    _nome = _row["Aparelho"]
-                    _tipo = _row["Tipo"]
-                    _qtd  = int(_row["Qtd"])
-
-                    if _cod and _cod in _prods_map:
-                        _prod_obj = _prods_map[_cod]
-                        # Encontra UMA variação que corresponda ao tipo
-                        _tipo_lower = _tipo.lower()
-                        _var_match = None
-                        for _v in _prod_obj.get("variacoes", []):
-                            _vd = _v.get("variacao", {})
-                            _vn = _vd.get("nome", "")
-                            _sufixo = _vn.split("/")[-1].strip().lower() if "/" in _vn else _vn.lower()
-                            if _tipo_lower in _sufixo or _sufixo in _tipo_lower:
-                                _var_match = _vd
-                                break
-
-                        st.session_state.pedido_itens.append({
-                            "produto_id":    _prod_obj.get("id", ""),
-                            "produto_nome":  _nome,
-                            "variacao_id":   _var_match.get("id", "") if _var_match else "",
-                            "variacao_nome": (_var_match.get("nome", _tipo) if _var_match else _tipo),
-                            "cod_interno":   _cod,
-                            "variacao_cod":  _var_match.get("codigo", "") if _var_match else "",
-                            "Qtd a Pedir":   _qtd,
-                            "fornecedor":    "",
-                            "custo":         float(_prod_obj.get("valor_custo") or 0),
-                        })
-                    else:
-                        # produto não encontrado → adiciona como avulso
-                        st.session_state.pedido_itens.append({
-                            "produto_id": "", "produto_nome": _nome,
-                            "variacao_id": "", "variacao_nome": _tipo,
-                            "cod_interno": _cod, "variacao_cod": "",
-                            "Qtd a Pedir": _qtd, "fornecedor": "", "custo": 0.0,
-                        })
+                for _i, _erow in _edited[_edited["✓"] == True].iterrows():
+                    _meta = _linhas[_i]
+                    st.session_state.pedido_itens.append({
+                        "fornecedor":    _forn,
+                        "produto_id":    _meta["_prod_id"],
+                        "produto_nome":  _meta["_nome"],
+                        "cod_interno":   _meta["_cod"],
+                        "variacao_id":   _meta["_var_id"],
+                        "variacao_cod":  _meta["_var_cod"],
+                        "variacao_nome": _erow["Cor"],
+                        "quantidade":    int(_erow["Qtd"]),
+                        "Qtd a Pedir":   int(_erow["Qtd"]),
+                        "valor_custo":   str(_meta["_custo"]),
+                    })
                     _adicionados += 1
-
-                del st.session_state["wpp_resultado"]
+                del st.session_state["wpp_expandido"]
                 st.success(f"✅ {_adicionados} itens adicionados ao pedido!")
                 st.rerun()
 
