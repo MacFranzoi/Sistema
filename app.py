@@ -1844,12 +1844,26 @@ Retorne SOMENTE JSON válido, sem markdown:
                             _client = _ant.Anthropic(api_key=_ant_key)
                             _msg = _client.messages.create(
                                 model="claude-sonnet-4-6",
-                                max_tokens=4096,
+                                max_tokens=8192,
                                 messages=[{"role": "user", "content": _prompt}]
                             )
                             _raw = _msg.content[0].text.strip()
+                            # Extrai o array JSON — tenta completo primeiro, depois recupera parcial
                             _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
-                            _parsed = _json.loads(_m.group() if _m else _raw)
+                            _json_str = _m.group() if _m else _raw
+                            try:
+                                _parsed = _json.loads(_json_str)
+                            except _json.JSONDecodeError:
+                                # JSON truncado: encontra o último objeto completo e fecha o array
+                                _ultimo_ok = _json_str.rfind('},')
+                                if _ultimo_ok == -1:
+                                    _ultimo_ok = _json_str.rfind('}')
+                                if _ultimo_ok > 0:
+                                    _json_rec = _json_str[:_ultimo_ok + 1] + ']'
+                                    _parsed = _json.loads(_json_rec)
+                                    st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas. Cole o restante do texto e gere novamente.")
+                                else:
+                                    raise
 
                             # Expande cada entrada nos itens reais (cor × qtd) usando os kits
                             # Mapas case-insensitive para lookup robusto
