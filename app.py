@@ -859,20 +859,12 @@ def painel_etiquetas(itens, key_suffix=""):
 
 
 def painel_salvar(itens, tipo, key_suffix=""):
-    """Bloco de salvar lista."""
-    with st.expander("💾 Salvar esta lista"):
-        nome_lista = st.text_input("Nome da lista", placeholder="ex: Entrada 14/06 - Plaza",
-                                    key=f"nome_lista_{key_suffix}")
-        if st.button("💾 Salvar", use_container_width=True, key=f"btn_salvar_{key_suffix}"):
-            if not nome_lista:
-                st.error("Digite um nome para a lista.")
-            else:
-                caminho = api.salvar_lista(nome_lista, tipo, itens, loja_id=loja_id, loja_nome=loja_sel_nome)
-                st.success(f"Lista salva!")
+    """Atalho legado — delega ao painel_listas."""
+    painel_listas(itens, tipo, key_suffix=key_suffix)
 
 
 def painel_carregar_lista(tipo, key_suffix="", retornar_arquivo=False):
-    """Bloco de carregar lista salva. Se retornar_arquivo=True devolve (itens, arquivo)."""
+    """Atalho legado — mantém compatibilidade com páginas que chamam diretamente."""
     listas = api.listar_listas_salvas(tipo)
     _vazio = (None, None) if retornar_arquivo else None
     if not listas:
@@ -890,6 +882,108 @@ def painel_carregar_lista(tipo, key_suffix="", retornar_arquivo=False):
         with col2:
             st.caption(f"{len(lista_sel['itens'])} itens")
     return _vazio
+
+
+def painel_listas(itens_atuais, tipo, key_suffix=""):
+    """Painel completo de gerenciamento de listas: salvar, carregar, renomear, excluir."""
+    import json as _pj, os as _pos
+
+    listas = api.listar_listas_salvas(tipo)
+    arq_atual = st.session_state.get(f"lista_arq_{key_suffix}")
+
+    with st.expander(f"📋 Listas salvas ({len(listas)})", expanded=False):
+        # ── Salvar ───────────────────────────────────────────────────────
+        st.markdown("**Salvar**")
+        _c1, _c2, _c3 = st.columns([3, 1, 1])
+        _nome_novo = _c1.text_input("Nome", placeholder="ex: Pedido 15/06 — Fornecedor X",
+                                     key=f"ls_nome_{key_suffix}", label_visibility="collapsed")
+        if _c2.button("💾 Salvar novo", use_container_width=True, key=f"ls_salvar_{key_suffix}"):
+            if not _nome_novo.strip():
+                st.error("Digite um nome.")
+            else:
+                _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
+                                        loja_id=loja_id, loja_nome=loja_sel_nome)
+                st.session_state[f"lista_arq_{key_suffix}"] = os.path.basename(_cam)
+                st.success("✅ Lista salva!")
+                st.rerun()
+        if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
+            _cam = os.path.join(api.DIR_LISTAS, arq_atual)
+            if os.path.exists(_cam):
+                with open(_cam, encoding="utf-8") as _f:
+                    _d = _pj.load(_f)
+                _d["itens"] = itens_atuais
+                _d["atualizado_em"] = datetime.now().isoformat()
+                with open(_cam, "w", encoding="utf-8") as _f:
+                    _pj.dump(_d, _f, ensure_ascii=False, indent=2)
+                st.success("✅ Lista atualizada!")
+                st.rerun()
+
+        if arq_atual:
+            st.caption(f"Lista aberta: **{arq_atual}**")
+
+        if not listas:
+            st.info("Nenhuma lista salva ainda.")
+            return
+
+        st.divider()
+        st.markdown("**Listas salvas**")
+
+        # Selectbox para escolher qual lista operar
+        _opcoes = [
+            f"{l['criado_em'][:16].replace('T',' ')} — {l['nome']} ({l.get('loja_nome','—')}) [{len(l['itens'])} itens]"
+            for l in listas
+        ]
+        _idx = st.selectbox("Selecione:", range(len(_opcoes)),
+                             format_func=lambda i: _opcoes[i],
+                             key=f"ls_sel_{key_suffix}")
+        _lst = listas[_idx]
+
+        # Preview resumido
+        if _lst["itens"]:
+            _prev_cols = ["produto_nome", "variacao_nome", "quantidade"]
+            _prev_cols = [c for c in _prev_cols if c in (_lst["itens"][0] if _lst["itens"] else {})]
+            _df_prev = pd.DataFrame(_lst["itens"])[_prev_cols].head(6) if _prev_cols else pd.DataFrame(_lst["itens"]).head(6)
+            _df_prev.columns = [c.replace("produto_nome","Produto").replace("variacao_nome","Variação").replace("quantidade","Qtd") for c in _df_prev.columns]
+            st.dataframe(_df_prev, use_container_width=True, hide_index=True)
+            if len(_lst["itens"]) > 6:
+                st.caption(f"… e mais {len(_lst['itens'])-6} itens")
+
+        _ca, _cb, _cc = st.columns(3)
+
+        # Carregar
+        if _ca.button("📂 Carregar", use_container_width=True, key=f"ls_load_{key_suffix}"):
+            st.session_state[f"lista_arq_{key_suffix}"] = _lst["_arquivo"]
+            st.session_state[f"ls_carregar_{key_suffix}"] = _lst["itens"]
+            st.rerun()
+
+        # Renomear
+        with _cb.popover("✏️ Renomear"):
+            _novo_nome = st.text_input("Novo nome:", value=_lst["nome"], key=f"ls_rename_txt_{key_suffix}")
+            if st.button("Salvar nome", key=f"ls_rename_btn_{key_suffix}"):
+                _cam = os.path.join(api.DIR_LISTAS, _lst["_arquivo"])
+                with open(_cam, encoding="utf-8") as _f:
+                    _d = _pj.load(_f)
+                _d["nome"] = _novo_nome.strip()
+                with open(_cam, "w", encoding="utf-8") as _f:
+                    _pj.dump(_d, _f, ensure_ascii=False, indent=2)
+                st.success("Renomeado!")
+                st.rerun()
+
+        # Excluir
+        with _cc.popover("🗑️ Excluir"):
+            st.warning(f"Excluir **{_lst['nome']}**?")
+            if st.button("Confirmar exclusão", key=f"ls_del_{key_suffix}", type="primary"):
+                _cam = os.path.join(api.DIR_LISTAS, _lst["_arquivo"])
+                if os.path.exists(_cam):
+                    _pos.remove(_cam)
+                if arq_atual == _lst["_arquivo"]:
+                    st.session_state.pop(f"lista_arq_{key_suffix}", None)
+                st.success("Excluído.")
+                st.rerun()
+
+    # Retorna itens carregados via botão (fora do expander para o caller processar)
+    _carregados = st.session_state.pop(f"ls_carregar_{key_suffix}", None)
+    return _carregados
 
 
 def df_lista_resumo(itens, colunas_extras=None):
@@ -2389,13 +2483,14 @@ Retorne SOMENTE JSON válido, sem markdown:
                 del st.session_state["clipboard"]
                 st.rerun()
 
-        if "pedido_lista_arquivo" not in st.session_state:
-            st.session_state.pedido_lista_arquivo = None
-
-        itens_ped_load, arq_ped_load = painel_carregar_lista("pedido", key_suffix="ped", retornar_arquivo=True)
-        if itens_ped_load:
-            st.session_state.pedido_itens = itens_ped_load
-            st.session_state.pedido_lista_arquivo = arq_ped_load
+        _itens_ped_load = painel_listas(
+            st.session_state.get("pedido_itens", []) + st.session_state.get("pedido_avulsos", []),
+            "pedido", key_suffix="ped"
+        )
+        if _itens_ped_load is not None:
+            # Separa itens cadastrados de avulsos
+            st.session_state.pedido_itens   = [i for i in _itens_ped_load if not i.get("_avulso")]
+            st.session_state.pedido_avulsos = [i for i in _itens_ped_load if i.get("_avulso")]
             st.rerun()
 
         col_f1, col_f2, col_f3 = st.columns(3)
@@ -2739,19 +2834,6 @@ Retorne SOMENTE JSON válido, sem markdown:
             st.metric("💰 Total estimado",
                       f"R$ {total_calculado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-            arq_atual = st.session_state.get("pedido_lista_arquivo")
-            if arq_atual:
-                if st.button(f"💾 Salvar na lista atual", use_container_width=True, key="ped_salvar_atual"):
-                    import json as _json
-                    caminho = os.path.join(api.DIR_LISTAS, arq_atual)
-                    with open(caminho, encoding="utf-8") as _f:
-                        dados_arq = _json.load(_f)
-                    dados_arq["itens"] = todos_itens_ped
-                    dados_arq["atualizado_em"] = datetime.now().isoformat()
-                    with open(caminho, "w", encoding="utf-8") as _f:
-                        _json.dump(dados_arq, _f, ensure_ascii=False, indent=2)
-                    st.success(f"✅ Lista atualizada!")
-            painel_salvar(todos_itens_ped, "pedido", key_suffix="ped")
 
             # ── Exportação filtrada por tipo de variação ───────────────
             with st.expander("🔽 Exportar por tipo de variação", expanded=False):
