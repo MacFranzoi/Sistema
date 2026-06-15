@@ -2055,24 +2055,33 @@ COMO DISTINGUIR COR DE KIT:
   - A regra "kit ambíguo → masculino" aplica-se APENAS a palavras ambíguas entre kits, nunca a cores
 
 TRANSCRIÇÃO DE VOZ / DITADO — fala contínua sem pontuação:
-1. Modelos podem ter espaço: "a 06"=A06, "a 07"=A07, "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo
-2. Um bloco pode ter MÚLTIPLOS modelos em sequência — ao detectar novo modelo, inicie entradas para ele
-3. Números por extenso = quantidade SEMPRE — nunca artigo neste contexto:
+1. DETECTAR MODELO: "a" + número = Samsung A[número]. "a 06"=A06, "a 07"=A07, "a 53"=A53.
+   O "a" aqui é SEMPRE prefixo de modelo Samsung, NUNCA artigo.
+   Outros: "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo, "g 54"=Moto G54.
+2. MÚLTIPLOS MODELOS: quando aparecer um novo modelo no meio do texto, todas as cores/kits
+   seguintes pertencem a ele. Não misture itens de modelos diferentes.
+3. QUANTIDADES — números por extenso são sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-   IMPORTANTE: "uma preta", "um brilho", "uma verde militar" → "uma/um" é quantidade 1, NÃO artigo.
-4. [número] + [cor] → avulso cor, quantidade_fixa=número
-5. [número] + [kit] → kit, quantidade_fixa=número
-6. Cor ou kit sem NENHUM número antes → quantidade_fixa=1
+   "uma preta" → preta qtd=1 | "um brilho" → brilho qtd=1 (NUNCA trate como artigo)
+4. Kit ou cor SEM número antes → quantidade_fixa=1
+5. [número] + [cor] → kit="avulso cor", descricao_avulso=cor normalizada, quantidade_fixa=número
+6. [número] + [kit] → kit=nome, quantidade_fixa=número
 7. Uma entrada JSON por par modelo+cor ou modelo+kit
-8. Não precisa de palavra-chave para iniciar o ditado — o formato é livre
 
-Exemplo: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
-→ A06 | kit="avulso cor" descricao_avulso="preta" qtd=2
-→ A06 | kit="avulso cor" descricao_avulso="verde militar" qtd=1
-→ A06 | kit="avulso cor" descricao_avulso="lilás" qtd=2
-→ A07 | kit="brilho" qtd=1
-→ A07 | kit="avulso cor" descricao_avulso="preta" qtd=2
-→ A07 | kit="avulso cor" descricao_avulso="branca" qtd=1
+Exemplo A: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
+→ A07 | kit="diversos masculino" | qtd=1
+→ A06 | kit="brilho" | qtd=1
+→ A53 | kit="avulso cor" descricao_avulso="preta" | qtd=1
+→ A53 | kit="avulso cor" descricao_avulso="vermelha" | qtd=2
+→ A53 | kit="avulso cor" descricao_avulso="vinho" | qtd=1
+
+Exemplo B: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
+→ A06 | kit="avulso cor" descricao_avulso="preta" | qtd=2
+→ A06 | kit="avulso cor" descricao_avulso="verde militar" | qtd=1
+→ A06 | kit="avulso cor" descricao_avulso="lilás" | qtd=2
+→ A07 | kit="brilho" | qtd=1
+→ A07 | kit="avulso cor" descricao_avulso="preta" | qtd=2
+→ A07 | kit="avulso cor" descricao_avulso="branca" | qtd=1
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
