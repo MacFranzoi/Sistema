@@ -1970,65 +1970,120 @@ Retorne SOMENTE JSON válido, sem markdown:
         # ── Tabela de revisão com seleção ──────────────────────────
         if "wpp_expandido" in st.session_state and st.session_state.wpp_expandido:
             import pandas as _pd
-            _linhas = st.session_state.wpp_expandido
+            _linhas   = st.session_state.wpp_expandido
+            _achados  = [l for l in _linhas if l["_achado"]]
+            _falhos   = [l for l in _linhas if not l["_achado"]]
+            _forn     = fornecedor_wpp.strip() or st.session_state.get("fornecedor_global", "") or "—"
 
             st.markdown(f"<div style='font-weight:700;font-size:0.95rem;margin:14px 0 6px'>Pré-pedido gerado — selecione e ajuste</div>", unsafe_allow_html=True)
 
-            _cols_visiveis = ["✓", "Aparelho", "Kit", "Variação", "Qtd", "Status"]
-            _df_edit = _pd.DataFrame(_linhas)[_cols_visiveis + ["_cod","_nome","_kit","_achado","_var_id","_var_cod","_prod_id","_custo"]]
+            # ── Itens encontrados no catálogo ──
+            if _achados:
+                _df_ok = _pd.DataFrame(_achados)[["✓","Aparelho","Kit","Variação","Qtd"]]
+                _edited_ok = st.data_editor(
+                    _df_ok,
+                    column_config={
+                        "✓":        st.column_config.CheckboxColumn("✓", width="small"),
+                        "Aparelho": st.column_config.TextColumn("Aparelho", width="medium", disabled=True),
+                        "Kit":      st.column_config.TextColumn("Kit", width="small", disabled=True),
+                        "Variação": st.column_config.TextColumn("Variação (catálogo)", width="large", disabled=True),
+                        "Qtd":      st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
+                    },
+                    hide_index=True, use_container_width=True, key="wpp_editor_ok",
+                )
+            else:
+                _edited_ok = _pd.DataFrame()
 
-            _n_achados  = int(_pd.DataFrame(_linhas)["_achado"].sum())
-            _n_falhos   = len(_linhas) - _n_achados
-            if _n_falhos:
-                st.warning(f"⚠ {_n_falhos} cor(es) não encontradas no catálogo — aparecem desmarcadas na lista.")
+            # ── Itens NÃO encontrados — criar como avulso ──
+            if _falhos:
+                st.markdown(f"""
+                <div style="background:{RED_LT};border:1px solid {RED}44;border-radius:8px;padding:8px 14px;margin:10px 0 4px">
+                  <span style="font-weight:700;color:{RED}">⚠ {len(_falhos)} variação(ões) sem match no catálogo</span>
+                  <span style="color:{TXT2};font-size:0.8rem;margin-left:8px">— marque para criar como item avulso (sem vínculo com catálogo)</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-            _edited = st.data_editor(
-                _df_edit[_cols_visiveis],
-                column_config={
-                    "✓":        st.column_config.CheckboxColumn("✓", width="small"),
-                    "Aparelho": st.column_config.TextColumn("Aparelho", width="medium", disabled=True),
-                    "Kit":      st.column_config.TextColumn("Kit", width="small", disabled=True),
-                    "Variação": st.column_config.TextColumn("Variação (catálogo)", width="large", disabled=True),
-                    "Qtd":      st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
-                    "Status":   st.column_config.TextColumn("", width="small", disabled=True),
-                },
-                hide_index=True,
-                use_container_width=True,
-                key="wpp_editor",
-            )
+                _rows_falhos = []
+                for _l in _falhos:
+                    _termos_raw = _l["Variação"].replace("⚠ ", "").replace(" não encontrado", "")
+                    _desc_sugerida = f"{_l['Aparelho']} / {_l['Kit']} / {_termos_raw}"
+                    _rows_falhos.append({
+                        "Criar avulso": False,
+                        "Descrição": _desc_sugerida,
+                        "Qtd": _l["Qtd"],
+                        "_idx": _falhos.index(_l),
+                    })
 
-            _n_sel = int(_edited["✓"].sum())
+                _df_falhos = _pd.DataFrame(_rows_falhos)
+                _edited_falhos = st.data_editor(
+                    _df_falhos[["Criar avulso", "Descrição", "Qtd"]],
+                    column_config={
+                        "Criar avulso": st.column_config.CheckboxColumn("Criar avulso", width="small"),
+                        "Descrição":    st.column_config.TextColumn("Descrição (editável)", width="large"),
+                        "Qtd":          st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
+                    },
+                    hide_index=True, use_container_width=True, key="wpp_editor_falhos",
+                )
+            else:
+                _edited_falhos = _pd.DataFrame()
+
+            # ── Contadores e ações ──
+            _n_ok  = int(_edited_ok["✓"].sum()) if not _edited_ok.empty and "✓" in _edited_ok.columns else 0
+            _n_av  = int(_edited_falhos["Criar avulso"].sum()) if not _edited_falhos.empty and "Criar avulso" in _edited_falhos.columns else 0
+            _total = _n_ok + _n_av
+
             col_wpp1, col_wpp2 = st.columns([2, 1])
-            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} selecionado(s) · {_n_falhos} sem match</div>", unsafe_allow_html=True)
+            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_ok} do catálogo · {_n_av} avulso(s) · {_total} total</div>", unsafe_allow_html=True)
             if col_wpp2.button("🗑 Limpar", key="wpp_clear", use_container_width=True):
                 for _k in ["wpp_expandido", "wpp_nao_comp"]:
                     st.session_state.pop(_k, None)
                 st.rerun()
 
-            if _n_sel and st.button("➕ Adicionar selecionados ao pedido", type="primary", key="wpp_add", use_container_width=True):
+            if _total and st.button("➕ Adicionar ao pedido", type="primary", key="wpp_add", use_container_width=True):
                 if "pedido_itens" not in st.session_state:
                     st.session_state.pedido_itens = []
-                _forn = fornecedor_wpp.strip() or st.session_state.get("fornecedor_global", "") or "—"
+                if "pedido_avulsos" not in st.session_state:
+                    st.session_state.pedido_avulsos = []
+
                 _adicionados = 0
-                for _i, _erow in _edited[_edited["✓"] == True].iterrows():
-                    _meta = _linhas[_i]
-                    if not _meta["_achado"]:
-                        continue  # nunca adiciona sem match exato
-                    st.session_state.pedido_itens.append({
-                        "fornecedor":    _forn,
-                        "produto_id":    _meta["_prod_id"],
-                        "produto_nome":  _meta["_nome"],
-                        "cod_interno":   _meta["_cod"],
-                        "variacao_id":   _meta["_var_id"],
-                        "variacao_cod":  _meta["_var_cod"],
-                        "variacao_nome": _erow["Variação"],
-                        "estoque_atual": 0,
-                        "quantidade":    int(_erow["Qtd"]),
-                        "Qtd a Pedir":   int(_erow["Qtd"]),
-                        "valor_custo":   str(_meta["_custo"]),
-                        "observacao":    "",
-                    })
-                    _adicionados += 1
+
+                # Itens do catálogo
+                if not _edited_ok.empty:
+                    for _i, _erow in _edited_ok[_edited_ok["✓"] == True].iterrows():
+                        _meta = _achados[_i]
+                        st.session_state.pedido_itens.append({
+                            "fornecedor":    _forn,
+                            "produto_id":    _meta["_prod_id"],
+                            "produto_nome":  _meta["_nome"],
+                            "cod_interno":   _meta["_cod"],
+                            "variacao_id":   _meta["_var_id"],
+                            "variacao_cod":  _meta["_var_cod"],
+                            "variacao_nome": _erow["Variação"],
+                            "estoque_atual": 0,
+                            "quantidade":    int(_erow["Qtd"]),
+                            "Qtd a Pedir":   int(_erow["Qtd"]),
+                            "valor_custo":   str(_meta["_custo"]),
+                            "observacao":    "",
+                        })
+                        _adicionados += 1
+
+                # Itens avulsos (sem match)
+                if not _edited_falhos.empty:
+                    for _, _frow in _edited_falhos[_edited_falhos["Criar avulso"] == True].iterrows():
+                        st.session_state.pedido_avulsos.append({
+                            "fornecedor":    _forn,
+                            "cod_interno":   "AVULSO",
+                            "produto_nome":  _frow["Descrição"],
+                            "variacao_cod":  "",
+                            "variacao_nome": "",
+                            "estoque_atual": 0,
+                            "quantidade":    int(_frow["Qtd"]),
+                            "valor_custo":   "0.00",
+                            "observacao":    "Criado via WhatsApp — sem vínculo com catálogo",
+                            "_avulso":       True,
+                        })
+                        _adicionados += 1
+
                 for _k in ["wpp_expandido", "wpp_nao_comp"]:
                     st.session_state.pop(_k, None)
                 st.success(f"✅ {_adicionados} itens adicionados ao pedido!")
