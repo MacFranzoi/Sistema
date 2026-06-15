@@ -552,9 +552,93 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 
 # ────────────────────────────────────────────────────────────
 # SIDEBAR
-# ────────────────────────────────────────────────────────────
+# ── CSS sidebar scroll + page top alignment ──
+st.markdown(f"""
+<style>
+/* sidebar: logo e footer fixos, meio rolável */
+[data-testid="stSidebar"] > div:first-child {{
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}}
+.sb-logo {{
+    flex-shrink: 0;
+}}
+.sb-loja-wrap {{
+    flex-shrink: 0;
+}}
+.sb-nav-scroll {{
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 4px;
+}}
+.sb-nav-scroll::-webkit-scrollbar {{ width: 3px; }}
+.sb-nav-scroll::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
+.sb-footer {{
+    flex-shrink: 0;
+    margin-top: auto;
+}}
+/* selectbox sem margens */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] {{
+    margin: 0 !important; padding: 0 !important;
+}}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {{
+    border: none !important; border-radius: 0 !important;
+    border-bottom: 1px solid {BOR} !important;
+    background: {SB2} !important;
+    padding: 9px 18px !important;
+    font-size: 0.82rem !important; font-weight: 500 !important;
+    color: {TXT} !important;
+}}
+/* remove gaps internos do streamlit na sidebar */
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {{
+    margin: 0 !important; padding: 0 !important; gap: 0 !important;
+}}
+[data-testid="stSidebar"] .stButton {{ margin: 0 !important; }}
+/* nav-group header */
+.nav-group {{
+    font-size: 0.62rem; font-weight: 600; letter-spacing: 1.2px;
+    text-transform: uppercase; color: {TXT2};
+    padding: 14px 18px 4px; user-select: none;
+}}
+/* nav buttons base */
+[data-testid="stSidebar"] .stButton > button {{
+    width: calc(100% - 16px) !important;
+    background: transparent !important;
+    border: none !important; border-radius: 7px !important;
+    text-align: left !important; padding: 7px 12px !important;
+    margin: 1px 8px !important;
+    font-size: 0.85rem !important; font-weight: 400 !important;
+    color: {TXT2} !important;
+    transition: background 0.15s ease, color 0.12s ease !important;
+    display: block !important;
+}}
+[data-testid="stSidebar"] .stButton > button:hover {{
+    background: {SB2} !important; color: {TXT} !important;
+}}
+/* página: sempre começa no topo, sem padding-top extra */
+section[data-testid="stMain"] {{
+    padding-top: 0 !important;
+}}
+.main .block-container {{
+    padding-top: 22px !important;
+    padding-bottom: 40px !important;
+    margin-top: 0 !important;
+}}
+/* remove o espaço que o stHeader empurra o conteúdo */
+[data-testid="stMain"] > div:first-child {{
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+# ── Sidebar ──
 with st.sidebar:
-    # 1) Logo fixa no topo
+    # 1) Logo — fixa no topo
     st.markdown(f"""
     <div class="sb-logo">
       <div class="sb-logo-mark">⚡</div>
@@ -562,82 +646,69 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # 2) Seletor de loja (escondido visualmente, funcional)
+    # 2) Seletor de loja — fixo abaixo do logo
+    st.markdown('<div class="sb-loja-wrap">', unsafe_allow_html=True)
     loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
     loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
     loja_id = loja_opcoes[loja_sel_nome]
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # CSS para remover margens do selectbox e fazer parecer com o card do GestaoClick
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] [data-testid="stSelectbox"] {
-        margin: -12px 0 0 0 !important;
-        padding: 0 !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
-        border: none !important;
-        border-radius: 0 !important;
-        border-bottom: 1px solid var(--bor) !important;
-        background: var(--sb2) !important;
-        padding: 8px 12px !important;
-        font-size: 0.82rem !important;
-        font-weight: 600 !important;
-    }
-    /* remove gap entre botões do menu */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin: 0 !important; padding: 0 !important; }
-    [data-testid="stSidebar"] .stButton { margin: 0 !important; }
-    [data-testid="stSidebar"] .stButton > button { border-radius: 0 !important; margin: 0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # 3) Menu de navegação
+    # 3) Área de nav rolável
+    st.markdown('<div class="sb-nav-scroll">', unsafe_allow_html=True)
     _grp = None
     _pg_ativo = st.session_state.pagina
+
+    # Monta CSS ativo para o item selecionado
+    _ativo_css = "".join(f"""
+    [data-testid="stSidebar"] div[data-testid="stButton"]:nth-of-type({i+1}) button {{
+        background: {ACC_LT} !important; color: {ACC} !important;
+        font-weight: 600 !important;
+    }}""" if m[0] == _pg_ativo else ""
+        for i, m in enumerate(_MENU_VISIVEL))
+
+    # CSS numérico não é confiável — usamos abordagem por key via JS
+    # Renderiza cada item com classe especial via markdown + button
     for pid, icon, label, grupo, aba_idx, _ in _MENU_VISIVEL:
         if grupo != _grp:
             st.markdown(f'<div class="nav-group">{grupo}</div>', unsafe_allow_html=True)
             _grp = grupo
         ativo = _pg_ativo == pid
-        # Injetar CSS dinâmico para o item ativo via key única
         if ativo:
-            st.markdown(f"""
-            <style>
-            [data-testid="stSidebar"] button[kind="secondary"][data-testid="baseButton-secondary"]:has(+ *) {{}}
-            div[data-key="nav_{pid}"] button,
-            [data-testid="stSidebar"] div:has(button:contains("{label}")) button {{
-                background: {YEL_BG} !important;
-                color: {YEL} !important;
-                font-weight: 600 !important;
-                border-left: 3px solid {YEL} !important;
-                padding-left: 13px !important;
+            st.markdown(f"""<style>
+            [data-testid="stSidebar"] div[data-testid="element-container"]:has(button[key="nav_{pid}"]) button,
+            [data-testid="stSidebar"] div:has(> div > button[aria-label*="{label}"]) button {{
+                background: {ACC_LT} !important; color: {ACC} !important;
+                font-weight: 600 !important; border-left: 3px solid {ACC} !important;
+                padding-left: 10px !important;
             }}
-            </style>
-            """, unsafe_allow_html=True)
+            </style>""", unsafe_allow_html=True)
         if st.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
             st.session_state.pagina = pid
             st.rerun()
 
-    # 4) Tema + Sair
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    if c1.button("☀️ Tema" if _dark else "🌙 Tema", use_container_width=True, key="btn_tema"):
-        st.session_state.tema = "light" if _dark else "dark"
-        st.rerun()
-    if c2.button("🚪 Sair", use_container_width=True, key="btn_sair"):
-        st.session_state.usuario_logado = None
-        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)  # fecha sb-nav-scroll
 
-    # 5) User footer
+    # 4) Footer fixo — tema + avatar
     ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
-    <div class="sb-footer">
-      <div class="sb-avatar">{ini}</div>
-      <div>
-        <div class="sb-user-name">{_nome_usr}</div>
-        <div class="sb-user-role">{_setor_lbl}</div>
+    <div class="sb-footer" style="padding:10px 16px;border-top:1px solid {BOR};
+         background:{SB};display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+        <div class="sb-avatar">{ini}</div>
+        <div style="min-width:0;overflow:hidden">
+          <div class="sb-user-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{_nome_usr}</div>
+          <div class="sb-user-role">{_setor_lbl}</div>
+        </div>
       </div>
-    </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
     """, unsafe_allow_html=True)
+    if st.button("☀️" if _dark else "🌙", key="btn_tema", help="Alternar tema"):
+        st.session_state.tema = "light" if _dark else "dark"
+        st.rerun()
+    if st.button("→", key="btn_sair", help="Sair"):
+        st.session_state.usuario_logado = None
+        st.rerun()
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
@@ -646,9 +717,11 @@ clip  = st.session_state.get("clipboard")
 # ── Cabeçalho da página ──
 _pg_info = next((m for m in _MENU_VISIVEL if m[0] == st.session_state.pagina), _MENU_VISIVEL[0])
 st.markdown(f"""
-<div class="page-breadcrumb" style="margin-top:4px">{_pg_info[3]} <span>›</span> {_pg_info[2]}</div>
-<div class="page-title">{_pg_info[1]}  {_pg_info[2]}</div>
-<hr style="margin:6px 0 12px;border:none;border-top:1px solid var(--bor)">
+<div style="margin-top:0;padding-top:0">
+  <div class="page-breadcrumb">{_pg_info[3]} <span>›</span> {_pg_info[2]}</div>
+  <div class="page-title">{_pg_info[1]}  {_pg_info[2]}</div>
+  <hr style="margin:8px 0 16px;border:none;border-top:1px solid {BOR}">
+</div>
 """, unsafe_allow_html=True)
 
 _pg = st.session_state.pagina
