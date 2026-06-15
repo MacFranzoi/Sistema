@@ -657,10 +657,12 @@ def mesclar_listas(arquivo_a, arquivo_b, nome_nova):
 def exportar_todas_listas_excel():
     """Gera um Excel com aba Resumo + uma aba por lista com metadados e itens."""
     import io
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    import pandas as pd
 
-    _TIPOS_NOMES = {"pedido": "Pedido de Compra", "entrada": "Entrada", "acerto": "Acerto", "etiquetas": "Etiquetas"}
+    _TIPOS_NOMES = {
+        "pedido": "Pedido de Compra", "entrada": "Entrada",
+        "acerto": "Acerto", "etiquetas": "Etiquetas"
+    }
     _COLS_POR_TIPO = {
         "pedido":    [("fornecedor","Fornecedor"), ("produto_nome","Produto"), ("variacao_nome","Variação"),
                       ("quantidade","Qtd"), ("valor_custo","Custo Unit."), ("observacao","Obs.")],
@@ -672,14 +674,8 @@ def exportar_todas_listas_excel():
     }
     _DEFAULT_COLS = [("produto_nome","Produto"), ("variacao_nome","Variação"), ("quantidade","Qtd")]
 
-    def _hdr(ws, row, col, val):
-        c = ws.cell(row=row, column=col, value=val)
-        c.font = Font(bold=True)
-        c.fill = PatternFill("solid", fgColor="E8E0F7")
-        return c
-
     def _safe_sheet_name(nome, used):
-        safe = "".join(c for c in nome if c not in r'\/:*?[]')[:31].strip() or "Lista"
+        safe = "".join(c for c in str(nome) if c not in r'\/:*?[]')[:31].strip() or "Lista"
         base, i = safe, 1
         while safe in used:
             safe = f"{base[:28]}_{i}"
@@ -688,68 +684,60 @@ def exportar_todas_listas_excel():
         return safe
 
     listas = listar_listas_salvas()
-    wb = openpyxl.Workbook()
-
-    # ── Aba Resumo ────────────────────────────────────────────────────────
-    ws_res = wb.active
-    ws_res.title = "Resumo"
-    hdrs_res = ["Nome", "Tipo", "Loja", "Itens", "Criado em", "Atualizado em", "Criado por", "Arquivo"]
-    for ci, h in enumerate(hdrs_res, 1):
-        _hdr(ws_res, 1, ci, h)
-    for ri, lst in enumerate(listas, 2):
-        ws_res.cell(ri, 1, lst.get("nome", ""))
-        ws_res.cell(ri, 2, _TIPOS_NOMES.get(lst.get("tipo",""), lst.get("tipo","")))
-        ws_res.cell(ri, 3, lst.get("loja_nome", ""))
-        ws_res.cell(ri, 4, len(lst.get("itens", [])))
-        ws_res.cell(ri, 5, lst.get("criado_em", "")[:16].replace("T", " "))
-        atualizado = lst.get("atualizado_em", "")
-        ws_res.cell(ri, 6, atualizado[:16].replace("T", " ") if atualizado else "—")
-        ws_res.cell(ri, 7, lst.get("criado_por", "—") or "—")
-        ws_res.cell(ri, 8, lst.get("_arquivo", ""))
-    for col in ws_res.columns:
-        ws_res.column_dimensions[col[0].column_letter].width = max(
-            (len(str(c.value or "")) for c in col), default=10
-        ) + 3
-
-    # ── Uma aba por lista ─────────────────────────────────────────────────
-    used_names = {"Resumo"}
-    for lst in listas:
-        sheet_name = _safe_sheet_name(lst.get("nome", "Lista"), used_names)
-        ws = wb.create_sheet(title=sheet_name)
-        tipo = lst.get("tipo", "")
-
-        # Metadados no topo
-        meta = [
-            ("Nome",         lst.get("nome", "")),
-            ("Tipo",         _TIPOS_NOMES.get(tipo, tipo)),
-            ("Loja",         lst.get("loja_nome", "")),
-            ("Criado em",    lst.get("criado_em", "")[:16].replace("T", " ")),
-            ("Atualizado em", lst.get("atualizado_em", "")[:16].replace("T", " ") if lst.get("atualizado_em") else "—"),
-            ("Criado por",   lst.get("criado_por", "—") or "—"),
-            ("Total de itens", len(lst.get("itens", []))),
-        ]
-        for mi, (k, v) in enumerate(meta, 1):
-            ws.cell(mi, 1, k).font = Font(bold=True)
-            ws.cell(mi, 2, str(v))
-
-        # Tabela de itens
-        itens = lst.get("itens", [])
-        cols_def = _COLS_POR_TIPO.get(tipo, _DEFAULT_COLS)
-        hdr_row = len(meta) + 2
-        for ci, (_, label) in enumerate(cols_def, 1):
-            _hdr(ws, hdr_row, ci, label)
-        for ii, item in enumerate(itens, 1):
-            for ci, (field, _) in enumerate(cols_def, 1):
-                ws.cell(hdr_row + ii, ci, item.get(field, ""))
-
-        # Largura automática
-        for col in ws.columns:
-            ws.column_dimensions[col[0].column_letter].width = max(
-                (len(str(c.value or "")) for c in col), default=8
-            ) + 3
-
     buf = io.BytesIO()
-    wb.save(buf)
+
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        # ── Aba Resumo ────────────────────────────────────────────────────
+        rows_res = []
+        for lst in listas:
+            atualizado = lst.get("atualizado_em", "")
+            rows_res.append({
+                "Nome":         lst.get("nome", ""),
+                "Tipo":         _TIPOS_NOMES.get(lst.get("tipo", ""), lst.get("tipo", "")),
+                "Loja":         lst.get("loja_nome", ""),
+                "Itens":        len(lst.get("itens", [])),
+                "Criado em":    lst.get("criado_em", "")[:16].replace("T", " "),
+                "Atualizado em": atualizado[:16].replace("T", " ") if atualizado else "—",
+                "Criado por":   lst.get("criado_por", "—") or "—",
+                "Arquivo":      lst.get("_arquivo", ""),
+            })
+        pd.DataFrame(rows_res).to_excel(writer, sheet_name="Resumo", index=False)
+
+        # ── Uma aba por lista ─────────────────────────────────────────────
+        used_names = {"Resumo"}
+        for lst in listas:
+            sheet_name = _safe_sheet_name(lst.get("nome", "Lista"), used_names)
+            tipo = lst.get("tipo", "")
+            cols_def = _COLS_POR_TIPO.get(tipo, _DEFAULT_COLS)
+            atualizado = lst.get("atualizado_em", "")
+
+            # Metadados como DataFrame de 2 colunas
+            meta_rows = [
+                {"Campo": "Nome",          "Valor": lst.get("nome", "")},
+                {"Campo": "Tipo",          "Valor": _TIPOS_NOMES.get(tipo, tipo)},
+                {"Campo": "Loja",          "Valor": lst.get("loja_nome", "")},
+                {"Campo": "Criado em",     "Valor": lst.get("criado_em", "")[:16].replace("T", " ")},
+                {"Campo": "Atualizado em", "Valor": atualizado[:16].replace("T", " ") if atualizado else "—"},
+                {"Campo": "Criado por",    "Valor": lst.get("criado_por", "—") or "—"},
+                {"Campo": "Total de itens","Valor": len(lst.get("itens", []))},
+            ]
+            df_meta = pd.DataFrame(meta_rows)
+
+            # Itens
+            itens = lst.get("itens", [])
+            fields = [f for f, _ in cols_def]
+            labels = [l for _, l in cols_def]
+            if itens:
+                df_itens = pd.DataFrame([{f: it.get(f, "") for f in fields} for it in itens])
+                df_itens.columns = labels
+            else:
+                df_itens = pd.DataFrame(columns=labels)
+
+            # Escreve metadados na linha 1, itens a partir da linha len(meta)+3
+            startrow_itens = len(meta_rows) + 2
+            df_meta.to_excel(writer, sheet_name=sheet_name, index=False, startrow=0)
+            df_itens.to_excel(writer, sheet_name=sheet_name, index=False, startrow=startrow_itens)
+
     buf.seek(0)
     return buf
 
