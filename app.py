@@ -1785,6 +1785,9 @@ if _pg == "pedido":
             placeholder="Poco x3 - masculino e brilho\nX6- femininas\nNote13pro4g- masculinas e femininas",
             height=160, key="wpp_input", label_visibility="collapsed"
         )
+        with st.expander("⚙️ Regras personalizadas", expanded=False):
+            st.markdown(f"<p style='color:{TXT2};font-size:0.82rem'>Uma regra por linha. Formato: <code>kit [marca/palavra] = kit_substituto</code><br>Exemplos: <code>sl iphone = vr</code> &nbsp;|&nbsp; <code>sl apple = vr</code></p>", unsafe_allow_html=True)
+            wpp_regras = st.text_area("Regras", placeholder="sl iphone = vr\nsl apple = vr", height=80, key="wpp_regras", label_visibility="collapsed")
         col_ia1, col_ia2 = st.columns([3, 1])
         fornecedor_wpp = col_ia1.text_input("Fornecedor (opcional)", placeholder="ex: Distribuidora ABC", key="wpp_forn")
         gerar = col_ia2.button("✨ Gerar pré-pedido", type="primary", use_container_width=True, key="wpp_gerar")
@@ -1795,6 +1798,14 @@ if _pg == "pedido":
             else:
                 with st.spinner("Analisando com IA…"):
                     import json as _json, re as _re, os as _os
+
+                    # Parseia regras personalizadas: "sl iphone = vr" → [("sl","iphone","vr"), ...]
+                    _regras_kit = []
+                    for _rl in (wpp_regras or "").splitlines():
+                        _rl = _rl.strip().lower()
+                        _rm = _re.match(r'^([a-záéíóúãõ\s]+?)\s+([a-záéíóúãõ\s]+?)\s*=\s*([a-záéíóúãõ\s]+)$', _rl)
+                        if _rm:
+                            _regras_kit.append((_rm.group(1).strip(), _rm.group(2).strip(), _rm.group(3).strip()))
 
                     # ── Pré-processamento do texto do WhatsApp ──────────
                     _SECOES_MARCA   = {"motorola","samsung","apple","iphone","xiaomi","poco","realme"}
@@ -1842,9 +1853,9 @@ if _pg == "pedido":
                         if _ln_low in _SECOES_MARCA:
                             _secao = "marca"; _marca = _ln_low; continue
                         if _ln_low in _SECOES_SPACE:
-                            _secao = "space"; continue
+                            _secao = "space"; _marca = ""; continue
                         if _ln_low in _SECOES_TRANSP:
-                            _secao = "transparente"; continue
+                            _secao = "transparente"; _marca = ""; continue
                         # Linha que começa com marca como cabeçalho
                         if _ln_low in ("motorola","samsung","apple","iphone"):
                             _secao = "marca"; _marca = _ln_low; continue
@@ -2047,6 +2058,14 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 _qtd_fixa  = _entry.get("quantidade_fixa")
                                 _nao_comp  = _entry.get("nao_compreendido", False)
                                 _motivo    = _entry.get("motivo", "")
+                                _nome_lower = (_entry.get("nome_produto") or _entry.get("modelo_digitado","")).lower()
+
+                                # Aplica regras personalizadas: ex "sl iphone = vr"
+                                for _r_kit, _r_palavra, _r_sub in _regras_kit:
+                                    if _kit.startswith(_r_kit) and _r_palavra in _nome_lower:
+                                        # Substitui prefixo do kit: "sl masculino" → "vr masculino"
+                                        _kit = _kit.replace(_r_kit, _r_sub, 1)
+                                        break
 
                                 if _nao_comp or not _kit:
                                     _nao_compreendidos.append(
