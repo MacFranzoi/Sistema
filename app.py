@@ -753,21 +753,22 @@ def busca_produto_ui(key_prefix, cache_local, col_qtd="Quantidade"):
     else:
         df_view = df.copy()
 
-    st.caption(f"{len(df_view)} de {len(df)} variação(ões) — preencha a quantidade nas que deseja incluir")
+    st.caption(f"{len(df_view)} de {len(df)} variação(ões)")
 
-    # Cabeçalho fora do frame
-    h1, h2, h3, h4 = st.columns([2, 4, 1, 2])
-    h1.markdown("**Código**"); h2.markdown("**Variação**")
-    h3.markdown("**Atual**"); h4.markdown(f"**{col_qtd}**")
+    # Cabeçalho compacto
+    h1, h2, h3, h4 = st.columns([1, 4, 1, 2])
+    h1.caption("**Cód.**"); h2.caption("**Variação**")
+    h3.caption("**Atual**"); h4.caption(f"**{col_qtd}**")
 
-    # Frame scrollável com as linhas
+    # Frame scrollável com altura dinâmica (evita espaço em branco desnecessário)
+    _altura_frame = min(220, max(90, len(df_view) * 52))
     qtds = {}
-    frame = st.container(height=280)
+    frame = st.container(height=_altura_frame)
     for _, row in df_view.iterrows():
-        c1, c2, c3, c4 = frame.columns([2, 4, 1, 2])
-        c1.write(row["Código Var."])
-        c2.write(row["Variação"])
-        c3.write(int(row["Estoque Atual"]))
+        c1, c2, c3, c4 = frame.columns([1, 4, 1, 2])
+        c1.caption(str(row["Código Var."]))
+        c2.caption(str(row["Variação"]))
+        c3.caption(str(int(row["Estoque Atual"])))
         qtds[row.name] = c4.number_input(
             label="qtd", label_visibility="collapsed",
             min_value=0, step=1, value=int(row[col_qtd]),
@@ -2927,36 +2928,31 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
 
             # Controles: seleciona linha → edita qtd / edita item / exclui
             if _ped_flat:
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
                 _fmt_item = lambda n: (
                     f"{n+1}. {_ped_flat[n]['it'].get('produto_nome','')} "
                     f"· {_ped_flat[n]['it'].get('variacao_nome','') or _ped_flat[n]['it'].get('observacao','')}"
                 )
-                _sel = st.selectbox("Item", range(len(_ped_flat)),
-                                    format_func=_fmt_item,
-                                    label_visibility="collapsed",
-                                    key="ped_sel")
+                _ca, _cb, _cc, _cd = st.columns([4, 1, 1, 1])
+                _sel = _ca.selectbox("Item", range(len(_ped_flat)),
+                                     format_func=_fmt_item,
+                                     label_visibility="collapsed",
+                                     key="ped_sel")
                 _it_sel = _ped_flat[_sel]["it"]
-                _ca, _cb, _cc = st.columns([2, 1, 1])
-                _nova_qtd = _ca.number_input(
+                _nova_qtd = _cb.number_input(
                     "Qtd", min_value=0, step=1,
                     value=int(_it_sel.get("quantidade", 1)),
                     key=f"ped_qtd_ctrl_{_sel}",
                     label_visibility="collapsed",
                 )
                 if _nova_qtd != int(_it_sel.get("quantidade", 1)):
-                    lk  = _ped_flat[_sel]["lk"]
-                    idx = _ped_flat[_sel]["idx"]
-                    st.session_state[lk][idx]["quantidade"] = _nova_qtd
+                    st.session_state[_ped_flat[_sel]["lk"]][_ped_flat[_sel]["idx"]]["quantidade"] = _nova_qtd
                     st.rerun()
-                if _cb.button("✏️ Editar", use_container_width=True, key="ped_edit_btn"):
+                if _cc.button("✏️", use_container_width=True, key="ped_edit_btn", help="Editar"):
                     st.session_state["_editar_lista"] = _ped_flat[_sel]["lk"]
                     st.session_state["_editar_idx"]   = _ped_flat[_sel]["idx"]
                     st.rerun()
-                if _cc.button("🗑 Excluir", use_container_width=True, key="ped_del_btn"):
-                    lk  = _ped_flat[_sel]["lk"]
-                    idx = _ped_flat[_sel]["idx"]
-                    st.session_state[lk].pop(idx)
+                if _cd.button("🗑", use_container_width=True, key="ped_del_btn", help="Excluir"):
+                    st.session_state[_ped_flat[_sel]["lk"]].pop(_ped_flat[_sel]["idx"])
                     st.rerun()
             st.divider()
             st.metric("💰 Total estimado",
