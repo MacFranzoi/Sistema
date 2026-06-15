@@ -74,18 +74,20 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # ── Tema ──
-# ── Somente dark mode ──
-_dark = True
+if "tema" not in st.session_state:
+    st.session_state.tema = "light"
+_dark = st.session_state.tema == "dark"
 
-BG    = "#0f1117"   # fundo principal — quase preto
-SB    = "#13151a"   # sidebar — ligeiramente mais quente
-SB2   = "#1a1d24"   # hover / linha loja
-CARD  = "#1a1d24"   # cards
-BOR   = "#2a2d36"   # bordas sutis
-TXT   = "#e8eaf0"   # texto principal
-TXT2  = "#6b7280"   # texto secundário / muted
-ACC   = "#7c3aed"   # violeta — acento principal
-ACC2  = "#a855f7"   # lilás — gradiente/hover
+# Light: branco limpo / Dark: grafite com letras bem legíveis
+BG    = "#18181b"   if _dark else "#f5f5f7"
+SB    = "#111113"   if _dark else "#ffffff"
+SB2   = "#1e1e22"   if _dark else "#f0f0f3"
+CARD  = "#1e1e22"   if _dark else "#ffffff"
+BOR   = "#2e2e34"   if _dark else "#e2e2e7"
+TXT   = "#f2f2f5"   if _dark else "#111113"   # letras bem claras no dark
+TXT2  = "#a0a0b0"   if _dark else "#6b6b80"   # muted mais legível no dark
+ACC   = "#7c3aed"
+ACC2  = "#a855f7"
 ACC_LT= "rgba(124,58,237,0.12)"
 GRN   = "#22c55e"
 GRN_LT= "rgba(34,197,94,0.10)"
@@ -592,13 +594,10 @@ st.markdown(f"""
 
 # ── Sidebar ──
 with st.sidebar:
-    # Logo
-    st.markdown(f"""
-    <div class="sb-logo">
-      <div class="sb-logo-mark">⚡</div>
-      <div class="sb-logo-text">PLUG ERP</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Logo — clicável, volta ao dashboard
+    if st.button("⚡  PLUG ERP", key="logo_btn", use_container_width=True):
+        st.session_state.pagina = "dashboard"
+        st.rerun()
 
     # Seletor de loja
     loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
@@ -612,7 +611,7 @@ with st.sidebar:
 
     if "sb_abertos" not in st.session_state:
         st.session_state.sb_abertos = {_grp_ativo}
-    st.session_state.sb_abertos.add(_grp_ativo)  # grupo ativo sempre aberto
+    st.session_state.sb_abertos.add(_grp_ativo)
 
     for grupo in _grupos_ordem:
         aberto = grupo in st.session_state.sb_abertos
@@ -624,42 +623,49 @@ with st.sidebar:
         if aberto:
             for pid, icon, label, grp, _, _ in _MENU_VISIVEL:
                 if grp != grupo: continue
-                ativo = pid == _pg_ativo
                 if st.button(f"  {icon}  {label}", key=f"nav_{pid}", use_container_width=True):
                     st.session_state.pagina = pid
                     st.rerun()
 
-    # JS: aplica visual de ativo e de header-de-grupo via MutationObserver
+    # JS — estiliza logo, grupos e item ativo
     _pg_label = next((f"  {m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
-    _grp_labels = [f"▾  {g}" for g in st.session_state.sb_abertos] + \
-                  [f"▸  {g}" for g in _grupos_ordem if g not in st.session_state.sb_abertos]
     st.markdown(f"""<script>
 (function() {{
-  const ACC    = '{ACC}';
-  const ACC_LT = '{ACC_LT}';
-  const TXT2   = '{TXT2}';
-  const SB2    = '{SB2}';
-  const activeLabel = {repr(_pg_label)};
-  const grpPrefixes = ['▾', '▸'];
+  const ACC='{ACC}', ACC_LT='{ACC_LT}', TXT='{TXT}', TXT2='{TXT2}', SB='{SB}', BOR='{BOR}';
+  const activeLabel = {repr(_pg_label.strip())};
 
   function styleAll() {{
     const sb = document.querySelector('[data-testid="stSidebar"]');
     if (!sb) return;
     sb.querySelectorAll('button').forEach(btn => {{
       const t = btn.innerText.trim();
-      const firstChar = t[0];
-      if (grpPrefixes.includes(firstChar)) {{
-        // header de grupo
+      // logo
+      if (t === '⚡  PLUG ERP') {{
+        btn.style.cssText = `font-size:1rem!important;font-weight:800!important;
+          color:${{TXT}}!important;background:transparent!important;border:none!important;
+          text-align:left!important;padding:0 16px!important;height:52px!important;
+          width:100%!important;border-radius:0!important;border-bottom:1px solid ${{BOR}}!important;
+          letter-spacing:-0.3px!important;cursor:pointer!important;`;
+        return;
+      }}
+      // header de grupo (começa com ▾ ou ▸)
+      if (t[0]==='▾' || t[0]==='▸') {{
         btn.style.cssText = `font-size:0.6rem!important;font-weight:700!important;
           letter-spacing:1.3px!important;text-transform:uppercase!important;
-          color:{TXT2}!important;padding:14px 16px 5px!important;
+          color:${{TXT2}}!important;padding:13px 16px 4px!important;
           margin:0!important;border-radius:0!important;width:100%!important;
           background:transparent!important;border:none!important;`;
-      }} else if (t === activeLabel.trim()) {{
+        return;
+      }}
+      // item ativo
+      if (t === activeLabel) {{
         btn.style.cssText = `background:${{ACC_LT}}!important;color:${{ACC}}!important;
           font-weight:600!important;border-left:3px solid ${{ACC}}!important;
           padding-left:9px!important;border-radius:6px!important;`;
-      }} else {{
+        return;
+      }}
+      // item normal — limpa override anterior
+      if (btn.style.cssText && !btn.closest('[data-testid="stForm"]')) {{
         btn.style.cssText = '';
       }}
     }});
@@ -670,21 +676,23 @@ with st.sidebar:
 }})();
 </script>""", unsafe_allow_html=True)
 
-    # Footer com sair
+    # Footer — avatar + tema + sair
     ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
-    <div style="margin-top:12px;border-top:1px solid {BOR};padding:10px 14px;
-         display:flex;align-items:center;justify-content:space-between;gap:6px">
-      <div style="display:flex;align-items:center;gap:8px;min-width:0">
-        <div class="sb-avatar">{ini}</div>
-        <div>
-          <div class="sb-user-name">{_nome_usr}</div>
-          <div class="sb-user-role">{_setor_lbl}</div>
-        </div>
+    <div style="border-top:1px solid {BOR};padding:10px 14px;
+         display:flex;align-items:center;gap:9px;background:{SB}">
+      <div class="sb-avatar">{ini}</div>
+      <div style="min-width:0;flex:1">
+        <div class="sb-user-name">{_nome_usr}</div>
+        <div class="sb-user-role">{_setor_lbl}</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Sair →", key="btn_sair", use_container_width=True):
+    col_t, col_s = st.columns([1, 1])
+    if col_t.button("☀️ Tema" if _dark else "🌙 Tema", key="btn_tema", use_container_width=True):
+        st.session_state.tema = "light" if _dark else "dark"
+        st.rerun()
+    if col_s.button("Sair", key="btn_sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
 
