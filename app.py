@@ -1797,35 +1797,41 @@ Catálogo de aparelhos (cod_interno | nome):
 
 Kits disponíveis: {_kits_disponiveis}
 
-REGRAS DE ABREVIAÇÃO — decodifique ANTES de buscar no catálogo:
-- "Ed" ou "ED" = "EDGE" (série Motorola). Ex: Ed20=EDGE 20, Ed30=EDGE 30, Ed30fusion=EDGE 30 Fusion, Ed30neo=EDGE 30 Neo, Ed40neo=EDGE 40 Neo, Ed50=EDGE 50, Ed50neo=EDGE 50 Neo, Ed50fusion=EDGE 50 Fusion, Ed5050=EDGE 50, Ed60=EDGE 60, Ed60pro=EDGE 60 Pro, Ed70=EDGE 70, Ed70ultra=EDGE 70 Ultra
-- "pró/pro/pró" = "Pro", "ultra/ul" = "Ultra", "neo" = "Neo", "fusion/fus" = "Fusion"
-- Números colados à letra: Ed30neo = EDGE 30 Neo
-- Marcas comuns: G23/G32/G53/G54 = Motorola G série; A01/A02/A03... = Samsung A série; Note = Samsung Note; X6/X6pro = Poco X6/X6 Pro; Redmi = Xiaomi Redmi
-- Se não tiver certeza do modelo exato, use o nome mais próximo do catálogo
+ABREVIAÇÕES DE MODELOS — decodifique antes de buscar:
+Motorola EDGE: "Ed"/"ED"/"edge" + número = EDGE [número]. Exemplos:
+  Ed20=EDGE 20, Ed30=EDGE 30, Ed30f/Ed30fus=EDGE 30 Fusion, Ed30n/Ed30neo=EDGE 30 Neo,
+  Ed40=EDGE 40, Ed40n/Ed40neo=EDGE 40 Neo, Ed50=EDGE 50, Ed50n=EDGE 50 Neo,
+  Ed50f=EDGE 50 Fusion, Ed5050=EDGE 50, Ed60=EDGE 60, Ed60p/Ed60pro=EDGE 60 Pro,
+  Ed70=EDGE 70, Ed70u/Ed70ultra=EDGE 70 Ultra, Ed70f=EDGE 70 Fusion
+Sufixos: "pro/pró/p" → Pro | "ultra/ul/u" → Ultra | "neo/n" → Neo | "fusion/fus/f" → Fusion | "plus/+" → Plus
+Motorola G: "G" + número (G23, G32, G53, G54, G60, G60S...)
+Samsung A: "A" + número (A01, A02, A03, A04, A13, A14, A23, A24, A33, A34, A51, A52, A53, A54, A72, A73...)
+Samsung Note: "Note" + número
+Xiaomi/Poco: "X6"=Poco X6, "X6pro"=Poco X6 Pro, "Redmi"=Redmi [número], "Note13"=Redmi Note 13...
+iPhone: "ip"/"iph"/"iphone" + número (ip15=iPhone 15, ip15pm=iPhone 15 Pro Max...)
+Outros: ignore acentos e espaços extras, tente o modelo mais próximo do catálogo
 
-REGRAS DE KIT — mapeie para o nome EXATO abaixo:
-Kits disponíveis: {list(_WPP_KITS.keys())}
+ABREVIAÇÕES DE KITS — mapeie para o nome exato:
+  "masc/masculina/masculinas/masculinos/m" → "masculino"
+  "fem/feminina/femininas/femininos/f" → "feminino"
+  "pac masc/pacote masc/pm" → "pacote masculino"
+  "pac fem/pacote fem/pf" → "pacote feminino"
+  "sl masc/silicone masc/slm" → "sl masculino"
+  "sl fem/silicone fem/slf" → "sl feminino"
+  "sl pac masc/slpm" → "sl pacote masculino"
+  "sl pac fem/slpf" → "sl pacote feminino"
+  "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
+  "div masc/diversos masc/dm" → "diversos masculino"
+Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
-- "masculinas/masculinos/masc" → "masculino"
-- "femininas/femininos/fem" → "feminino"
-- "pacote masc/pacote masculino" → "pacote masculino"
-- "pacote fem/pacote feminino" → "pacote feminino"
-- "sl masc/silicone masc/silicone masculino" → "sl masculino"
-- "sl fem/silicone fem/silicone feminino" → "sl feminino"
-- "sl pacote masc" → "sl pacote masculino"
-- "sl pacote fem" → "sl pacote feminino"
-- "brilho/brilhos/glitter/div brilho/diversos brilho" → "brilho"  (= botão ✨ Diversos Brilho ×3, adiciona R$59,99/Diversos × 3)
-- "diversos masc/div masc/diversos masculino" → "diversos masculino"
-- Se pedir 2 ou mais kits numa linha, gere uma entrada por kit para o mesmo aparelho
+EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
+Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
-EXCLUSÕES: se a linha contiver "menos [cor]" ou "exceto [cor]" ou "sem [cor]", inclua essas cores em "excluir_cores".
-Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
+QUANDO NÃO ENTENDER: se uma linha for ilegível, modelo inexistente no catálogo ou kit desconhecido,
+retorne com cod_interno: null, kit: null e nao_compreendido: true com motivo em "motivo".
 
-- Encontre o cod_interno exato no catálogo para cada aparelho.
-- Retorne SOMENTE JSON válido sem markdown:
-
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"nome_do_kit","excluir_cores":[],"confianca":"alta|media|baixa"}}]"""
+Retorne SOMENTE JSON válido, sem markdown:
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
 
                     try:
                         _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -1867,18 +1873,32 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                                             return _p
                                 return None
 
+                            _nao_compreendidos = []
                             for _entry in _parsed:
                                 _cod  = _entry.get("cod_interno") or ""
                                 _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
-                                _kit  = _entry.get("kit", "").lower()
+                                _kit  = (_entry.get("kit") or "").lower()
                                 _conf = _entry.get("confianca", "baixa")
                                 _excluir = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
+                                _nao_comp = _entry.get("nao_compreendido", False)
+                                _motivo   = _entry.get("motivo", "")
+
+                                if _nao_comp or not _kit or _kit not in _WPP_KITS:
+                                    _nao_compreendidos.append(
+                                        f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or ('kit desconhecido: ' + _kit if _kit else 'não identificado')}"
+                                    )
+                                    continue
+
                                 _cores_kit = _WPP_KITS.get(_kit, [])
                                 _prod_obj  = _achar_produto(_cod, _nome)
+                                if not _prod_obj:
+                                    _nao_compreendidos.append(
+                                        f"• \"{_entry.get('modelo_digitado','')}\" — modelo não encontrado no catálogo"
+                                    )
+                                    continue
                                 # Atualiza cod e nome com o que foi encontrado no cache
-                                if _prod_obj:
-                                    _cod  = _prod_obj.get("codigo_interno", _cod)
-                                    _nome = _prod_obj.get("nome", _nome)
+                                _cod  = _prod_obj.get("codigo_interno", _cod)
+                                _nome = _prod_obj.get("nome", _nome)
 
                                 for _cor, _qtd in _cores_kit:
                                     # Aplica exclusões ("menos preta" → pula "preto"/"preta")
@@ -1916,9 +1936,20 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                                         "Status":   "✓" if _encontrado else "⚠",
                                     })
 
-                            st.session_state["wpp_expandido"] = _linhas_expandidas
+                            st.session_state["wpp_expandido"]      = _linhas_expandidas
+                            st.session_state["wpp_nao_comp"] = _nao_compreendidos
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
+
+        # ── Itens não compreendidos ────────────────────────────────
+        if st.session_state.get("wpp_nao_comp"):
+            _nc = st.session_state["wpp_nao_comp"]
+            st.markdown(f"""
+            <div style="background:{RED_LT};border:1px solid {RED}44;border-radius:8px;padding:10px 14px;margin:10px 0">
+              <div style="font-weight:700;color:{RED};margin-bottom:4px">⚠ {len(_nc)} linha(s) não compreendida(s) — revise o texto:</div>
+              <div style="color:{TXT};font-size:0.83rem;line-height:1.7">{"<br>".join(_nc)}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         # ── Tabela de revisão com seleção ──────────────────────────
         if "wpp_expandido" in st.session_state and st.session_state.wpp_expandido:
@@ -1954,7 +1985,8 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
             col_wpp1, col_wpp2 = st.columns([2, 1])
             col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} selecionado(s) · {_n_falhos} sem match</div>", unsafe_allow_html=True)
             if col_wpp2.button("🗑 Limpar", key="wpp_clear", use_container_width=True):
-                del st.session_state["wpp_expandido"]
+                for _k in ["wpp_expandido", "wpp_nao_comp"]:
+                    st.session_state.pop(_k, None)
                 st.rerun()
 
             if _n_sel and st.button("➕ Adicionar selecionados ao pedido", type="primary", key="wpp_add", use_container_width=True):
@@ -1981,7 +2013,8 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                         "observacao":    "",
                     })
                     _adicionados += 1
-                del st.session_state["wpp_expandido"]
+                for _k in ["wpp_expandido", "wpp_nao_comp"]:
+                    st.session_state.pop(_k, None)
                 st.success(f"✅ {_adicionados} itens adicionados ao pedido!")
                 st.rerun()
 
