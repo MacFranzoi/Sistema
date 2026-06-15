@@ -458,52 +458,80 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # SIDEBAR
 # ────────────────────────────────────────────────────────────
 with st.sidebar:
-    # Logo / topbar
-    loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
-    loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
-    loja_id  = loja_opcoes[loja_sel_nome]
-
+    # 1) Logo fixa no topo
     st.markdown(f"""
     <div class="sb-logo">
       <div class="sb-logo-mark">⚡</div>
       <div class="sb-logo-text">PLUG ERP</div>
     </div>
-    <div class="sb-empresa">
-      <div>
-        <div class="sb-empresa-name">{loja_sel_nome}</div>
-        <div class="sb-empresa-cnpj">Loja ativa</div>
-      </div>
-      <div class="sb-empresa-arrow">▼</div>
-    </div>
     """, unsafe_allow_html=True)
 
-    # Menu
+    # 2) Seletor de loja (escondido visualmente, funcional)
+    loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
+    loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
+    loja_id = loja_opcoes[loja_sel_nome]
+
+    # CSS para remover margens do selectbox e fazer parecer com o card do GestaoClick
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] {
+        margin: -12px 0 0 0 !important;
+        padding: 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
+        border: none !important;
+        border-radius: 0 !important;
+        border-bottom: 1px solid var(--bor) !important;
+        background: var(--sb2) !important;
+        padding: 8px 12px !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+    }
+    /* remove gap entre botões do menu */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin: 0 !important; padding: 0 !important; }
+    [data-testid="stSidebar"] .stButton { margin: 0 !important; }
+    [data-testid="stSidebar"] .stButton > button { border-radius: 0 !important; margin: 0 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 3) Menu de navegação
     _grp = None
+    _pg_ativo = st.session_state.pagina
     for pid, icon, label, grupo, aba_idx, _ in _MENU_VISIVEL:
         if grupo != _grp:
             st.markdown(f'<div class="nav-group">{grupo}</div>', unsafe_allow_html=True)
             _grp = grupo
-        ativo = st.session_state.pagina == pid
+        ativo = _pg_ativo == pid
+        # Injetar CSS dinâmico para o item ativo via key única
         if ativo:
-            st.markdown('<div class="nav-active">', unsafe_allow_html=True)
+            st.markdown(f"""
+            <style>
+            [data-testid="stSidebar"] button[kind="secondary"][data-testid="baseButton-secondary"]:has(+ *) {{}}
+            div[data-key="nav_{pid}"] button,
+            [data-testid="stSidebar"] div:has(button:contains("{label}")) button {{
+                background: {YEL_BG} !important;
+                color: {YEL} !important;
+                font-weight: 600 !important;
+                border-left: 3px solid {YEL} !important;
+                padding-left: 13px !important;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
         if st.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
             st.session_state.pagina = pid
             st.rerun()
-        if ativo:
-            st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-
-    # Tema + Sair
+    # 4) Tema + Sair
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    if c1.button("☀️" if _dark else "🌙", use_container_width=True, key="btn_tema"):
+    if c1.button("☀️ Tema" if _dark else "🌙 Tema", use_container_width=True, key="btn_tema"):
         st.session_state.tema = "light" if _dark else "dark"
         st.rerun()
-    if c2.button("Sair", use_container_width=True, key="btn_sair"):
+    if c2.button("🚪 Sair", use_container_width=True, key="btn_sair"):
         st.session_state.usuario_logado = None
         st.rerun()
 
-    # User footer
+    # 5) User footer
     ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
     <div class="sb-footer">
@@ -522,14 +550,9 @@ clip  = st.session_state.get("clipboard")
 # ── Cabeçalho da página ──
 _pg_info = next((m for m in _MENU_VISIVEL if m[0] == st.session_state.pagina), _MENU_VISIVEL[0])
 st.markdown(f"""
-<div class="page-wrap" style="padding-bottom:0">
-<div class="page-header">
-  <div>
-    <div class="page-breadcrumb">{_pg_info[3]} <span>›</span> {_pg_info[2]}</div>
-    <div class="page-title">{_pg_info[1]}  {_pg_info[2]}</div>
-  </div>
-</div>
-</div>
+<div class="page-breadcrumb" style="margin-top:4px">{_pg_info[3]} <span>›</span> {_pg_info[2]}</div>
+<div class="page-title">{_pg_info[1]}  {_pg_info[2]}</div>
+<hr style="margin:6px 0 12px;border:none;border-top:1px solid var(--bor)">
 """, unsafe_allow_html=True)
 
 _pg = st.session_state.pagina
