@@ -1958,7 +1958,108 @@ if _pg == "pedido":
                             else:
                                 _linhas_ia.append(_exp)
 
-                    _texto_proc = "\n".join(_linhas_ia)
+                    # ── Pré-processador de fala natural ──────────────────────
+                    # Detecta linhas que parecem ditado ("a06 quantidade uma preta duas verde...")
+                    # e as expande em sub-linhas estruturadas que a IA já sabe processar.
+                    _NUMS_EXT = {
+                        "um":1,"uma":1,"dois":2,"duas":2,"três":3,"tres":3,
+                        "quatro":4,"cinco":5,"seis":6,"sete":7,"oito":8,"nove":9,"dez":10,
+                        "onze":11,"doze":12,"treze":13,"quatorze":14,"quinze":15,
+                    }
+                    _KITS_CONHECIDOS = set(_WPP_KITS.keys()) | {"brilho","masculino","feminino",
+                        "carteira","película","pelicula","transparente","couro","strass",
+                        "magsafe","very rio","vr","sl","pacote"}
+
+                    def _parece_ditado(txt):
+                        """True se a linha tem 'quantidade' ou padrões de número+palavra soltos."""
+                        t = txt.lower()
+                        if "quantidade" in t:
+                            return True
+                        # tem pelo menos 2 números por extenso ou sequência número-palavra-número
+                        conta = sum(1 for w in t.split() if w in _NUMS_EXT)
+                        return conta >= 2
+
+                    def _expandir_ditado(linha):
+                        """Quebra 'A06 quantidade uma preta duas verde militar brilho 2 lilas'
+                        em ['A06 preta 1', 'A06 verde militar 2', 'A06 brilho 2', 'A06 lilas 1']"""
+                        t = linha.strip()
+                        # Isola o modelo: tudo antes de 'quantidade' ou antes da primeira sequência num+item
+                        modelo_part = ""
+                        resto = t
+                        m_qtd = _re.match(r'^(.+?)\s+quantidade\s+(.+)$', t, _re.I)
+                        if m_qtd:
+                            modelo_part = m_qtd.group(1).strip()
+                            resto = m_qtd.group(2).strip()
+                        else:
+                            # tenta extrair o modelo como primeiro token que não é número nem cor
+                            tokens = t.split()
+                            modelo_tokens = []
+                            for tok in tokens:
+                                if tok.lower() in _NUMS_EXT or tok.isdigit():
+                                    break
+                                modelo_tokens.append(tok)
+                                if len(modelo_tokens) >= 3:
+                                    break
+                            if modelo_tokens:
+                                modelo_part = " ".join(modelo_tokens)
+                                resto = t[len(modelo_part):].strip()
+
+                        if not modelo_part:
+                            return [linha]
+
+                        # Tokeniza o resto em pares (número, item)
+                        tokens = resto.split()
+                        linhas_exp = []
+                        i = 0
+                        qtd_atual = 1
+                        item_tokens = []
+
+                        def _flush(item_toks, qtd):
+                            if item_toks:
+                                item_str = " ".join(item_toks)
+                                linhas_exp.append(f"{modelo_part} {item_str} {qtd}")
+
+                        # Kits que funcionam como separador de item quando aparecem sem número antes
+                        _KITS_SEPARADORES = {
+                            "brilho","masculino","feminino","carteira","película","pelicula",
+                            "transparente","couro","strass","magsafe","very","vr","sl",
+                        }
+
+                        while i < len(tokens):
+                            tok = tokens[i]
+                            tok_low = tok.lower()
+                            if tok_low in _NUMS_EXT:
+                                _flush(item_tokens, qtd_atual)
+                                item_tokens = []
+                                qtd_atual = _NUMS_EXT[tok_low]
+                            elif tok.isdigit():
+                                if item_tokens:
+                                    qtd_atual = int(tok)
+                                    _flush(item_tokens, qtd_atual)
+                                    item_tokens = []
+                                    qtd_atual = 1
+                                else:
+                                    qtd_atual = int(tok)
+                            elif tok_low in _KITS_SEPARADORES and item_tokens:
+                                # kit nomeado sem número antes → flush do item anterior com qtd=1
+                                _flush(item_tokens, qtd_atual)
+                                item_tokens = [tok]
+                                qtd_atual = 1
+                            else:
+                                item_tokens.append(tok)
+                            i += 1
+                        _flush(item_tokens, qtd_atual)
+
+                        return linhas_exp if linhas_exp else [linha]
+
+                    _linhas_ia_final = []
+                    for _ln_ia in _linhas_ia:
+                        if _parece_ditado(_ln_ia):
+                            _linhas_ia_final.extend(_expandir_ditado(_ln_ia))
+                        else:
+                            _linhas_ia_final.append(_ln_ia)
+
+                    _texto_proc = "\n".join(_linhas_ia_final)
 
                     _prods_all = cache.get("produtos", [])
                     _catalogo_txt = "\n".join(
@@ -2029,19 +2130,13 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
-FORMATO TRANSCRIÇÃO DE VOZ — quando o texto parece ditado (sem pontuação, palavras soltas):
-- Padrão: "[modelo] quantidade [número por extenso ou dígito] [cor/kit] [número] [cor/kit] ..."
-- Números por extenso: "uma/um"=1, "duas/dois"=2, "três/tres"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-- Cada par [número][cor/kit] gera uma entrada com quantidade_fixa=esse número
-- Se "quantidade" aparece antes de uma sequência, interprete o que segue como lista de pares qty+item
-- Cores isoladas (preta, lilas, verde militar, rose, azul, vinho etc.) → kit="avulso cor" com a cor na descrição
-- Kits nomeados (brilho, masculino, feminino, etc.) → kit normal com quantidade_fixa
-- Ex: "a06 quantidade uma preta duas verde militar brilho 2 lilas" →
-    {{modelo:A06, kit:"avulso cor", descricao:"preta", qtd:1}}
-    {{modelo:A06, kit:"avulso cor", descricao:"verde militar", qtd:2}}
-    {{modelo:A06, kit:"brilho", qtd:2}}  ← "brilho 2" = brilho com qtd 2
-    {{modelo:A06, kit:"avulso cor", descricao:"lilas", qtd:1}}  ← sem número antes = 1
-- Se não há número antes de um item na sequência, assuma quantidade_fixa=1
+LINHAS PRÉ-EXPANDIDAS DE DITADO — o pré-processador já quebrou falas como
+"a06 quantidade uma preta duas verde militar brilho 2 lilas" em linhas do tipo
+"A06 preta 1", "A06 verde militar 2", "A06 brilho 2", "A06 lilas 1".
+Cada linha dessas tem: [modelo] [cor ou kit] [quantidade no final].
+- O número no final é a quantidade_fixa.
+- Uma cor isolada (preta, lilas, verde militar, rose, vinho, nude, etc.) → kit="avulso cor", descricao_avulso=a cor.
+- Um kit reconhecido (brilho, masculino, feminino, etc.) → kit normal.
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
