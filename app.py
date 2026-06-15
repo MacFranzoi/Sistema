@@ -1755,9 +1755,28 @@ if _pg == "pedido":
                                (["rosa",   "silicone"], 1), (["marsala","silicone"], 2),
                                (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
                                (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
+        # ── Very Rio ── mesmas cores do SL (silicone), observacao="Very Rio"
+        "vr masculino":      [(["preto",        "silicone"], 2), (["marrom",      "silicone"], 1),
+                              (["azul marinho", "silicone"], 1), (["cinza chumbo","silicone"], 1)],
+        "vr feminino":       [(["lilás",  "silicone"], 1), (["marsala","silicone"], 1),
+                              (["marrom", "silicone"], 1)],
+        "vr pacote masculino":[(["preto",        "silicone"], 3), (["azul marinho","silicone"], 2),
+                               (["verde militar","silicone"], 1), (["marrom",      "silicone"], 1),
+                               (["cinza chumbo", "silicone"], 2)],
+        "vr pacote feminino": [(["lilás",  "silicone"], 2), (["pink",   "silicone"], 1),
+                               (["rosa",   "silicone"], 1), (["marsala","silicone"], 2),
+                               (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
+                               (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
+        # ── MagSafe ── mesmo que o botão MagSafe ×3 da página
+        "magsafe":           [(["119,99", "magsafe"], 3)],
         # ── Diversos ── mesmos que os botões Diversos da página
         "brilho":            [(["59,99", "diversos"], 3)],   # ✨ Diversos Brilho ×3
         "diversos masculino":[(["39,99", "diversos"], 3)],   # 💪 Diversos Masculino ×3
+    }
+    # Alias: "sl" sozinho → pacote masculino + feminino (inserido como dois kits pelo AI)
+    _WPP_KIT_ALIAS = {
+        "sl": ["sl pacote masculino", "sl pacote feminino"],
+        "vr": ["vr pacote masculino", "vr pacote feminino"],
     }
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
@@ -1820,6 +1839,13 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "sl fem/silicone fem/slf" → "sl feminino"
   "sl pac masc/slpm" → "sl pacote masculino"
   "sl pac fem/slpf" → "sl pacote feminino"
+  "sl" sozinho (sem masc/fem) → gere 2 entradas: "sl pacote masculino" + "sl pacote feminino"
+  "very rio masc/vr masc/vrm" → "vr masculino"
+  "very rio fem/vr fem/vrf" → "vr feminino"
+  "vr pac masc/vrpm" → "vr pacote masculino"
+  "vr pac fem/vrpf" → "vr pacote feminino"
+  "very rio/vr" sozinho → gere 2 entradas: "vr pacote masculino" + "vr pacote feminino"
+  "magsafe/mag safe/ms/magsafe" → "magsafe"
   "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
   "div masc/diversos masc/dm" → "diversos masculino"
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
@@ -1950,13 +1976,16 @@ Retorne SOMENTE JSON válido, sem markdown:
                                                 break
 
                                     _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
+                                    _obs_kit = ("Very Rio" if _kit.startswith("vr ") else
+                                                ("MagSafe" if _kit == "magsafe" else ""))
                                     _linhas_expandidas.append({
-                                        "✓":        _encontrado,  # só marca se achou exato
+                                        "✓":        _encontrado,
                                         "_cod":     _cod,
                                         "_nome":    _nome,
                                         "_kit":     _kit,
                                         "_conf":    _conf,
                                         "_achado":  _encontrado,
+                                        "_obs":     _obs_kit,
                                         "_var_id":  _var_match.get("id", "") if _var_match else "",
                                         "_var_cod": _var_match.get("codigo", "") if _var_match else "",
                                         "_prod_id": _prod_obj.get("id", "") if _prod_obj else "",
@@ -2082,7 +2111,7 @@ Retorne SOMENTE JSON válido, sem markdown:
                             "quantidade":    int(_erow["Qtd"]),
                             "Qtd a Pedir":   int(_erow["Qtd"]),
                             "valor_custo":   str(_meta["_custo"]),
-                            "observacao":    "",
+                            "observacao":    _meta.get("_obs", ""),
                         })
                         _adicionados += 1
 
