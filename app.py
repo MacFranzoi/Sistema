@@ -1732,36 +1732,37 @@ if _pg == "pedido":
     st.subheader("Pedido de Compra ao Fornecedor")
 
     # ── Importação via WhatsApp + IA ──────────────────────────────
-    # Kits predefinidos — termos em lista = todos devem estar presentes no nome da variação
-    # Formato: (termos_busca, quantidade)  →  ["preto","aveludada"] busca variação que contenha ambos
+    # Kits espelho EXATO dos botões da página de Pedidos
+    # Simples = busca a cor no nome da variação (igual ao _adicionar_kit da página)
+    # Lista   = todos os termos devem estar presentes (igual ao _sl da página)
     _WPP_KITS = {
-        "masculino":        [(["preto",       "aveludada"], 2),
-                             (["marrom",      "aveludada"], 1),
-                             (["azul marinho","aveludada"], 1),
-                             (["cinza chumbo","aveludada"], 1)],
-        "feminino":         [(["lilás",       "aveludada"], 1),
-                             (["marsala",     "aveludada"], 1),
-                             (["marrom",      "aveludada"], 1)],
-        "brilho":           [(["preto",        "space 2"], 1),
-                             (["azul marinho", "space 2"], 1),
-                             (["azul tiffany", "space 2"], 1),
-                             (["marsala",      "space 2"], 1),
-                             (["lilás",        "space 2"], 1),
-                             (["rosa",         "space 2"], 1),
-                             (["verde militar","space 2"], 1)],
-        "pacote masculino": [(["preto",        "aveludada"], 3),
-                             (["azul marinho", "aveludada"], 2),
-                             (["verde militar","aveludada"], 1),
-                             (["marrom",       "aveludada"], 1),
-                             (["cinza chumbo", "aveludada"], 2)],
-        "pacote feminino":  [(["lilás",        "aveludada"], 2),
-                             (["pink",         "aveludada"], 1),
-                             (["rosa",         "aveludada"], 1),
-                             (["marsala",      "aveludada"], 2),
-                             (["vinho",        "aveludada"], 1),
-                             (["roxo",         "aveludada"], 1),
-                             (["marrom",       "aveludada"], 1),
-                             (["nude",         "aveludada"], 1)],
+        # ── Aveludada ── mesmos que CORES_MASC / CORES_FEM
+        "masculino":         [("preto", 2), ("marrom", 1), ("azul marinho", 1), ("cinza chumbo", 1)],
+        "feminino":          [("lilás", 1), ("marsala", 1), ("marrom", 1)],
+        "pacote masculino":  [("preto", 3), ("azul marinho", 2), ("verde militar", 1),
+                              ("marrom", 1), ("cinza chumbo", 2)],
+        "pacote feminino":   [("lilás", 2), ("pink", 1), ("rosa", 1), ("marsala", 2),
+                              ("vinho", 1), ("roxo", 1), ("marrom", 1), ("nude", 1)],
+        # ── Silicone Líquido ── mesmo que SL_MASC / SL_FEM
+        "sl masculino":      [(["preto",        "silicone"], 2), (["marrom",      "silicone"], 1),
+                              (["azul marinho", "silicone"], 1), (["cinza chumbo","silicone"], 1)],
+        "sl feminino":       [(["lilás",    "silicone"], 1), (["marsala","silicone"], 1),
+                              (["marrom",   "silicone"], 1)],
+        "sl pacote masculino":[(["preto",       "silicone"], 3), (["azul marinho","silicone"], 2),
+                               (["verde militar","silicone"],1), (["marrom",      "silicone"], 1),
+                               (["cinza chumbo","silicone"], 2)],
+        "sl pacote feminino": [(["lilás",  "silicone"], 2), (["pink",   "silicone"], 1),
+                               (["rosa",   "silicone"], 1), (["marsala","silicone"], 2),
+                               (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
+                               (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
+        # ── Space 2 / Brilho ── Space 2 é o tipo "brilho" nas variações
+        "brilho":            [(["preto",        "space 2"], 1), (["azul marinho", "space 2"], 1),
+                              (["azul tiffany", "space 2"], 1), (["marsala",      "space 2"], 1),
+                              (["lilás",        "space 2"], 1), (["rosa",         "space 2"], 1),
+                              (["verde militar","space 2"], 1)],
+        # ── Diversos ── mesmos que os botões Diversos da página
+        "diversos brilho":   [(["59,99", "diversos"], 3)],
+        "diversos masculino":[(["39,99", "diversos"], 3)],
     }
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
@@ -1808,13 +1809,21 @@ REGRAS DE ABREVIAÇÃO — decodifique ANTES de buscar no catálogo:
 - Marcas comuns: G23/G32/G53/G54 = Motorola G série; A01/A02/A03... = Samsung A série; Note = Samsung Note; X6/X6pro = Poco X6/X6 Pro; Redmi = Xiaomi Redmi
 - Se não tiver certeza do modelo exato, use o nome mais próximo do catálogo
 
-REGRAS DE KIT:
-- "masculinas/masculinos/masc" → kit "masculino"
-- "femininas/femininos/fem" → kit "feminino"
-- "pacote masc" → kit "pacote masculino"
-- "pacote fem" → kit "pacote feminino"
-- "brilho/brilhos/glitter/space 2/space" → kit "brilho" (kit próprio com cores do Space 2)
-- Se pedir 2 kits em uma linha, gere 2 entradas separadas para o mesmo aparelho
+REGRAS DE KIT — mapeie para o nome EXATO abaixo:
+Kits disponíveis: {list(_WPP_KITS.keys())}
+
+- "masculinas/masculinos/masc" → "masculino"
+- "femininas/femininos/fem" → "feminino"
+- "pacote masc/pacote masculino" → "pacote masculino"
+- "pacote fem/pacote feminino" → "pacote feminino"
+- "sl masc/silicone masc/silicone masculino" → "sl masculino"
+- "sl fem/silicone fem/silicone feminino" → "sl feminino"
+- "sl pacote masc" → "sl pacote masculino"
+- "sl pacote fem" → "sl pacote feminino"
+- "brilho/brilhos/glitter/space/space2" → "brilho"  (Space 2 = capa com brilho)
+- "diversos brilho/div brilho" → "diversos brilho"
+- "diversos masc/div masc" → "diversos masculino"
+- Se pedir 2 ou mais kits numa linha, gere uma entrada por kit para o mesmo aparelho
 
 EXCLUSÕES: se a linha contiver "menos [cor]" ou "exceto [cor]" ou "sem [cor]", inclua essas cores em "excluir_cores".
 Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
