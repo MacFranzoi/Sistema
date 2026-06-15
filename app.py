@@ -1827,13 +1827,17 @@ Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
-POSTURA — REGRA ABSOLUTA: NUNCA marque nao_compreendido: true por falta de certeza sobre o modelo.
-- Se o modelo não existir exatamente no catálogo, use o cod_interno mais próximo disponível e coloque confianca "baixa".
-- "Realme C85" não existe → use REALMEC75 (mais próximo) com confianca "baixa". É melhor errar e o usuário corrigir do que omitir.
-- "F7" não reconhecido → tente variações: Moto G F7, Galaxy F7, ou qualquer F7 no catálogo. Se não houver nenhum F7, use o modelo mais parecido e confianca "baixa".
-- Kit ambíguo → prefira "masculino" com confianca "baixa".
-- nao_compreendido: true SOMENTE para linhas completamente ilegíveis (ex: "asdfgh", emoji puro, linha em branco).
-- Nunca escreva justificativas ou peça confirmação — apenas escolha o mais próximo e processe.
+CASOS ESPECIAIS:
+- "não temos nenhuma" / "estoque zerado" / "zeramos" / "acabou" / "sem estoque" na linha → significa pedir TODOS os kits: gere 4 entradas para o modelo: kit="masculino", kit="feminino", kit="brilho", kit="diversos masculino"
+- "preta" / "preta apenas" / "só preta" no final → adicione excluir_cores com todas as cores EXCETO "preto" (ou seja, é um pedido específico da cor preta — use kit="masculino" com excluir_cores=["marrom","azul marinho","cinza chumbo"])
+- Linha que fala de AUSÊNCIA mas não pede nada (ex: "Edge 60 estoque zerado") → processe normalmente com os 4 kits
+
+POSTURA — REGRA ABSOLUTA:
+- Se o modelo existir no catálogo com nome parecido, use-o com confianca "baixa".
+- Se o modelo NÃO existir de jeito nenhum no catálogo (nenhum nome próximo), marque cod_interno: null e nao_compreendido: false — o sistema vai criar como item avulso automaticamente.
+- nao_compreendido: true SOMENTE para linhas completamente ilegíveis (emoji puro, linha em branco, texto aleatório sem modelo nem kit).
+- Kit ambíguo → prefira "masculino".
+- Nunca escreva justificativas — apenas processe.
 
 Retorne SOMENTE JSON válido, sem markdown:
 [{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
@@ -1911,9 +1915,19 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 _cores_kit = _WPP_KITS.get(_kit, [])
                                 _prod_obj  = _achar_produto(_cod, _nome)
                                 if not _prod_obj:
-                                    _nao_compreendidos.append(
-                                        f"• \"{_entry.get('modelo_digitado','')}\" — modelo não encontrado no catálogo"
-                                    )
+                                    # Modelo não encontrado → avulso automático
+                                    _desc_av = f"{_nome} / {_kit.title()}"
+                                    _linhas_expandidas.append({
+                                        "✓": False, "_cod": "", "_nome": _nome,
+                                        "_kit": _kit, "_conf": _conf, "_achado": False,
+                                        "_avulso_auto": True,
+                                        "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                        "Aparelho": _nome, "Kit": _kit.title(),
+                                        "Variação": f"⚠ {_desc_av}",
+                                        "Qtd": 1,
+                                        "Status": "⚠",
+                                        "_desc_avulso": _desc_av,
+                                    })
                                     continue
                                 # Atualiza cod e nome com o que foi encontrado no cache
                                 _cod  = _prod_obj.get("codigo_interno", _cod)
@@ -2008,13 +2022,15 @@ Retorne SOMENTE JSON válido, sem markdown:
 
                 _rows_falhos = []
                 for _l in _falhos:
-                    _termos_raw = _l["Variação"].replace("⚠ ", "").replace(" não encontrado", "")
-                    _desc_sugerida = f"{_l['Aparelho']} / {_l['Kit']} / {_termos_raw}"
+                    if _l.get("_avulso_auto"):
+                        _desc_sugerida = _l.get("_desc_avulso", f"{_l['Aparelho']} / {_l['Kit']}")
+                    else:
+                        _termos_raw = _l["Variação"].replace("⚠ ", "").replace(" não encontrado", "")
+                        _desc_sugerida = f"{_l['Aparelho']} / {_l['Kit']} / {_termos_raw}"
                     _rows_falhos.append({
-                        "Criar avulso": False,
+                        "Criar avulso": _l.get("_avulso_auto", False),  # auto-marca modelo não encontrado
                         "Descrição": _desc_sugerida,
                         "Qtd": _l["Qtd"],
-                        "_idx": _falhos.index(_l),
                     })
 
                 _df_falhos = _pd.DataFrame(_rows_falhos)
