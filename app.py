@@ -2028,20 +2028,40 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
-CORES SÃO SEMPRE "avulso cor" — NUNCA masculino/feminino:
-Palavras de cor (preta, preto, branca, branco, lilás, lilas, verde militar, rosa, vinho, nude,
-dourada, azul, vermelha, transparente preta, etc.) NÃO são kits. São SEMPRE:
-  kit="avulso cor", descricao_avulso=a cor no singular (ex: "pretas"→"preta", "lilás"→"lilás")
-A regra "kit ambíguo → masculino" NUNCA se aplica a cores.
+CORES E KITS NO DITADO — regra absoluta:
+O ditado mistura cores e kits livremente. Você deve identificar cada palavra/expressão como:
+  A) COR → kit="avulso cor", descricao_avulso=cor normalizada no SINGULAR FEMININO
+  B) KIT → kit=nome do kit
 
-TRANSCRIÇÃO DE VOZ / DITADO — o texto pode ser fala contínua sem pontuação.
-1. Modelos podem ter espaço: "a 06"=A06, "a 07"=A07, "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo.
-2. Um bloco pode conter MÚLTIPLOS modelos em sequência — quando aparecer novo modelo, inicie entradas para ele.
-3. Números por extenso = quantidade: "uma"=1, "duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10.
-4. [número] + [cor] → avulso cor com quantidade_fixa=número. Ex: "duas pretas" → avulso cor "preta", qtd 2.
-5. [número] + [kit] → kit com quantidade_fixa=número. Ex: "duas masculino" → kit masculino, qtd 2.
-6. [kit ou cor] sem número antes → quantidade_fixa=1.
-7. Gere UMA entrada JSON por par (modelo + cor/kit).
+NORMALIZAÇÃO DE COR — seja tolerante com gênero e plural:
+  pretas/pretos/preta/preto → "preta"
+  brancas/brancos/branca/branco → "branca"
+  rosas/rosa → "rosa"
+  lilases/lilás/lilas → "lilás"
+  verdes militares/verde militar → "verde militar"
+  vinhos/vinho → "vinho"
+  nudes/nude → "nude"
+  douradas/dourados/dourada/dourado → "dourada"
+  azuis/azul → "azul"
+  vermelhas/vermelhos/vermelha/vermelho → "vermelha"
+  cinzas/cinza → "cinza"
+  Qualquer outra cor: normalize para singular e use como descricao_avulso
+
+COMO DISTINGUIR COR DE KIT:
+  - É KIT: masculino, feminino, brilho, very rio, vr, sl, magsafe, carteira, película, couro, strass, pacote
+  - É COR: qualquer palavra que descreve uma tonalidade (preta, verde, lilás, rose, nude, vinho, etc.)
+  - "masculino"/"feminino" NUNCA são cores — são kits
+  - Cores NUNCA são kits — não tente mapear cor para masculino/feminino
+  - A regra "kit ambíguo → masculino" aplica-se APENAS a palavras ambíguas entre kits, nunca a cores
+
+TRANSCRIÇÃO DE VOZ / DITADO — fala contínua sem pontuação:
+1. Modelos podem ter espaço: "a 06"=A06, "a 07"=A07, "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo
+2. Um bloco pode ter MÚLTIPLOS modelos em sequência — ao detectar novo modelo, inicie entradas para ele
+3. Números por extenso = quantidade: "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
+4. [número] + [cor] → avulso cor, quantidade_fixa=número
+5. [número] + [kit] → kit, quantidade_fixa=número
+6. Cor ou kit sem número antes → quantidade_fixa=1
+7. Uma entrada JSON por par modelo+cor ou modelo+kit
 
 Exemplo: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
 → A06 | kit="avulso cor" descricao_avulso="preta" qtd=2
