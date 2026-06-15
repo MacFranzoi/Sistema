@@ -275,7 +275,9 @@ def painel_carregar_lista(tipo, key_suffix="", retornar_arquivo=False):
 
 
 def df_lista_resumo(itens, colunas_extras=None):
-    df = pd.DataFrame(itens).sort_values(["cod_interno", "variacao_cod"], errors="ignore")
+    _df = pd.DataFrame(itens)
+    _sort_cols = [c for c in ["cod_interno", "variacao_cod"] if c in _df.columns]
+    df = _df.sort_values(_sort_cols) if _sort_cols else _df
     cols = ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "quantidade"]
     if colunas_extras:
         cols += colunas_extras
