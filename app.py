@@ -2703,6 +2703,17 @@ Retorne SOMENTE JSON válido, sem markdown:
                 except Exception:
                     return str(v)
 
+            # cabeçalho da lista
+            st.markdown(f"""
+            <div style="display:grid;grid-template-columns:1fr 48px 40px 36px;
+                        gap:4px;padding:4px 6px;
+                        font-size:0.68rem;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.6px;color:{TXT2};border-bottom:1px solid {BOR};
+                        margin-bottom:2px">
+              <span>Produto · Variação</span><span style="text-align:center">Qtd</span>
+              <span></span><span></span>
+            </div>""", unsafe_allow_html=True)
+
             total_calculado = 0.0
             for lista_key, lista in [("pedido_itens", st.session_state.pedido_itens),
                                       ("pedido_avulsos", st.session_state.get("pedido_avulsos", []))]:
@@ -2713,35 +2724,38 @@ Retorne SOMENTE JSON válido, sem markdown:
                         custo_f = 0.0
                     qtd_atual = int(it.get("quantidade", 0))
                     tag = "🆕 " if it.get("_avulso") else ""
+                    var = it.get("variacao_nome", "") or ""
                     obs = it.get("observacao", "") or ""
-                    forn = it.get("fornecedor", "") or "—"
+                    nome = it.get("produto_nome", "")
+                    linha2 = " · ".join(filter(None, [var, obs]))
 
-                    st.markdown(f"""
-                    <div style="border:1px solid {BOR};border-radius:10px;padding:10px 12px;
-                                margin-bottom:6px;background:{CARD}">
-                      <div style="font-size:0.78rem;color:{TXT2};margin-bottom:2px">{tag}{forn}{(' · <i>' + obs + '</i>') if obs else ''}</div>
-                      <div style="font-weight:600;font-size:0.95rem;color:{TXT};line-height:1.3">{it.get('produto_nome','')}</div>
-                      <div style="font-size:0.83rem;color:{TXT2}">{it.get('variacao_nome','')}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # info da linha em HTML, qtd + botões em colunas Streamlit
+                    _ci, _cq, _ce, _cd = st.columns([6, 1.2, 0.8, 0.8])
+                    _ci.markdown(f"""
+                    <div style="padding:5px 2px 2px;line-height:1.25">
+                      <div style="font-size:0.82rem;font-weight:600;color:{TXT}">{tag}{nome}</div>
+                      <div style="font-size:0.72rem;color:{TXT2}">{linha2}</div>
+                    </div>""", unsafe_allow_html=True)
 
-                    _ca, _cb, _cc, _cd = st.columns([2, 1, 1, 1])
-                    nova_qtd = _ca.number_input(
-                        "Qtd", label_visibility="collapsed",
+                    nova_qtd = _cq.number_input(
+                        "q", label_visibility="collapsed",
                         min_value=0, step=1, value=qtd_atual,
                         key=f"ped_qtd_{lista_key}_{idx}"
                     )
                     lista[idx]["quantidade"] = nova_qtd
                     total_calculado += nova_qtd * custo_f
-                    _cb.markdown(f"<div style='padding-top:8px;font-size:0.82rem;color:{TXT2}'>{_fmt_brl(it.get('valor_custo','0'))}</div>", unsafe_allow_html=True)
-                    if _cc.button("✏️ Editar", key=f"edit_{lista_key}_{idx}", use_container_width=True):
+
+                    if _ce.button("✏️", key=f"edit_{lista_key}_{idx}", use_container_width=True):
                         st.session_state["_editar_lista"] = lista_key
                         st.session_state["_editar_idx"]   = idx
                         st.rerun()
-                    if _cd.button("🗑️", key=f"del_{lista_key}_{idx}", use_container_width=True):
+                    if _cd.button("🗑", key=f"del_{lista_key}_{idx}", use_container_width=True):
                         lista.pop(idx)
                         st.session_state[lista_key] = lista
                         st.rerun()
+
+                    st.markdown(f"<hr style='margin:0;border:none;border-top:1px solid {BOR}'>",
+                                unsafe_allow_html=True)
             st.divider()
             st.metric("💰 Total estimado",
                       f"R$ {total_calculado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
