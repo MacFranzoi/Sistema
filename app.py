@@ -71,86 +71,249 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 
     return bytes(pdf.output())
 
-st.set_page_config(page_title="Sistema de Estoque", page_icon="📦", layout="wide")
+st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # ──────────────────────────────────────────────
-# CSS Global
+# Tema (dark/light)
 # ──────────────────────────────────────────────
-st.markdown("""
+if "tema" not in st.session_state:
+    st.session_state.tema = "dark"
+
+_dark = st.session_state.tema == "dark"
+
+# paleta
+_C = {
+    "bg":       "#0d0d0d" if _dark else "#f5f5f5",
+    "sidebar":  "#141414" if _dark else "#ffffff",
+    "card":     "#1a1a1a" if _dark else "#ffffff",
+    "border":   "#2a2a2a" if _dark else "#e0e0e0",
+    "text":     "#f0f0f0" if _dark else "#111111",
+    "muted":    "#888888",
+    "yellow":   "#FFD600",
+    "yellow2":  "#FFE566",
+    "white":    "#ffffff",
+    "danger":   "#e05555",
+    "success":  "#4caf7d",
+}
+
+st.markdown(f"""
 <style>
-/* ── fonte base menor em mobile ── */
-html, body, [class*="css"] { font-size: 14px; }
+/* ── reset & base ── */
+html, body, [class*="css"], .main {{ background-color: {_C["bg"]} !important; color: {_C["text"]} !important; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; }}
 
-/* ── título principal compacto ── */
-h1 { font-size: 1.4rem !important; margin-bottom: 0.2rem !important; }
-h2 { font-size: 1.15rem !important; }
-h3 { font-size: 1rem !important; }
+/* ── sidebar ── */
+[data-testid="stSidebar"] {{
+    background: {_C["sidebar"]} !important;
+    border-right: 1px solid {_C["border"]};
+    padding-top: 0 !important;
+}}
+[data-testid="stSidebar"] * {{ color: {_C["text"]} !important; }}
 
-/* ── tabs: fonte menor, sem overflow horizontal ── */
-.stTabs [data-baseweb="tab-list"] { flex-wrap: wrap; gap: 2px; }
-.stTabs [data-baseweb="tab"] {
-    font-size: 0.72rem !important;
-    padding: 6px 10px !important;
-    white-space: nowrap;
-}
+/* ── logo area ── */
+.erp-logo {{
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 16px 12px;
+    border-bottom: 2px solid {_C["yellow"]};
+    margin-bottom: 8px;
+}}
+.erp-logo-icon {{
+    font-size: 1.6rem; line-height: 1;
+    background: {_C["yellow"]}; color: #000;
+    width: 36px; height: 36px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+}}
+.erp-logo-name {{ font-size: 1rem; font-weight: 700; color: {_C["yellow"]} !important; letter-spacing: 0.5px; }}
+.erp-logo-sub  {{ font-size: 0.65rem; color: {_C["muted"]} !important; }}
 
-/* ── botões menores ── */
-.stButton > button {
-    font-size: 0.8rem !important;
-    padding: 0.3rem 0.8rem !important;
+/* ── nav section labels ── */
+.nav-section {{
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: {_C["muted"]} !important;
+    padding: 12px 16px 4px; margin: 0;
+}}
+
+/* ── nav item buttons ── */
+[data-testid="stSidebar"] .stButton > button {{
+    width: 100% !important;
+    background: transparent !important;
+    border: none !important;
     border-radius: 6px !important;
-}
+    text-align: left !important;
+    padding: 8px 16px !important;
+    font-size: 0.8rem !important;
+    color: {_C["text"]} !important;
+    margin: 1px 0 !important;
+    transition: background 0.15s;
+}}
+[data-testid="stSidebar"] .stButton > button:hover {{
+    background: {_C["border"]} !important;
+    color: {_C["yellow"]} !important;
+}}
 
-/* ── inputs e selects compactos ── */
-.stTextInput input, .stSelectbox select,
-.stNumberInput input, .stTextArea textarea {
-    font-size: 0.82rem !important;
-    padding: 0.3rem 0.5rem !important;
-}
+/* ── nav item ativo ── */
+.nav-ativo button {{
+    background: {_C["yellow"]}22 !important;
+    border-left: 3px solid {_C["yellow"]} !important;
+    color: {_C["yellow"]} !important;
+    font-weight: 600 !important;
+    padding-left: 13px !important;
+}}
 
-/* ── dataframe: fonte menor, scroll horizontal ── */
-.stDataFrame { overflow-x: auto; }
-.stDataFrame table { font-size: 0.75rem !important; }
-
-/* ── sidebar compacta ── */
-[data-testid="stSidebar"] { min-width: 200px !important; }
-[data-testid="stSidebar"] .stButton > button { font-size: 0.75rem !important; padding: 0.25rem 0.5rem !important; }
-
-/* ── cards de métrica ── */
-[data-testid="stMetric"] {
-    background: #1e2130;
+/* ── user card na sidebar ── */
+.erp-usercard {{
+    margin: 8px 12px;
+    padding: 10px 12px;
+    background: {_C["border"]};
     border-radius: 8px;
-    padding: 10px 14px !important;
-}
+    display: flex; gap: 10px; align-items: center;
+}}
+.erp-usercard-avatar {{
+    width: 32px; height: 32px; border-radius: 50%;
+    background: {_C["yellow"]}; color: #000;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+}}
+.erp-usercard-name  {{ font-size: 0.78rem; font-weight: 600; }}
+.erp-usercard-setor {{ font-size: 0.65rem; color: {_C["muted"]} !important; }}
 
-/* ── login card ── */
-.login-card {
-    background: #1e2130;
-    border-radius: 12px;
-    padding: 2rem;
-    max-width: 360px;
-    margin: 4rem auto;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-}
-.login-logo {
-    text-align: center;
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-}
-.login-titulo {
-    text-align: center;
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 1.5rem;
-    color: #cdd6f4;
-}
+/* ── header principal ── */
+.erp-header {{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0 14px;
+    border-bottom: 1px solid {_C["border"]};
+    margin-bottom: 16px;
+}}
+.erp-breadcrumb {{ font-size: 0.72rem; color: {_C["muted"]}; }}
+.erp-page-title  {{ font-size: 1.2rem; font-weight: 700; margin-top: 2px; }}
+.erp-page-title span {{ color: {_C["yellow"]}; }}
 
-/* ── mobile: esconde sidebar por padrão nos pequenos ── */
-@media (max-width: 640px) {
-    h1 { font-size: 1.1rem !important; }
-    .stTabs [data-baseweb="tab"] { font-size: 0.65rem !important; padding: 5px 7px !important; }
-    .stButton > button { font-size: 0.72rem !important; }
-}
+/* ── card ── */
+.erp-card {{
+    background: {_C["card"]};
+    border: 1px solid {_C["border"]};
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}}
+
+/* ── badge ── */
+.erp-badge {{
+    display: inline-block;
+    background: {_C["yellow"]}22;
+    color: {_C["yellow"]};
+    border: 1px solid {_C["yellow"]}55;
+    border-radius: 20px;
+    font-size: 0.65rem; font-weight: 600;
+    padding: 2px 8px;
+}}
+
+/* ── stat cards ── */
+.stat-card {{
+    background: {_C["card"]};
+    border: 1px solid {_C["border"]};
+    border-radius: 10px;
+    padding: 14px 16px;
+    border-top: 3px solid {_C["yellow"]};
+}}
+.stat-value {{ font-size: 1.6rem; font-weight: 700; color: {_C["yellow"]}; }}
+.stat-label {{ font-size: 0.72rem; color: {_C["muted"]}; margin-top: 2px; }}
+
+/* ── tabelas ── */
+.stDataFrame {{ overflow-x: auto; border-radius: 8px; }}
+.stDataFrame thead th {{ background: {_C["border"]} !important; font-size: 0.72rem !important; }}
+.stDataFrame tbody td {{ font-size: 0.75rem !important; }}
+
+/* ── inputs ── */
+.stTextInput input, .stNumberInput input, .stTextArea textarea {{
+    background: {_C["card"]} !important;
+    border: 1px solid {_C["border"]} !important;
+    color: {_C["text"]} !important;
+    border-radius: 6px !important;
+    font-size: 0.82rem !important;
+}}
+.stTextInput input:focus, .stNumberInput input:focus {{
+    border-color: {_C["yellow"]} !important;
+    box-shadow: 0 0 0 2px {_C["yellow"]}33 !important;
+}}
+.stSelectbox > div > div {{
+    background: {_C["card"]} !important;
+    border-color: {_C["border"]} !important;
+    font-size: 0.82rem !important;
+}}
+
+/* ── botões principais ── */
+.main .stButton > button {{
+    font-size: 0.8rem !important;
+    padding: 0.35rem 1rem !important;
+    border-radius: 6px !important;
+    border: 1px solid {_C["border"]} !important;
+    background: {_C["card"]} !important;
+    color: {_C["text"]} !important;
+}}
+.main .stButton > button[kind="primary"],
+.main .stFormSubmitButton > button {{
+    background: {_C["yellow"]} !important;
+    color: #000 !important;
+    border-color: {_C["yellow"]} !important;
+    font-weight: 600 !important;
+}}
+.main .stButton > button:hover {{
+    border-color: {_C["yellow"]} !important;
+    color: {_C["yellow"]} !important;
+}}
+
+/* ── divider ── */
+hr {{ border-color: {_C["border"]} !important; }}
+
+/* ── expander ── */
+.stExpander {{ border: 1px solid {_C["border"]} !important; border-radius: 8px !important; }}
+.stExpander summary {{ font-size: 0.82rem !important; }}
+
+/* ── tabs dentro de páginas ── */
+.stTabs [data-baseweb="tab-list"] {{ border-bottom: 2px solid {_C["border"]}; gap: 0; }}
+.stTabs [data-baseweb="tab"] {{
+    font-size: 0.78rem !important; padding: 8px 14px !important;
+    border-radius: 0 !important; border-bottom: 2px solid transparent !important;
+    margin-bottom: -2px;
+}}
+.stTabs [aria-selected="true"] {{
+    border-bottom-color: {_C["yellow"]} !important;
+    color: {_C["yellow"]} !important;
+    font-weight: 600 !important;
+}}
+
+/* ── login ── */
+.login-wrap {{
+    min-height: 85vh; display: flex; align-items: center; justify-content: center;
+}}
+.login-box {{
+    background: {_C["card"]};
+    border: 1px solid {_C["border"]};
+    border-top: 4px solid {_C["yellow"]};
+    border-radius: 14px;
+    padding: 2.5rem 2rem;
+    width: 100%; max-width: 360px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}}
+.login-logo-wrap {{
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    margin-bottom: 1.8rem;
+}}
+.login-icon {{
+    width: 56px; height: 56px; border-radius: 14px;
+    background: {_C["yellow"]}; color: #000;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem;
+}}
+.login-brand  {{ font-size: 1.2rem; font-weight: 800; color: {_C["yellow"]}; letter-spacing: 0.5px; }}
+.login-sub    {{ font-size: 0.7rem; color: {_C["muted"]}; }}
+
+/* ── mobile ── */
+@media (max-width: 640px) {{
+    .erp-page-title {{ font-size: 1rem !important; }}
+    .stat-value {{ font-size: 1.2rem !important; }}
+    .main .stButton > button {{ font-size: 0.72rem !important; padding: 0.28rem 0.6rem !important; }}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -174,16 +337,21 @@ if "usuario_logado" not in st.session_state:
 
 if st.session_state.usuario_logado is None:
     st.markdown("""
-    <div class="login-card">
-      <div class="login-logo">📦</div>
-      <div class="login-titulo">Sistema de Estoque</div>
+    <div class="login-wrap">
+      <div class="login-box">
+        <div class="login-logo-wrap">
+          <div class="login-icon">⚡</div>
+          <div class="login-brand">PLUG ERP</div>
+          <div class="login-sub">Sistema de Gestão de Estoque</div>
+        </div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
-    _, col_login, _ = st.columns([1, 1.2, 1])
+    _, col_login, _ = st.columns([1, 1.1, 1])
     with col_login:
         with st.form("form_login"):
-            usuario_input = st.text_input("👤 Usuário")
-            senha_input   = st.text_input("🔒 Senha", type="password")
+            usuario_input = st.text_input("Usuário")
+            senha_input   = st.text_input("Senha", type="password")
             entrar = st.form_submit_button("Entrar", use_container_width=True)
         if entrar:
             u = usuario_input.strip().lower()
@@ -202,75 +370,115 @@ _setor       = _user_data.get("setor", "vendas")
 _abas_permitidas = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
 _nome_usuario    = _user_data.get("nome", _user)
 _is_admin        = _setor == "admin"
-
 setor_label = api.SETORES.get(_setor, {}).get("label", _setor)
-col_titulo, col_user = st.columns([5, 1])
-col_titulo.markdown("### 📦 Sistema de Estoque")
-col_user.markdown(f"<div style='text-align:right;font-size:0.78rem;padding-top:6px'>👤 {_nome_usuario}<br><span style='color:#888'>{setor_label}</span></div>", unsafe_allow_html=True)
+
+# ── mapa de páginas: id → (ícone, label, categoria, aba_idx ou None) ──
+_MENU = [
+    # (id,                 icon, label,                 categoria,  aba_idx)
+    ("dashboard",          "🏠", "Dashboard",           "GERAL",    None),
+    ("entrada",            "📥", "Entrada de Mercadoria","ESTOQUE",  0),
+    ("acerto",             "🔧", "Acerto de Estoque",   "ESTOQUE",  1),
+    ("estoque_loja",       "🏪", "Estoque por Loja",    "ESTOQUE",  4),
+    ("disponibilidade",    "🔘", "Disponibilidade",     "ESTOQUE",  5),
+    ("pedido",             "🛒", "Pedido de Compra",    "COMPRAS",  3),
+    ("etiquetas",          "🏷️", "Etiquetas",           "OPERAÇÕES",2),
+    ("precos",             "💰", "Preços",              "FINANCEIRO",6),
+    ("novo_modelo",        "➕", "Novo Modelo",         "CATÁLOGO", 7),
+    ("clonar_modelo",      "🔁", "Clonar Modelo",       "CATÁLOGO", 8),
+    ("usuarios",           "👥", "Usuários",            "ADMIN",    None),
+    ("sincronizacao",      "🔄", "Sincronização",       "ADMIN",    None),
+]
+
+# filtra pelo setor
+def _pode(aba_idx):
+    if aba_idx is None:
+        return True
+    return aba_idx in _abas_permitidas
+
+_MENU_VISIVEL = [m for m in _MENU if m[0] not in ("usuarios", "sincronizacao") and _pode(m[4])]
+if _is_admin:
+    _MENU_VISIVEL += [m for m in _MENU if m[0] in ("usuarios", "sincronizacao")]
+
+if "pagina" not in st.session_state:
+    st.session_state.pagina = _MENU_VISIVEL[0][0]
 
 # ──────────────────────────────────────────────
-# Sidebar
+# Sidebar — navegação ERP
 # ──────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(f"**{_nome_usuario}** · `{setor_label}`")
-    if st.button("🚪 Sair", use_container_width=True):
+    # Logo
+    st.markdown("""
+    <div class="erp-logo">
+      <div class="erp-logo-icon">⚡</div>
+      <div>
+        <div class="erp-logo-name">PLUG ERP</div>
+        <div class="erp-logo-sub">Gestão de Estoque</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Loja ativa
+    loja_opcoes = {"Todas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
+    loja_sel_nome = st.selectbox("🏪 Loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
+    loja_id = loja_opcoes[loja_sel_nome]
+    loja_label = loja_sel_nome if loja_sel_nome != "Todas" else "Todas as lojas"
+    st.markdown(f'<div style="text-align:center;padding:2px 0 8px"><span class="erp-badge">📍 {loja_label}</span></div>', unsafe_allow_html=True)
+
+    # Navegação
+    _cat_atual = None
+    for pid, icon, label, cat, aba_idx in _MENU_VISIVEL:
+        if cat != _cat_atual:
+            st.markdown(f'<p class="nav-section">{cat}</p>', unsafe_allow_html=True)
+            _cat_atual = cat
+        ativo = st.session_state.pagina == pid
+        container = st.container()
+        if ativo:
+            container.markdown('<div class="nav-ativo">', unsafe_allow_html=True)
+        if container.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
+            st.session_state.pagina = pid
+            st.rerun()
+        if ativo:
+            container.markdown('</div>', unsafe_allow_html=True)
+
+    # User card + tema + sair
+    st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
+    st.divider()
+    inicial = (_nome_usuario[0] if _nome_usuario else "U").upper()
+    st.markdown(f"""
+    <div class="erp-usercard">
+      <div class="erp-usercard-avatar">{inicial}</div>
+      <div>
+        <div class="erp-usercard-name">{_nome_usuario}</div>
+        <div class="erp-usercard-setor">{setor_label}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    tema_icon = "☀️" if _dark else "🌙"
+    if c1.button(f"{tema_icon} Tema", use_container_width=True, key="btn_tema"):
+        st.session_state.tema = "light" if _dark else "dark"
+        st.rerun()
+    if c2.button("🚪 Sair", use_container_width=True, key="btn_sair"):
         st.session_state.usuario_logado = None
         st.rerun()
-    st.divider()
-    st.markdown("**🏪 Loja ativa**")
-    loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
-    loja_sel_nome = st.selectbox("Selecionar loja:", list(loja_opcoes.keys()), key="loja_ativa")
-    loja_id = loja_opcoes[loja_sel_nome]
 
-    st.divider()
-    st.header("🔄 Sincronização")
-    cache = api.carregar_cache(loja_id)
+# ── cache e clipboard (ainda necessários nas páginas) ──
+cache = api.carregar_cache(loja_id)
+clip  = st.session_state.get("clipboard")
 
-    if cache:
-        sincronizado = cache.get("sincronizado_em", "")[:16].replace("T", " às ")
-        st.success(f"Cache: {cache['total']} produtos\nLoja: {cache.get('loja_nome','—')}\nSync: {sincronizado}")
-    else:
-        st.warning("Nenhum cache para esta loja.")
+# ── header da página ──
+_pag_atual = next((m for m in _MENU_VISIVEL if m[0] == st.session_state.pagina), _MENU_VISIVEL[0])
+st.markdown(f"""
+<div class="erp-header">
+  <div>
+    <div class="erp-breadcrumb">{_pag_atual[3]} › {_pag_atual[2]}</div>
+    <div class="erp-page-title">{_pag_atual[1]}  <span>{_pag_atual[2]}</span></div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-    if st.button("🔄 Sincronizar Todas as Lojas", use_container_width=True):
-        lojas_list = list(api.LOJAS.items())
-        barra = st.progress(0)
-        status_txt = st.empty()
-        erros_sync = []
-        for idx, (lid, lnome) in enumerate(lojas_list):
-            status_txt.info(f"Sincronizando **{lnome}**… ({idx+1}/{len(lojas_list)})")
-            def prog(pag, total, _lnome=lnome, _idx=idx, _n=len(lojas_list)):
-                frac = (_idx + pag / max(total, 1)) / _n
-                barra.progress(frac, text=f"{_lnome}: página {pag}/{total}")
-            try:
-                resultado = api.sincronizar_produtos(loja_id=lid, progress_callback=prog)
-                if lid == loja_id:
-                    cache = resultado
-            except Exception as e:
-                erros_sync.append(f"{lnome}: {e}")
-        barra.progress(1.0)
-        if erros_sync:
-            status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
-        else:
-            status_txt.success(f"✅ {len(lojas_list)} lojas sincronizadas!")
-        st.rerun()
-
-    if loja_id:
-        st.info(f"Operações em: **{loja_sel_nome}**")
-    else:
-        st.warning("Sem loja selecionada.")
-
-    # Área de transferência entre abas
-    st.divider()
-    st.header("📋 Área de transferência")
-    clip = st.session_state.get("clipboard")
-    if clip:
-        st.success(f"**{clip['tipo']}** — {len(clip['itens'])} itens\nDe: {clip.get('origem','—')}")
-        if st.button("🗑️ Limpar transferência", use_container_width=True):
-            del st.session_state["clipboard"]
-            st.rerun()
-    else:
-        st.caption("Nenhum item aguardando transferência.")
+_pg = st.session_state.pagina
 
 
 # ──────────────────────────────────────────────
@@ -429,34 +637,99 @@ def df_lista_resumo(itens, colunas_extras=None):
 
 
 # ──────────────────────────────────────────────
-# Abas
+# Roteador de páginas
 # ──────────────────────────────────────────────
 class _NullCtx:
     def __enter__(self): return self
     def __exit__(self, *a): return False
 
-def _guard(tab):
-    return tab if tab is not None else _NullCtx()
+_NULL = _NullCtx()
 
-_abas_visiveis = [TODAS_ABAS[i] for i in _abas_permitidas]
-if _is_admin:
-    _abas_visiveis += ["👥 Usuários"]
-_tabs_widgets = st.tabs(_abas_visiveis)
-_tab_map = {i: _tabs_widgets[_abas_permitidas.index(i)] for i in _abas_permitidas}
-aba_usuarios = _tabs_widgets[-1] if _is_admin else None
+def _guard(pg_name):
+    return st.container() if _pg == pg_name else _NULL
 
-def _aba(idx):
-    return _tab_map.get(idx)
+aba1          = _guard("entrada")
+aba2          = _guard("acerto")
+aba3          = _guard("etiquetas")
+aba4          = _guard("pedido")
+aba5          = _guard("estoque_loja")
+aba6          = _guard("disponibilidade")
+aba7          = _guard("precos")
+aba8          = _guard("novo_modelo")
+aba9          = _guard("clonar_modelo")
+aba_usuarios  = _guard("usuarios")
 
-aba1 = _aba(0)
-aba2 = _aba(1)
-aba3 = _aba(2)
-aba4 = _aba(3)
-aba5 = _aba(4)
-aba6 = _aba(5)
-aba7 = _aba(6)
-aba8 = _aba(7)
-aba9 = _aba(8)
+# ══════════════════════════════════════════════
+# DASHBOARD
+# ══════════════════════════════════════════════
+if _pg == "dashboard":
+    total_cache = cache.get("total", 0) if cache else 0
+    sync_em = cache.get("sincronizado_em", "")[:16].replace("T", " às ") if cache else "—"
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(f'<div class="stat-card"><div class="stat-value">{total_cache}</div><div class="stat-label">Produtos em cache</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="stat-card"><div class="stat-value">{len(api.LOJAS)}</div><div class="stat-label">Lojas ativas</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="stat-card"><div class="stat-value">{len(_usuarios_db)}</div><div class="stat-label">Usuários</div></div>', unsafe_allow_html=True)
+    c4.markdown(f'<div class="stat-card"><div class="stat-value">{sync_em}</div><div class="stat-label">Última sincronização</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="erp-card">', unsafe_allow_html=True)
+    st.markdown("**📍 Lojas**")
+    for lid, lnome in api.LOJAS.items():
+        c = api.carregar_cache(lid)
+        t = c.get("total", 0) if c else 0
+        s = c.get("sincronizado_em", "")[:10] if c else "não sincronizado"
+        st.markdown(f"• **{lnome}** — {t} produtos · sync {s}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if clip:
+        st.info(f"📋 Transferência pendente: **{clip['tipo']}** — {len(clip['itens'])} itens  ·  origem: {clip.get('origem','—')}")
+        if st.button("🗑️ Limpar", key="dash_clip"):
+            del st.session_state["clipboard"]
+            st.rerun()
+
+# ══════════════════════════════════════════════
+# SINCRONIZAÇÃO
+# ══════════════════════════════════════════════
+if _pg == "sincronizacao":
+    if cache:
+        sincronizado = cache.get("sincronizado_em", "")[:16].replace("T", " às ")
+        st.success(f"Cache atual: **{cache['total']}** produtos — {cache.get('loja_nome','—')} — sync {sincronizado}")
+    else:
+        st.warning("Nenhum cache para esta loja.")
+
+    if st.button("🔄 Sincronizar Todas as Lojas", type="primary"):
+        lojas_list = list(api.LOJAS.items())
+        barra = st.progress(0)
+        status_txt = st.empty()
+        erros_sync = []
+        for idx, (lid, lnome) in enumerate(lojas_list):
+            status_txt.info(f"Sincronizando **{lnome}**… ({idx+1}/{len(lojas_list)})")
+            def prog(pag, total, _lnome=lnome, _idx=idx, _n=len(lojas_list)):
+                frac = (_idx + pag / max(total, 1)) / _n
+                barra.progress(frac, text=f"{_lnome}: página {pag}/{total}")
+            try:
+                resultado = api.sincronizar_produtos(loja_id=lid, progress_callback=prog)
+                if lid == loja_id:
+                    cache = resultado
+            except Exception as e:
+                erros_sync.append(f"{lnome}: {e}")
+        barra.progress(1.0)
+        if erros_sync:
+            status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
+        else:
+            status_txt.success(f"✅ {len(lojas_list)} lojas sincronizadas!")
+        st.rerun()
+
+    st.markdown('<div class="erp-card">', unsafe_allow_html=True)
+    st.markdown("**Status por loja**")
+    for lid, lnome in api.LOJAS.items():
+        c = api.carregar_cache(lid)
+        if c:
+            s = c.get("sincronizado_em", "")[:16].replace("T", " às ")
+            st.markdown(f"✅ **{lnome}** — {c['total']} produtos — {s}")
+        else:
+            st.markdown(f"⚠️ **{lnome}** — sem cache")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════
