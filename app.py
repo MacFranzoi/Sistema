@@ -587,54 +587,48 @@ loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Tod
 
 # ── Barra de navegação horizontal ──
 _pg_ativo = st.session_state.pagina
-_nav_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-_col_idx = 0
+_grupos_menu = list(dict.fromkeys(m[3] for m in _MENU_VISIVEL))
+_menu_por_grupo = {g: [(m[0], f"{m[1]} {m[2]}") for m in _MENU_VISIVEL if m[3] == g] for g in _grupos_menu}
 
-# Logo
-with _nav_cols[_col_idx]:
-    if st.button("⚡ PLUG", key="logo_btn", use_container_width=True):
-        st.session_state.pagina = "dashboard"
-        st.rerun()
-_col_idx += 1
+_nc = len(_grupos_menu) + 3  # grupos + loja + tema + sair
+_nav_cols = st.columns(_nc)
 
-# Páginas do menu
-for pid, icon, label, grp, _, _ in _MENU_VISIVEL:
-    if _col_idx >= len(_nav_cols):
-        break
-    _ativo = pid == _pg_ativo
-    _lbl = f"**{icon} {label}**" if _ativo else f"{icon} {label}"
-    with _nav_cols[_col_idx]:
-        if st.button(f"{icon} {label}", key=f"nav_{pid}", use_container_width=True,
-                     type="primary" if _ativo else "secondary"):
-            st.session_state.pagina = pid
+for _ci, _grp in enumerate(_grupos_menu):
+    _itens_grp = _menu_por_grupo[_grp]
+    _opcoes_labels = [lbl for _, lbl in _itens_grp]
+    _opcoes_pids   = [pid for pid, _ in _itens_grp]
+    _idx_ativo = _opcoes_pids.index(_pg_ativo) if _pg_ativo in _opcoes_pids else 0
+    with _nav_cols[_ci]:
+        _sel = st.selectbox(
+            _grp, _opcoes_labels, index=_idx_ativo,
+            key=f"nav_grp_{_grp}", label_visibility="visible"
+        )
+        _pid_sel = _opcoes_pids[_opcoes_labels.index(_sel)]
+        if _pid_sel != _pg_ativo:
+            st.session_state.pagina = _pid_sel
             st.rerun()
-    _col_idx += 1
 
-# Loja + ações no final
 with _nav_cols[-3]:
-    if st.button(f"🏪 {loja_sel_nome[:8]}", key="loja_toggle", use_container_width=True):
-        st.session_state.loja_picker = not st.session_state.get("loja_picker", False)
+    _lojas_nomes = ["Todas"] + [n for _, n in api.LOJAS.items()]
+    _lojas_ids   = [None] + [lid for lid, _ in api.LOJAS.items()]
+    _loja_idx    = _lojas_ids.index(loja_id) if loja_id in _lojas_ids else 0
+    _loja_sel = st.selectbox("🏪 Loja", _lojas_nomes, index=_loja_idx, key="nav_loja")
+    _novo_lid = _lojas_ids[_lojas_nomes.index(_loja_sel)]
+    if _novo_lid != loja_id:
+        st.session_state.loja_ativa_id = _novo_lid
         st.rerun()
+
 with _nav_cols[-2]:
-    if st.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
+    st.write("")
+    if st.button("☀️ Tema" if _dark else "🌙 Tema", key="btn_tema", use_container_width=True):
         st.session_state.tema = "light" if _dark else "dark"
         st.rerun()
+
 with _nav_cols[-1]:
+    st.write("")
     if st.button("Sair", key="btn_sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
-
-# Picker de loja inline
-if st.session_state.get("loja_picker"):
-    _lojas_opcoes = [("Todas as lojas", None)] + [(n, lid) for lid, n in api.LOJAS.items()]
-    _lcols = st.columns(len(_lojas_opcoes))
-    for i, (nome_op, lid_op) in enumerate(_lojas_opcoes):
-        with _lcols[i]:
-            if st.button(nome_op, key=f"loja_opt_{lid_op or 'all'}", use_container_width=True,
-                         type="primary" if loja_id == lid_op else "secondary"):
-                st.session_state.loja_ativa_id = lid_op
-                st.session_state.loja_picker = False
-                st.rerun()
 
 # ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
