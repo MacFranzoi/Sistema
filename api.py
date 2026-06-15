@@ -27,6 +27,32 @@ DIR_LISTAS = os.path.join(DIR, "listas")
 os.makedirs(DIR_LISTAS, exist_ok=True)
 DISPONIBILIDADE_FILE = os.path.join(DIR, "disponibilidade_lojas.json")
 CUSTOS_TIPO_FILE     = os.path.join(DIR, "custos_tipo.json")
+USUARIOS_FILE        = os.path.join(DIR, "usuarios.json")
+
+# Setores: definem quais abas cada perfil pode acessar
+# Índices: 0=Entrada, 1=Acerto, 2=Etiquetas, 3=Pedido, 4=Estoque, 5=Disponibilidade, 6=Preços, 7=Novo Modelo, 8=Clonar
+SETORES = {
+    "admin":     {"label": "Administrador",   "abas": [0,1,2,3,4,5,6,7,8]},
+    "gerencia":  {"label": "Gerência",        "abas": [0,1,2,3,4,5,6]},
+    "estoque":   {"label": "Estoque",         "abas": [0,1,2,3,4,5]},
+    "compras":   {"label": "Compras",         "abas": [3,4]},
+    "vendas":    {"label": "Vendas",          "abas": [2,4]},
+}
+
+USUARIOS_PADRAO = {
+    "gustavo": {"nome": "Gustavo", "senha": "admin", "setor": "admin"},
+}
+
+def carregar_usuarios():
+    if os.path.exists(USUARIOS_FILE):
+        with open(USUARIOS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    salvar_usuarios(USUARIOS_PADRAO)
+    return dict(USUARIOS_PADRAO)
+
+def salvar_usuarios(usuarios):
+    with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
+        json.dump(usuarios, f, ensure_ascii=False, indent=2)
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",

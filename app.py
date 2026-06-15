@@ -76,24 +76,6 @@ st.set_page_config(page_title="Sistema de Estoque", page_icon="📦", layout="wi
 # ──────────────────────────────────────────────
 # Login
 # ──────────────────────────────────────────────
-USUARIOS = {
-    "gustavo": {
-        "senha": "admin",
-        "nome": "Gustavo",
-        "abas": [0, 1, 2, 3, 4, 5, 6, 7, 8],  # acesso total
-    },
-    "vendas": {
-        "senha": "vendas123",
-        "nome": "Vendas",
-        "abas": [2, 4],  # Etiquetas + Estoque por Loja
-    },
-    "estoque": {
-        "senha": "estoque123",
-        "nome": "Estoque",
-        "abas": [0, 1, 2, 3, 4, 5],  # tudo menos Preços, Novo Modelo, Clonar
-    },
-}
-
 TODAS_ABAS = [
     "📦 Entrada de Mercadoria",
     "📊 Acerto de Estoque",
@@ -117,20 +99,25 @@ if st.session_state.usuario_logado is None:
         st.subheader("🔐 Login")
         with st.form("form_login"):
             usuario_input = st.text_input("Usuário")
-            senha_input = st.text_input("Senha", type="password")
+            senha_input   = st.text_input("Senha", type="password")
             entrar = st.form_submit_button("Entrar", use_container_width=True)
         if entrar:
             u = usuario_input.strip().lower()
-            if u in USUARIOS and USUARIOS[u]["senha"] == senha_input:
+            _usuarios = api.carregar_usuarios()
+            if u in _usuarios and _usuarios[u]["senha"] == senha_input:
                 st.session_state.usuario_logado = u
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
     st.stop()
 
-_user = st.session_state.usuario_logado
-_abas_permitidas = USUARIOS[_user]["abas"]
-_nome_usuario = USUARIOS[_user]["nome"]
+_user        = st.session_state.usuario_logado
+_usuarios_db = api.carregar_usuarios()
+_user_data   = _usuarios_db.get(_user, {})
+_setor       = _user_data.get("setor", "vendas")
+_abas_permitidas = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
+_nome_usuario    = _user_data.get("nome", _user)
+_is_admin        = _setor == "admin"
 
 st.title("📦 Sistema de Estoque — Loja de Acessórios")
 
@@ -138,7 +125,9 @@ st.title("📦 Sistema de Estoque — Loja de Acessórios")
 # Sidebar
 # ──────────────────────────────────────────────
 with st.sidebar:
+    setor_label = api.SETORES.get(_setor, {}).get("label", _setor)
     st.markdown(f"👤 **{_nome_usuario}**")
+    st.caption(f"Setor: {setor_label}")
     if st.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
@@ -365,8 +354,11 @@ def _guard(tab):
     return tab if tab is not None else _NullCtx()
 
 _abas_visiveis = [TODAS_ABAS[i] for i in _abas_permitidas]
+if _is_admin:
+    _abas_visiveis += ["👥 Usuários"]
 _tabs_widgets = st.tabs(_abas_visiveis)
 _tab_map = {i: _tabs_widgets[_abas_permitidas.index(i)] for i in _abas_permitidas}
+aba_usuarios = _tabs_widgets[-1] if _is_admin else None
 
 def _aba(idx):
     return _tab_map.get(idx)
@@ -1734,3 +1726,102 @@ with _guard(aba9):
                             st.info("Sincronize os produtos na barra lateral.")
                         except Exception as e:
                             st.error(f"Erro ao clonar: {e}")
+
+
+# ══════════════════════════════════════════════
+# ABA USUÁRIOS — somente admin
+# ══════════════════════════════════════════════
+with _guard(aba_usuarios):
+    st.subheader("👥 Gerenciamento de Usuários")
+
+    _usuarios_db = api.carregar_usuarios()
+    setores_opcoes = {v["label"]: k for k, v in api.SETORES.items()}
+
+    # ── Tabela de usuários existentes ──────────
+    st.markdown("### Usuários cadastrados")
+    rows = []
+    for login, ud in _usuarios_db.items():
+        setor_k = ud.get("setor", "vendas")
+        rows.append({
+            "Login": login,
+            "Nome": ud.get("nome", ""),
+            "Setor": api.SETORES.get(setor_k, {}).get("label", setor_k),
+            "Abas permitidas": ", ".join(
+                TODAS_ABAS[i].split(" ", 1)[-1]
+                for i in api.SETORES.get(setor_k, {}).get("abas", [])
+            ),
+        })
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    st.divider()
+    col_add, col_edit = st.columns(2)
+
+    # ── Adicionar / Editar usuário ─────────────
+    with col_add:
+        st.markdown("### ➕ Adicionar usuário")
+        with st.form("form_add_usuario", clear_on_submit=True):
+            nu_login = st.text_input("Login (único, sem espaços)").strip().lower()
+            nu_nome  = st.text_input("Nome completo")
+            nu_setor = st.selectbox("Setor", list(setores_opcoes.keys()))
+            nu_senha = st.text_input("Senha inicial")
+            salvar_novo = st.form_submit_button("Salvar", use_container_width=True)
+        if salvar_novo:
+            if not nu_login or not nu_senha:
+                st.error("Login e senha são obrigatórios.")
+            elif nu_login in _usuarios_db:
+                st.error(f"Login '{nu_login}' já existe. Use Editar.")
+            else:
+                _usuarios_db[nu_login] = {
+                    "nome": nu_nome or nu_login,
+                    "senha": nu_senha,
+                    "setor": setores_opcoes[nu_setor],
+                }
+                api.salvar_usuarios(_usuarios_db)
+                st.success(f"Usuário '{nu_login}' criado!")
+                st.rerun()
+
+    # ── Editar usuário existente ───────────────
+    with col_edit:
+        st.markdown("### ✏️ Editar usuário")
+        login_sel = st.selectbox("Selecionar usuário", list(_usuarios_db.keys()), key="sel_editar_usr")
+        ud_sel = _usuarios_db.get(login_sel, {})
+        setor_atual_label = api.SETORES.get(ud_sel.get("setor","vendas"), {}).get("label","Vendas")
+        with st.form("form_edit_usuario"):
+            ed_nome  = st.text_input("Nome", value=ud_sel.get("nome",""))
+            ed_setor = st.selectbox("Setor", list(setores_opcoes.keys()),
+                                    index=list(setores_opcoes.keys()).index(setor_atual_label)
+                                    if setor_atual_label in setores_opcoes else 0)
+            ed_senha = st.text_input("Nova senha (deixe em branco para manter)", value="")
+            col_s, col_d = st.columns(2)
+            salvar_edit = col_s.form_submit_button("💾 Salvar", use_container_width=True)
+            excluir     = col_d.form_submit_button("🗑️ Excluir", use_container_width=True)
+        if salvar_edit:
+            if login_sel == _user and setores_opcoes[ed_setor] != "admin":
+                st.error("Você não pode remover seu próprio acesso admin.")
+            else:
+                _usuarios_db[login_sel]["nome"]  = ed_nome
+                _usuarios_db[login_sel]["setor"] = setores_opcoes[ed_setor]
+                if ed_senha:
+                    _usuarios_db[login_sel]["senha"] = ed_senha
+                api.salvar_usuarios(_usuarios_db)
+                st.success("Usuário atualizado!")
+                st.rerun()
+        if excluir:
+            if login_sel == _user:
+                st.error("Você não pode excluir seu próprio usuário.")
+            else:
+                del _usuarios_db[login_sel]
+                api.salvar_usuarios(_usuarios_db)
+                st.success(f"Usuário '{login_sel}' removido.")
+                st.rerun()
+
+    # ── Referência de setores ──────────────────
+    st.divider()
+    st.markdown("### 📋 Setores e permissões")
+    setor_rows = []
+    for k, v in api.SETORES.items():
+        setor_rows.append({
+            "Setor": v["label"],
+            "Abas": ", ".join(TODAS_ABAS[i].split(" ", 1)[-1] for i in v["abas"]),
+        })
+    st.dataframe(setor_rows, use_container_width=True, hide_index=True)
