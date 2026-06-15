@@ -496,12 +496,26 @@ def sincronizar_listas_do_github():
 # ──────────────────────────────────────────────
 
 def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
+    # Descobre a maior ordem atual para esse tipo
+    max_ordem = 0
+    try:
+        for arq in os.listdir(DIR_LISTAS):
+            if not arq.endswith(".json"):
+                continue
+            with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
+                d = json.load(f)
+            if d.get("tipo") == tipo and "ordem" in d:
+                max_ordem = max(max_ordem, d["ordem"])
+    except Exception:
+        pass
+
     dados = {
         "nome": nome,
         "tipo": tipo,
         "loja_id": loja_id,
         "loja_nome": loja_nome,
         "criado_em": datetime.now().isoformat(),
+        "ordem": max_ordem + 1,
         "itens": itens
     }
     slug = nome.replace(" ", "_").replace("/", "-")[:40]
@@ -525,16 +539,20 @@ def listar_listas_salvas(tipo=None):
     )
     listas = []
     for arq in arquivos:
-        if tipo and not arq.startswith(tipo):
-            continue
         try:
             with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
                 dados = json.load(f)
+            # Filtra por tipo via campo JSON (não mais pelo prefixo do nome)
+            if tipo and dados.get("tipo") != tipo:
+                continue
             dados["_arquivo"] = arq
             listas.append(dados)
         except Exception:
             pass
-    return listas
+    # Ordena: listas com `ordem` primeiro (ascendente), depois por data desc
+    com_ordem = sorted([l for l in listas if "ordem" in l], key=lambda l: l["ordem"])
+    sem_ordem = sorted([l for l in listas if "ordem" not in l], key=lambda l: l.get("criado_em", ""), reverse=True)
+    return com_ordem + sem_ordem
 
 
 def carregar_lista(arquivo):
@@ -548,6 +566,81 @@ def excluir_lista(arquivo):
     if os.path.exists(caminho):
         os.remove(caminho)
     _gh_delete_arquivo(f"listas/{arquivo}")
+
+
+def mover_lista_na_ordem(arquivo, tipo, direcao):
+    """Move a lista uma posição para cima ou para baixo na ordem de exibição."""
+    # Carrega todas as listas do tipo sem chamar sincronizar (evita rede desnecessária)
+    arquivos = sorted([f for f in os.listdir(DIR_LISTAS) if f.endswith(".json")], reverse=True)
+    listas = []
+    for arq in arquivos:
+        try:
+            with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
+                d = json.load(f)
+            if d.get("tipo") == tipo:
+                listas.append([arq, d])
+        except Exception:
+            pass
+
+    # Ordena igual ao listar_listas_salvas: com ordem asc, depois sem ordem por data desc
+    com_ordem = sorted([x for x in listas if "ordem" in x[1]], key=lambda x: x[1]["ordem"])
+    sem_ordem = sorted([x for x in listas if "ordem" not in x[1]], key=lambda x: x[1].get("criado_em", ""), reverse=True)
+    listas_ord = com_ordem + sem_ordem
+
+    idx = next((i for i, (arq, _) in enumerate(listas_ord) if arq == arquivo), None)
+    if idx is None:
+        return False
+
+    outro_idx = idx - 1 if direcao == "cima" else idx + 1
+    if outro_idx < 0 or outro_idx >= len(listas_ord):
+        return False
+
+    # Atribui ordens sequenciais em memória e faz o swap
+    for i, (_, d) in enumerate(listas_ord):
+        d["_ord_tmp"] = i + 1
+
+    ordem_nova_a = listas_ord[outro_idx][1]["_ord_tmp"]
+    ordem_nova_b = listas_ord[idx][1]["_ord_tmp"]
+
+    def _salvar_ordem(arq, d, nova_ordem):
+        d["ordem"] = nova_ordem
+        d_clean = {k: v for k, v in d.items() if not k.startswith("_")}
+        conteudo = json.dumps(d_clean, ensure_ascii=False, indent=2)
+        with open(os.path.join(DIR_LISTAS, arq), "w", encoding="utf-8") as f:
+            f.write(conteudo)
+        _gh_push_arquivo(f"listas/{arq}", conteudo, f"Reordena lista: {d.get('nome', '')}")
+
+    _salvar_ordem(listas_ord[idx][0], listas_ord[idx][1], ordem_nova_a)
+    _salvar_ordem(listas_ord[outro_idx][0], listas_ord[outro_idx][1], ordem_nova_b)
+    return True
+
+
+def mudar_tipo_lista(arquivo, novo_tipo):
+    """Muda o tipo de uma lista (ex: pedido → entrada)."""
+    cam = os.path.join(DIR_LISTAS, arquivo)
+    with open(cam, encoding="utf-8") as f:
+        d = json.load(f)
+    d["tipo"] = novo_tipo
+    d.pop("ordem", None)  # reseta ordem para a nova categoria
+    conteudo = json.dumps(d, ensure_ascii=False, indent=2)
+    with open(cam, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _gh_push_arquivo(f"listas/{arquivo}", conteudo, f"Muda tipo lista: {d.get('nome', '')}")
+    return True
+
+
+def acrescentar_itens_lista(arquivo_destino, novos_itens):
+    """Adiciona itens ao final de uma lista existente."""
+    cam = os.path.join(DIR_LISTAS, arquivo_destino)
+    with open(cam, encoding="utf-8") as f:
+        d = json.load(f)
+    d["itens"] = d.get("itens", []) + novos_itens
+    d["atualizado_em"] = datetime.now().isoformat()
+    conteudo = json.dumps(d, ensure_ascii=False, indent=2)
+    with open(cam, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _gh_push_arquivo(f"listas/{arquivo_destino}", conteudo, f"Adiciona itens: {d.get('nome', '')}")
+    return True
 
 
 # ──────────────────────────────────────────────

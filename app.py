@@ -927,6 +927,55 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
                 st.success("Excluído.")
                 st.rerun()
 
+        # ── Segunda linha: reordenar / mudar tipo / mover itens ──────────
+        _cd, _ce, _cf, _cg = st.columns(4)
+
+        # Mover para cima
+        if _cd.button("⬆️ Para cima", use_container_width=True, key=f"ls_up_{key_suffix}"):
+            api.mover_lista_na_ordem(_lst["_arquivo"], tipo, "cima")
+            st.rerun()
+
+        # Mover para baixo
+        if _ce.button("⬇️ Para baixo", use_container_width=True, key=f"ls_down_{key_suffix}"):
+            api.mover_lista_na_ordem(_lst["_arquivo"], tipo, "baixo")
+            st.rerun()
+
+        # Mudar tipo
+        _TIPOS_LISTA = {"pedido": "Pedido de Compra", "entrada": "Entrada", "acerto": "Acerto", "etiquetas": "Etiquetas"}
+        with _cf.popover("🔀 Mudar tipo"):
+            _tipos_opcoes = [t for t in _TIPOS_LISTA if t != tipo]
+            _novo_tipo = st.selectbox(
+                "Novo tipo:",
+                _tipos_opcoes,
+                format_func=lambda t: _TIPOS_LISTA[t],
+                key=f"ls_tipo_sel_{key_suffix}"
+            )
+            st.caption(f"A lista sairá de **{_TIPOS_LISTA.get(tipo, tipo)}** e irá para **{_TIPOS_LISTA.get(_novo_tipo, _novo_tipo)}**.")
+            if st.button("Confirmar mudança", key=f"ls_tipo_btn_{key_suffix}", type="primary"):
+                api.mudar_tipo_lista(_lst["_arquivo"], _novo_tipo)
+                st.success(f"Tipo alterado para {_TIPOS_LISTA.get(_novo_tipo, _novo_tipo)}!")
+                st.rerun()
+
+        # Mover itens para outra lista
+        with _cg.popover("➡️ Mover itens"):
+            _outras = [l for l in listas if l["_arquivo"] != _lst["_arquivo"]]
+            if not _outras:
+                st.info("Nenhuma outra lista disponível.")
+            else:
+                _dest_opcoes = [l["_arquivo"] for l in _outras]
+                _dest_idx = st.selectbox(
+                    "Destino:",
+                    range(len(_outras)),
+                    format_func=lambda i: f"{_outras[i]['nome']} ({_outras[i].get('loja_nome','—')})",
+                    key=f"ls_mv_sel_{key_suffix}"
+                )
+                _dest = _outras[_dest_idx]
+                st.caption(f"Adiciona **{len(_lst['itens'])} itens** ao final de **{_dest['nome']}**.")
+                if st.button("Mover itens", key=f"ls_mv_btn_{key_suffix}", type="primary"):
+                    api.acrescentar_itens_lista(_dest["_arquivo"], _lst["itens"])
+                    st.success(f"Itens adicionados a **{_dest['nome']}**!")
+                    st.rerun()
+
     # Retorna itens carregados via botão (fora do expander para o caller processar)
     _carregados = st.session_state.pop(f"ls_carregar_{key_suffix}", None)
     return _carregados
