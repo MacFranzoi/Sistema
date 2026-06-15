@@ -562,167 +562,79 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* Header mínimo mas visível — mantém o toggle nativo */
-[data-testid="stHeader"] {{
-    background: {SB} !important;
-    height: 40px !important;
-    min-height: 40px !important;
-    border-bottom: 1px solid {BOR} !important;
-}}
-[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
-    color: {TXT2} !important; fill: {TXT2} !important;
-}}
+[data-testid="stHeader"] {{ display: none !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
-[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
-    padding-top: 40px !important;
+[data-testid="stSidebar"] {{ display: none !important; }}
+[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{ padding-top: 0 !important; }}
+.main .block-container {{ padding-top: 0 !important; padding-bottom: 40px !important; max-width: 100% !important; }}
+/* Barra de navegação horizontal */
+.plug-nav {{
+    position: sticky; top: 0; z-index: 999;
+    background: {SB}; border-bottom: 1px solid {BOR};
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 12px; height: 48px; overflow-x: auto;
+    scrollbar-width: none;
 }}
-.main .block-container {{
-    padding-top: 22px !important; padding-bottom: 40px !important;
-    max-width: 100% !important;
-}}
-/* Esconde o botão de FECHAR dentro da sidebar — impede fechamento acidental */
-[data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
+.plug-nav::-webkit-scrollbar {{ display: none; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar ──
-with st.sidebar:
-    # Logo — clicável, volta ao dashboard
-    if st.button("⚡  PLUG ERP", key="logo_btn", use_container_width=True):
+# Variáveis de loja necessárias antes do menu
+if "loja_ativa_id" not in st.session_state:
+    st.session_state.loja_ativa_id = None
+loja_id = st.session_state.loja_ativa_id
+loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Todas")
+
+# ── Barra de navegação horizontal ──
+_pg_ativo = st.session_state.pagina
+_nav_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+_col_idx = 0
+
+# Logo
+with _nav_cols[_col_idx]:
+    if st.button("⚡ PLUG", key="logo_btn", use_container_width=True):
         st.session_state.pagina = "dashboard"
         st.rerun()
+_col_idx += 1
 
-    # Seletor de loja — botões inline
-    if "loja_ativa_id" not in st.session_state:
-        st.session_state.loja_ativa_id = None   # None = todas
-    loja_id = st.session_state.loja_ativa_id
-    loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Todas as lojas")
+# Páginas do menu
+for pid, icon, label, grp, _, _ in _MENU_VISIVEL:
+    if _col_idx >= len(_nav_cols):
+        break
+    _ativo = pid == _pg_ativo
+    _lbl = f"**{icon} {label}**" if _ativo else f"{icon} {label}"
+    with _nav_cols[_col_idx]:
+        if st.button(f"{icon} {label}", key=f"nav_{pid}", use_container_width=True,
+                     type="primary" if _ativo else "secondary"):
+            st.session_state.pagina = pid
+            st.rerun()
+    _col_idx += 1
 
-    # card da loja atual — abre/fecha o picker
-    if "loja_picker" not in st.session_state:
-        st.session_state.loja_picker = False
-
-    _icon_loja = "🏪"
-    st.markdown(f"""
-    <div style="border-bottom:1px solid {BOR};padding:8px 14px 6px">
-      <div style="font-size:0.58rem;font-weight:600;letter-spacing:1px;
-                  text-transform:uppercase;color:{TXT2};margin-bottom:4px">Loja ativa</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button(f"{_icon_loja}  {loja_sel_nome}  {'▴' if st.session_state.loja_picker else '▾'}",
-                 key="loja_toggle", use_container_width=True):
-        st.session_state.loja_picker = not st.session_state.loja_picker
+# Loja + ações no final
+with _nav_cols[-3]:
+    if st.button(f"🏪 {loja_sel_nome[:8]}", key="loja_toggle", use_container_width=True):
+        st.session_state.loja_picker = not st.session_state.get("loja_picker", False)
+        st.rerun()
+with _nav_cols[-2]:
+    if st.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
+        st.session_state.tema = "light" if _dark else "dark"
+        st.rerun()
+with _nav_cols[-1]:
+    if st.button("Sair", key="btn_sair", use_container_width=True):
+        st.session_state.usuario_logado = None
         st.rerun()
 
-    if st.session_state.loja_picker:
-        opcoes = [("Todas as lojas", None)] + [(n, lid) for lid, n in api.LOJAS.items()]
-        for nome_op, lid_op in opcoes:
-            ativo_op = loja_id == lid_op
-            if st.button(
-                f"{'●' if ativo_op else '○'}  {nome_op}",
-                key=f"loja_opt_{lid_op or 'all'}",
-                use_container_width=True
-            ):
+# Picker de loja inline
+if st.session_state.get("loja_picker"):
+    _lojas_opcoes = [("Todas as lojas", None)] + [(n, lid) for lid, n in api.LOJAS.items()]
+    _lcols = st.columns(len(_lojas_opcoes))
+    for i, (nome_op, lid_op) in enumerate(_lojas_opcoes):
+        with _lcols[i]:
+            if st.button(nome_op, key=f"loja_opt_{lid_op or 'all'}", use_container_width=True,
+                         type="primary" if loja_id == lid_op else "secondary"):
                 st.session_state.loja_ativa_id = lid_op
                 st.session_state.loja_picker = False
                 st.rerun()
-        st.markdown(f"<hr style='margin:4px 0;border-color:{BOR}'>", unsafe_allow_html=True)
-
-    # ── Menu colapsável ──
-    _pg_ativo = st.session_state.pagina
-    _grupos_ordem = list(dict.fromkeys(m[3] for m in _MENU_VISIVEL))
-    _grp_ativo = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _grupos_ordem[0])
-
-    if "sb_abertos" not in st.session_state:
-        st.session_state.sb_abertos = {_grp_ativo}
-    st.session_state.sb_abertos.add(_grp_ativo)
-
-    for grupo in _grupos_ordem:
-        aberto = grupo in st.session_state.sb_abertos
-        seta = "▾" if aberto else "▸"
-        if st.button(f"{seta}  {grupo}", key=f"grp_{grupo}", use_container_width=True):
-            s = st.session_state.sb_abertos
-            s.discard(grupo) if grupo in s else s.add(grupo)
-            st.rerun()
-        if aberto:
-            for pid, icon, label, grp, _, _ in _MENU_VISIVEL:
-                if grp != grupo: continue
-                if st.button(f"  {icon}  {label}", key=f"nav_{pid}", use_container_width=True):
-                    st.session_state.pagina = pid
-                    st.rerun()
-
-    # JS — estiliza logo, grupos e item ativo
-    _pg_label = next((f"  {m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
-    st.markdown(f"""<script>
-(function() {{
-  const ACC='{ACC}', ACC_LT='{ACC_LT}', TXT='{TXT}', TXT2='{TXT2}', SB='{SB}', BOR='{BOR}';
-  const activeLabel = {repr(_pg_label.strip())};
-
-  function styleAll() {{
-    const sb = document.querySelector('[data-testid="stSidebar"]');
-    if (!sb) return;
-    sb.querySelectorAll('button').forEach(btn => {{
-      const t = btn.innerText.trim();
-      // logo
-      if (t === '⚡  PLUG ERP') {{
-        btn.style.cssText = `font-size:1rem!important;font-weight:800!important;
-          color:${{TXT}}!important;background:transparent!important;border:none!important;
-          text-align:left!important;padding:0 16px!important;height:52px!important;
-          width:100%!important;border-radius:0!important;border-bottom:1px solid ${{BOR}}!important;
-          letter-spacing:-0.3px!important;cursor:pointer!important;`;
-        return;
-      }}
-      // header de grupo (começa com ▾ ou ▸)
-      if (t[0]==='▾' || t[0]==='▸') {{
-        btn.style.cssText = `font-size:0.6rem!important;font-weight:700!important;
-          letter-spacing:1.3px!important;text-transform:uppercase!important;
-          color:${{TXT2}}!important;padding:13px 16px 4px!important;
-          margin:0!important;border-radius:0!important;width:100%!important;
-          background:transparent!important;border:none!important;`;
-        return;
-      }}
-      // item ativo
-      if (t === activeLabel) {{
-        btn.style.cssText = `background:${{ACC_LT}}!important;color:${{ACC}}!important;
-          font-weight:600!important;border-left:3px solid ${{ACC}}!important;
-          padding-left:9px!important;border-radius:6px!important;`;
-        return;
-      }}
-      // botão loja toggle ou opção — não mexe
-      if (t.includes('▴') || t.includes('▾') && t.includes('●') === false && t[0] !== '▾') return;
-      if (t.startsWith('●') || t.startsWith('○')) return;
-      // item normal — limpa override anterior
-      if (btn.style.cssText && !btn.closest('[data-testid="stForm"]')) {{
-        btn.style.cssText = '';
-      }}
-    }});
-  }}
-  const obs = new MutationObserver(styleAll);
-  obs.observe(document.body, {{childList:true, subtree:true}});
-  styleAll();
-}})();
-</script>""", unsafe_allow_html=True)
-
-    # Footer — avatar + tema + sair
-    ini = (_nome_usr[0] if _nome_usr else "U").upper()
-    st.markdown(f"""
-    <div style="border-top:1px solid {BOR};padding:10px 14px;
-         display:flex;align-items:center;gap:9px;background:{SB}">
-      <div class="sb-avatar">{ini}</div>
-      <div style="min-width:0;flex:1">
-        <div class="sb-user-name">{_nome_usr}</div>
-        <div class="sb-user-role">{_setor_lbl}</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    col_t, col_s = st.columns([1, 1])
-    if col_t.button("☀️ Tema" if _dark else "🌙 Tema", key="btn_tema", use_container_width=True):
-        st.session_state.tema = "light" if _dark else "dark"
-        st.rerun()
-    if col_s.button("Sair", key="btn_sair", use_container_width=True):
-        st.session_state.usuario_logado = None
-        st.rerun()
 
 # ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
