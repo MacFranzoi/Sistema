@@ -622,9 +622,17 @@ st.markdown(f"""
     margin-top: 0 !important;
     max-width: 100% !important;
 }}
-/* Oculta o header nativo para eliminar o espaço reservado */
+/* Header: altura mínima, mantém botão de toggle da sidebar */
 [data-testid="stHeader"] {{
-    display: none !important;
+    background: {SB} !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    border-bottom: 1px solid {BOR} !important;
+}}
+[data-testid="stToolbar"] {{ display: none !important; }}
+/* Reduz o espaço que o header reserva abaixo dele */
+[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
+    padding-top: 38px !important;
 }}
 </style>
 <script>
