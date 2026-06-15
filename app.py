@@ -319,24 +319,35 @@ hr {{ border-color: {BOR} !important; margin: 12px 0 !important; }}
 /* ── LOGIN ── */
 .login-page {{
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 80vh;
+    min-height: 100vh; margin-top: -4rem;
 }}
 .login-card {{
     background: {CARD}; border: 1px solid {BOR};
     border-top: 3px solid {YEL};
-    border-radius: 10px; padding: 2.2rem 2rem;
+    border-radius: 10px; padding: 2.2rem 2rem 1.6rem;
     width: 100%; max-width: 340px;
     box-shadow: 0 4px 32px rgba(0,0,0,0.4);
 }}
 .login-logo {{ display: flex; align-items: center; gap: 10px; margin-bottom: 1.6rem; }}
 .login-logo-mark {{
-    width: 38px; height: 38px; border-radius: 8px;
+    width: 44px; height: 44px; border-radius: 10px;
     background: {YEL}; color: #000;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 1.1rem;
+    font-weight: 900; font-size: 1.3rem;
 }}
 .login-brand {{ font-size: 1.1rem; font-weight: 800; color: {YEL}; }}
 .login-sub   {{ font-size: 0.68rem; color: {TXT2}; }}
+/* Formulário de login: remove gap entre logo e form */
+div[data-testid="stForm"] {{ background: transparent !important; border: none !important; padding: 0 !important; }}
+div[data-testid="stForm"] > div {{ gap: 0.5rem !important; }}
+/* Labels uppercase */
+div[data-testid="stForm"] label p {{ font-size: 0.65rem !important; font-weight: 700 !important; letter-spacing: .08em !important; color: {TXT2} !important; }}
+/* Submit button amarelo */
+div[data-testid="stForm"] button[type="submit"] {{
+    background: {YEL} !important; color: #000 !important;
+    font-weight: 700 !important; border-radius: 6px !important;
+    border: none !important; margin-top: 0.4rem !important;
+}}
 
 /* ── MISC ── */
 .stAlert {{ border-radius: 6px !important; font-size: 0.8rem !important; }}
@@ -368,25 +379,67 @@ if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
 if st.session_state.usuario_logado is None:
+    # CSS extra: centraliza a coluna do meio verticalmente
+    st.markdown("""
+    <style>
+    [data-testid="stMain"] > div:first-child { padding-top: 0 !important; }
+    section[data-testid="stMain"] { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    </style>
+    """, unsafe_allow_html=True)
+
     _, col_login, _ = st.columns([1, 1.1, 1])
     with col_login:
+        # Logo no topo do card
         st.markdown(f"""
-        <div class="login-page">
-          <div class="login-card">
-            <div class="login-logo">
-              <div class="login-logo-mark">⚡</div>
-              <div>
-                <div class="login-brand">PLUG ERP</div>
-                <div class="login-sub">Sistema de Gestão</div>
-              </div>
+        <div style="background:{CARD};border:1px solid {BOR};border-top:3px solid {YEL};
+                    border-radius:10px 10px 0 0;padding:1.8rem 1.8rem 1rem;
+                    box-shadow:0 4px 32px rgba(0,0,0,.4)">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:44px;height:44px;border-radius:10px;background:{YEL};
+                        color:#000;display:flex;align-items:center;justify-content:center;
+                        font-weight:900;font-size:1.4rem">⚡</div>
+            <div>
+              <div style="font-size:1.1rem;font-weight:800;color:{YEL}">PLUG ERP</div>
+              <div style="font-size:0.68rem;color:{TXT2}">Sistema de Gestão</div>
             </div>
           </div>
         </div>
         """, unsafe_allow_html=True)
+
+        # Form colado abaixo do logo (sem borda superior)
+        st.markdown(f"""
+        <div style="background:{CARD};border:1px solid {BOR};border-top:none;
+                    border-radius:0 0 10px 10px;padding:0 1.8rem 1.6rem;
+                    box-shadow:0 4px 32px rgba(0,0,0,.4)">
+        </div>
+        <style>
+        /* posiciona o form dentro do card visual */
+        [data-testid="stForm"] {{
+            background:{CARD} !important;
+            border:1px solid {BOR} !important;
+            border-top:none !important;
+            border-radius:0 0 10px 10px !important;
+            padding:0 1.8rem 1.6rem !important;
+            margin-top:-8px !important;
+            box-shadow:0 4px 32px rgba(0,0,0,.4);
+        }}
+        [data-testid="stForm"] button[type="submit"] {{
+            background:{YEL} !important;color:#000 !important;
+            font-weight:700 !important;border:none !important;
+            border-radius:6px !important;margin-top:0.6rem !important;
+        }}
+        [data-testid="stForm"] label p {{
+            font-size:0.65rem !important;font-weight:700 !important;
+            letter-spacing:.08em !important;color:{TXT2} !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+
         with st.form("form_login"):
-            usuario_input = st.text_input("Usuário")
-            senha_input   = st.text_input("Senha", type="password")
+            usuario_input = st.text_input("USUÁRIO")
+            senha_input   = st.text_input("SENHA", type="password")
             entrar = st.form_submit_button("Entrar →", use_container_width=True)
+
         if entrar:
             u = usuario_input.strip().lower()
             _udb = api.carregar_usuarios()
