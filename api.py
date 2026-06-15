@@ -33,11 +33,53 @@ USUARIOS_FILE        = os.path.join(DIR, "usuarios.json")
 # Setores: definem quais abas cada perfil pode acessar
 # Índices: 0=Entrada, 1=Acerto, 2=Etiquetas, 3=Pedido, 4=Estoque, 5=Disponibilidade, 6=Preços, 7=Novo Modelo, 8=Clonar
 SETORES = {
-    "admin":     {"label": "Administrador",   "abas": [0,1,2,3,4,5,6,7,8]},
-    "gerencia":  {"label": "Gerência",        "abas": [0,1,2,3,4,5,6]},
-    "estoque":   {"label": "Estoque",         "abas": [0,1,2,3,4,5]},
-    "compras":   {"label": "Compras",         "abas": [3,4]},
-    "vendas":    {"label": "Vendas",          "abas": [2,4]},
+    "admin": {
+        "label": "Administrador",
+        "paginas": [
+            "dashboard","clientes","fornecedores",
+            "novo_modelo","clonar_modelo","precos",
+            "vendas","orcamentos",
+            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "pedido","compras_hist",
+            "financeiro","relatorios",
+            "sincronizacao","usuarios",
+        ],
+    },
+    "gerencia": {
+        "label": "Gerência",
+        "paginas": [
+            "dashboard","clientes","fornecedores",
+            "novo_modelo","clonar_modelo","precos",
+            "vendas","orcamentos",
+            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "pedido","compras_hist",
+            "financeiro","relatorios",
+        ],
+    },
+    "estoque": {
+        "label": "Estoque",
+        "paginas": [
+            "dashboard",
+            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "pedido","compras_hist",
+        ],
+    },
+    "compras": {
+        "label": "Compras",
+        "paginas": [
+            "dashboard",
+            "pedido","compras_hist",
+            "estoque_loja","disponibilidade",
+        ],
+    },
+    "vendas": {
+        "label": "Vendas",
+        "paginas": [
+            "dashboard",
+            "vendas","orcamentos",
+            "estoque_loja","disponibilidade","etiquetas",
+        ],
+    },
 }
 
 USUARIOS_PADRAO = {

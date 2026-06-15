@@ -517,10 +517,11 @@ _user        = st.session_state.usuario_logado
 _usuarios_db = api.carregar_usuarios()
 _user_data   = _usuarios_db.get(_user, {})
 _setor       = _user_data.get("setor", "vendas")
-_abas_perm   = api.SETORES.get(_setor, api.SETORES["vendas"])["abas"]
+_setor_cfg   = api.SETORES.get(_setor, api.SETORES["vendas"])
+_paginas_perm = set(_setor_cfg.get("paginas", []))
 _nome_usr    = _user_data.get("nome", _user)
 _is_admin    = _setor == "admin"
-_setor_lbl   = api.SETORES.get(_setor, {}).get("label", _setor)
+_setor_lbl   = _setor_cfg.get("label", _setor)
 
 # ── Menu estruturado (como GestaoClick) ──
 # (id, icon, label, grupo, aba_idx_ou_None, placeholder)
@@ -555,15 +556,10 @@ _MENU_FULL = [
     ("usuarios",        "👤", "Usuários",             "CONFIGURAÇÕES",None,  False),
 ]
 
-def _pode_ver(aba_idx, is_placeholder):
-    if is_placeholder: return False
-    if aba_idx is None: return True
-    return aba_idx in _abas_perm
-
 _MENU_VISIVEL = [
     m for m in _MENU_FULL
-    if _pode_ver(m[4], m[5])
-    and (m[0] not in ("usuarios","sincronizacao") or _is_admin)
+    if not m[5]  # não é placeholder
+    and m[0] in _paginas_perm
 ]
 
 if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for m in _MENU_VISIVEL]:
@@ -3565,10 +3561,7 @@ if _pg == "usuarios":
             "Login": login,
             "Nome": ud.get("nome", ""),
             "Setor": api.SETORES.get(setor_k, {}).get("label", setor_k),
-            "Abas permitidas": ", ".join(
-                TODAS_ABAS[i].split(" ", 1)[-1]
-                for i in api.SETORES.get(setor_k, {}).get("abas", [])
-            ),
+            "Páginas": ", ".join(api.SETORES.get(setor_k, {}).get("paginas", [])),
         })
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
@@ -3637,10 +3630,11 @@ if _pg == "usuarios":
     # ── Referência de setores ──────────────────
     st.divider()
     st.markdown("### 📋 Setores e permissões")
+    _label_por_id = {m[0]: f"{m[1]} {m[2]}" for m in _MENU_FULL}
     setor_rows = []
     for k, v in api.SETORES.items():
         setor_rows.append({
             "Setor": v["label"],
-            "Abas": ", ".join(TODAS_ABAS[i].split(" ", 1)[-1] for i in v["abas"]),
+            "Páginas": ", ".join(_label_por_id.get(p, p) for p in v.get("paginas", [])),
         })
     st.dataframe(setor_rows, use_container_width=True, hide_index=True)
