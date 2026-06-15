@@ -1778,11 +1778,12 @@ Tipos de variação existentes no sistema: {", ".join(_tipos_lista)}
 
 Instruções:
 - Para cada linha identifique: aparelho, tipos/estilos pedidos e quantidade (se mencionada, senão null).
-- Mapeie termos coloquiais para os tipos reais da lista acima:
-  "feminino/fem" → estilo feminino (ex: Aveludada)
-  "masculino/masc" → estilo masculino (ex: Silicone, Couro, Space 2)
+- Normalize plurais e variações de gênero ANTES de mapear: "masculinas/masculinos/masc" = "masculino", "femininas/femininos/fem" = "feminino", "brilhos" = "brilho", etc.
+- Mapeie os termos normalizados para os tipos reais da lista acima:
+  "feminino" → estilo feminino (ex: Aveludada)
+  "masculino" → estilo masculino (ex: Silicone, Couro, Space 2)
   "brilho/glitter" → brilhoso (ex: Space 2, Vidro)
-  Se não houver correspondência clara use o termo original.
+  Se não houver correspondência clara use o termo normalizado.
 - Gere UMA entrada por tipo por aparelho (não expanda cores).
 - Retorne SOMENTE JSON válido sem markdown:
 
