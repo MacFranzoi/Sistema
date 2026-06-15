@@ -643,6 +643,16 @@ def acrescentar_itens_lista(arquivo_destino, novos_itens):
     return True
 
 
+def mesclar_listas(arquivo_a, arquivo_b, nome_nova):
+    """Cria uma nova lista com a união dos itens de A e B (mantém tipo de A)."""
+    with open(os.path.join(DIR_LISTAS, arquivo_a), encoding="utf-8") as f:
+        da = json.load(f)
+    with open(os.path.join(DIR_LISTAS, arquivo_b), encoding="utf-8") as f:
+        db = json.load(f)
+    itens = da.get("itens", []) + db.get("itens", [])
+    return salvar_lista(nome_nova, da.get("tipo", "pedido"), itens, da.get("loja_id"), da.get("loja_nome"))
+
+
 # ──────────────────────────────────────────────
 # Produtos
 # ──────────────────────────────────────────────

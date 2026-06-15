@@ -20,6 +20,7 @@
       "financeiro",
       "relatorios",
       "sincronizacao",
+      "listas",
       "usuarios"
     ]
   },
@@ -42,7 +43,8 @@
       "pedido",
       "compras_hist",
       "financeiro",
-      "relatorios"
+      "relatorios",
+      "listas"
     ]
   },
   "estoque": {
@@ -55,7 +57,8 @@
       "disponibilidade",
       "etiquetas",
       "pedido",
-      "compras_hist"
+      "compras_hist",
+      "listas"
     ]
   },
   "compras": {
@@ -65,7 +68,8 @@
       "pedido",
       "compras_hist",
       "estoque_loja",
-      "disponibilidade"
+      "disponibilidade",
+      "listas"
     ]
   },
   "vendas": {

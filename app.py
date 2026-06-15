@@ -547,6 +547,7 @@ _MENU_FULL = [
     ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",   None,  False),
     # CONFIG
     ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None,  False),
+    ("listas",          "📋", "Listas",               "CONFIGURAÇÕES",None,  False),
     ("usuarios",        "👤", "Usuários",             "CONFIGURAÇÕES",None,  False),
 ]
 
@@ -3724,6 +3725,163 @@ if _pg == "clonar_modelo":
                             st.info("Sincronize os produtos na barra lateral.")
                         except Exception as e:
                             st.error(f"Erro ao clonar: {e}")
+
+
+# ══════════════════════════════════════════════
+# GERENCIAR LISTAS
+# ══════════════════════════════════════════════
+if _pg == "listas":
+    import os as _glos, json as _gljson
+
+    _TIPOS_BADGE = {"pedido": "🛒", "entrada": "📥", "acerto": "🔧", "etiquetas": "🏷️"}
+    _TIPOS_NOMES = {"pedido": "Pedido", "entrada": "Entrada", "acerto": "Acerto", "etiquetas": "Etiquetas"}
+    _TIPOS_FILTRO = {"todas": "Todas", "pedido": "🛒 Pedido", "entrada": "📥 Entrada", "acerto": "🔧 Acerto", "etiquetas": "🏷️ Etiquetas"}
+
+    st.markdown("## 📋 Gerenciar Listas")
+
+    _gl_tfiltro = st.radio(
+        "Tipo:", list(_TIPOS_FILTRO.keys()),
+        format_func=lambda t: _TIPOS_FILTRO[t],
+        horizontal=True, key="gl_tipo_filtro"
+    )
+
+    # Carrega todas as listas uma única vez
+    _gl_todas = api.listar_listas_salvas()
+    _tq = None if _gl_tfiltro == "todas" else _gl_tfiltro
+    _gl_listas = _gl_todas if _tq is None else [l for l in _gl_todas if l.get("tipo") == _tq]
+
+    st.divider()
+
+    if not _gl_listas:
+        st.info("Nenhuma lista encontrada.")
+    else:
+        if _gl_tfiltro == "todas":
+            st.caption(f"{len(_gl_listas)} lista(s)  ·  ⬆️/⬇️ reordena dentro do próprio tipo")
+        else:
+            st.caption(f"{len(_gl_listas)} lista(s)")
+
+        for _gli, _lst in enumerate(_gl_listas):
+            _arq  = _lst["_arquivo"]
+            _nome = _lst.get("nome", _arq)
+            _tipo_l = _lst.get("tipo", "—")
+            _loja_l = _lst.get("loja_nome", "—")
+            _n_it   = len(_lst.get("itens", []))
+            _data_l = _lst.get("criado_em", "")[:16].replace("T", " ")
+            _badge  = _TIPOS_BADGE.get(_tipo_l, "📋")
+            _tnome  = _TIPOS_NOMES.get(_tipo_l, _tipo_l)
+
+            # Posição desta lista dentro do SEU tipo (para habilitar/desabilitar setas)
+            _listas_mesmo_tipo = [l for l in _gl_todas if l.get("tipo") == _tipo_l]
+            _pos_tipo = next((i for i, l in enumerate(_listas_mesmo_tipo) if l["_arquivo"] == _arq), 0)
+            _eh_primeiro = (_pos_tipo == 0)
+            _eh_ultimo   = (_pos_tipo == len(_listas_mesmo_tipo) - 1)
+
+            _r1, _r2, _r3, _r4, _r5, _r6, _r7 = st.columns([5, 1, 1, 1, 1, 1, 1])
+
+            _r1.markdown(
+                f"**{_nome}**  \n"
+                f"<small style='color:#888'>{_badge} {_tnome} · {_loja_l} · {_n_it} itens · {_data_l}</small>",
+                unsafe_allow_html=True
+            )
+
+            # ── Reordenar ────────────────────────────────────────────────
+            if _r2.button("⬆️", key=f"gl_up_{_arq}", disabled=_eh_primeiro, use_container_width=True, help="Mover para cima"):
+                api.mover_lista_na_ordem(_arq, _tipo_l, "cima")
+                st.rerun()
+
+            if _r3.button("⬇️", key=f"gl_down_{_arq}", disabled=_eh_ultimo, use_container_width=True, help="Mover para baixo"):
+                api.mover_lista_na_ordem(_arq, _tipo_l, "baixo")
+                st.rerun()
+
+            # ── Renomear ─────────────────────────────────────────────────
+            with _r4.popover("✏️", help="Renomear"):
+                _gl_nn = st.text_input("Novo nome:", value=_nome, key=f"gl_rn_txt_{_arq}")
+                if st.button("Salvar nome", key=f"gl_rn_btn_{_arq}"):
+                    _gl_cam = _glos.path.join(api.DIR_LISTAS, _arq)
+                    with open(_gl_cam, encoding="utf-8") as _ff:
+                        _gl_dd = _gljson.load(_ff)
+                    _gl_dd["nome"] = _gl_nn.strip()
+                    _gl_str = _gljson.dumps(_gl_dd, ensure_ascii=False, indent=2)
+                    with open(_gl_cam, "w", encoding="utf-8") as _ff:
+                        _ff.write(_gl_str)
+                    api._gh_push_arquivo(f"listas/{_arq}", _gl_str, f"Renomeia lista: {_gl_nn.strip()}")
+                    st.success("✅ Renomeado!")
+                    st.rerun()
+
+            # ── Mudar tipo ────────────────────────────────────────────────
+            with _r5.popover("🔀", help="Mudar tipo"):
+                _gl_tipos_alt = [t for t in _TIPOS_NOMES if t != _tipo_l]
+                _gl_nt = st.selectbox(
+                    "Novo tipo:", _gl_tipos_alt,
+                    format_func=lambda t: f"{_TIPOS_BADGE[t]} {_TIPOS_NOMES[t]}",
+                    key=f"gl_tp_sel_{_arq}"
+                )
+                st.caption(f"Muda de **{_tnome}** para **{_TIPOS_NOMES[_gl_nt]}**")
+                if st.button("Confirmar", key=f"gl_tp_btn_{_arq}", type="primary"):
+                    api.mudar_tipo_lista(_arq, _gl_nt)
+                    st.success(f"✅ Tipo alterado para {_TIPOS_NOMES[_gl_nt]}!")
+                    st.rerun()
+
+            # ── Mover itens para outra lista ──────────────────────────────
+            _outras_gl = [l for l in _gl_todas if l["_arquivo"] != _arq]
+            with _r6.popover("➡️", help="Mover itens para outra lista"):
+                if not _outras_gl:
+                    st.info("Nenhuma outra lista disponível.")
+                else:
+                    _gl_dst_i = st.selectbox(
+                        "Destino:",
+                        range(len(_outras_gl)),
+                        format_func=lambda i: f"{_TIPOS_BADGE.get(_outras_gl[i].get('tipo',''), '📋')} {_outras_gl[i]['nome']}",
+                        key=f"gl_mv_sel_{_arq}"
+                    )
+                    _gl_dst = _outras_gl[_gl_dst_i]
+                    st.caption(f"Adiciona **{_n_it} itens** ao final de **{_gl_dst['nome']}**")
+                    if st.button("Mover itens", key=f"gl_mv_btn_{_arq}", type="primary"):
+                        api.acrescentar_itens_lista(_gl_dst["_arquivo"], _lst["itens"])
+                        st.success(f"✅ {_n_it} itens adicionados a **{_gl_dst['nome']}**!")
+                        st.rerun()
+
+            # ── Excluir ───────────────────────────────────────────────────
+            with _r7.popover("🗑️", help="Excluir lista"):
+                st.warning(f"Excluir **{_nome}**?")
+                if st.button("Confirmar exclusão", key=f"gl_del_btn_{_arq}", type="primary"):
+                    api.excluir_lista(_arq)
+                    st.rerun()
+
+            if _gli < len(_gl_listas) - 1:
+                st.divider()
+
+    # ── Mesclar duas listas ──────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### Mesclar duas listas em uma nova")
+    if len(_gl_todas) < 2:
+        st.info("Precisa de pelo menos 2 listas para mesclar.")
+    else:
+        _mc1, _mc2, _mc3 = st.columns(3)
+        _gl_ma_i = _mc1.selectbox(
+            "Lista A:", range(len(_gl_todas)),
+            format_func=lambda i: f"{_TIPOS_BADGE.get(_gl_todas[i].get('tipo',''), '📋')} {_gl_todas[i]['nome']}",
+            key="gl_mescla_a"
+        )
+        _gl_mb_i = _mc2.selectbox(
+            "Lista B:", range(len(_gl_todas)),
+            format_func=lambda i: f"{_TIPOS_BADGE.get(_gl_todas[i].get('tipo',''), '📋')} {_gl_todas[i]['nome']}",
+            key="gl_mescla_b"
+        )
+        _gl_nome_mescla = _mc3.text_input("Nome da nova lista:", key="gl_mescla_nome", placeholder="ex: Pedido completo 15/06")
+
+        if st.button("💥 Mesclar", key="gl_mescla_btn"):
+            if _gl_ma_i == _gl_mb_i:
+                st.error("Selecione duas listas diferentes.")
+            elif not _gl_nome_mescla.strip():
+                st.error("Digite um nome para a nova lista.")
+            else:
+                _gl_la = _gl_todas[_gl_ma_i]
+                _gl_lb = _gl_todas[_gl_mb_i]
+                api.mesclar_listas(_gl_la["_arquivo"], _gl_lb["_arquivo"], _gl_nome_mescla.strip())
+                _tot = len(_gl_la.get("itens", [])) + len(_gl_lb.get("itens", []))
+                st.success(f"✅ **{_gl_nome_mescla}** criada com {_tot} itens!")
+                st.rerun()
 
 
 # ══════════════════════════════════════════════
