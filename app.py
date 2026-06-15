@@ -632,7 +632,69 @@ st.markdown(f"""
     left: 100% !important;
     border-radius: 0 8px 8px 0 !important;
 }}
+
+/* Botão de emergência — abre sidebar à força */
+#plug-open-sb {{
+    position: fixed;
+    bottom: 18px;
+    left: 12px;
+    z-index: 99999;
+    background: {ACC};
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    opacity: 0.85;
+}}
+#plug-open-sb:hover {{ opacity: 1; }}
 </style>
+
+<button id="plug-open-sb" onclick="plugForceSidebar()" title="Abrir menu lateral">☰ Menu</button>
+
+<script>
+function plugForceSidebar() {{
+  // 1. tenta todos os botões nativos conhecidos do Streamlit
+  var selectors = [
+    '[data-testid="stSidebarNavToggleButton"] button',
+    '[data-testid="stSidebarCollapseButton"] button',
+    '[data-testid="collapsedControl"] button',
+    '[data-testid="stBaseButton-headerNoPadding"]',
+    'button[aria-label="Open sidebar"]',
+    'button[aria-label="Expand sidebar"]',
+    '[data-testid="stHeader"] button',
+    'section[data-testid="stSidebar"] ~ div button'
+  ];
+  for (var i = 0; i < selectors.length; i++) {{
+    var btn = document.querySelector(selectors[i]);
+    if (btn) {{ btn.click(); console.log('clicked', selectors[i]); return; }}
+  }}
+  // 2. fallback: força visibilidade da sidebar via CSS
+  var sb = document.querySelector('[data-testid="stSidebar"]');
+  if (sb) {{
+    sb.style.cssText = 'transform:none!important;visibility:visible!important;display:block!important;width:300px!important;min-width:300px!important;position:fixed!important;left:0!important;top:0!important;height:100%!important;z-index:9999!important;';
+    sb.setAttribute('aria-expanded','true');
+    console.log('forced sidebar open via style');
+  }}
+}}
+
+// Auto-oculta o botão quando sidebar está aberta
+(function() {{
+  function watchSidebar() {{
+    var sb = document.querySelector('[data-testid="stSidebar"]');
+    var btn = document.getElementById('plug-open-sb');
+    if (!sb || !btn) {{ setTimeout(watchSidebar, 300); return; }}
+    function sync() {{
+      btn.style.display = (sb.getAttribute('aria-expanded') === 'false') ? 'block' : 'none';
+    }}
+    sync();
+    new MutationObserver(sync).observe(sb, {{attributes:true, attributeFilter:['aria-expanded','style']}});
+  }}
+  setTimeout(watchSidebar, 500);
+}})();
+</script>
 """, unsafe_allow_html=True)
 
 # ── Sidebar ──
