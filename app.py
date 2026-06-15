@@ -851,12 +851,12 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
             else:
                 _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
                                         loja_id=loja_id, loja_nome=loja_sel_nome)
-                st.session_state[f"lista_arq_{key_suffix}"] = os.path.basename(_cam)
+                st.session_state[f"lista_arq_{key_suffix}"] = _pos.path.basename(_cam)
                 st.success("✅ Lista salva!")
                 st.rerun()
         if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
-            _cam = os.path.join(api.DIR_LISTAS, arq_atual)
-            if os.path.exists(_cam):
+            _cam = _pos.path.join(api.DIR_LISTAS, arq_atual)
+            if _pos.path.exists(_cam):
                 with open(_cam, encoding="utf-8") as _f:
                     _d = _pj.load(_f)
                 _d["itens"] = itens_atuais
@@ -908,7 +908,7 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
         with _cb.popover("✏️ Renomear"):
             _novo_nome = st.text_input("Novo nome:", value=_lst["nome"], key=f"ls_rename_txt_{key_suffix}")
             if st.button("Salvar nome", key=f"ls_rename_btn_{key_suffix}"):
-                _cam = os.path.join(api.DIR_LISTAS, _lst["_arquivo"])
+                _cam = _pos.path.join(api.DIR_LISTAS, _lst["_arquivo"])
                 with open(_cam, encoding="utf-8") as _f:
                     _d = _pj.load(_f)
                 _d["nome"] = _novo_nome.strip()
