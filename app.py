@@ -562,9 +562,10 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* Esconde o header padrão do Streamlit e toolbar */
-[data-testid="stHeader"] {{ display: none !important; }}
+/* Esconde header e toolbar do Streamlit mas mantém o collapsedControl funcional */
+[data-testid="stHeader"] {{ visibility: hidden !important; height: 0 !important; min-height: 0 !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
+[data-testid="collapsedControl"] {{ display: none !important; }}
 [data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
     padding-top: 0 !important;
 }}
@@ -590,78 +591,116 @@ st.markdown(f"""
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
-    box-shadow: 2px 0 8px rgba(0,0,0,.25);
-    transition: width .15s, background .15s;
+    font-size: 15px;
+    box-shadow: 2px 0 8px rgba(0,0,0,.30);
+    transition: left .2s ease, width .15s, background .15s;
     padding: 0;
     line-height: 1;
 }}
 #plug-sidebar-toggle:hover {{
     width: 28px;
-    background: {ACC}dd;
-}}
-/* Quando a sidebar está aberta o botão fica colado na borda dela */
-[data-testid="stSidebar"][aria-expanded="true"] ~ * #plug-sidebar-toggle,
-body.sb-open #plug-sidebar-toggle {{
-    left: 0;
+    background: {ACC}cc;
 }}
 </style>
 
-<button id="plug-sidebar-toggle" title="Abrir/fechar menu" onclick="plugToggleSidebar()">&#9776;</button>
+<button id="plug-sidebar-toggle" title="Abrir/fechar menu">&#9776;</button>
 
 <script>
-function plugToggleSidebar() {{
-  const sb = document.querySelector('[data-testid="stSidebar"]');
-  // tenta o botão nativo do Streamlit (pode estar em lugares diferentes por versão)
-  const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
-              document.querySelector('[data-testid="stBaseButton-headerNoPadding"]') ||
-              document.querySelector('button[aria-controls*="sidebar"]') ||
-              document.querySelector('[data-testid="collapsedControl"] button');
-  if (btn) {{ btn.click(); return; }}
-  // fallback: força aria-expanded
-  if (sb) {{
-    const expanded = sb.getAttribute('aria-expanded') === 'true';
-    sb.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-  }}
-}}
-
-// Abre a sidebar ao carregar se estiver fechada
 (function() {{
-  function tryOpen() {{
-    const sb = document.querySelector('[data-testid="stSidebar"]');
-    if (!sb) {{ setTimeout(tryOpen, 200); return; }}
-    if (sb.getAttribute('aria-expanded') === 'false') {{
-      plugToggleSidebar();
-    }}
-    // Ajusta posição do botão quando sidebar abre/fecha
-    const obs = new MutationObserver(function() {{
-      const expanded = sb.getAttribute('aria-expanded') === 'true';
-      const toggleBtn = document.getElementById('plug-sidebar-toggle');
-      if (!toggleBtn) return;
-      if (expanded) {{
-        const w = sb.offsetWidth || 300;
-        toggleBtn.style.left = w + 'px';
-        toggleBtn.innerHTML = '&#8249;';
-      }} else {{
-        toggleBtn.style.left = '0';
-        toggleBtn.innerHTML = '&#9776;';
-      }}
-    }});
-    obs.observe(sb, {{ attributes: true, attributeFilter: ['aria-expanded'] }});
-    // Estado inicial
-    const expanded = sb.getAttribute('aria-expanded') === 'true';
-    const toggleBtn = document.getElementById('plug-sidebar-toggle');
-    if (toggleBtn) {{
-      if (expanded) {{
-        toggleBtn.style.left = (sb.offsetWidth || 300) + 'px';
-        toggleBtn.innerHTML = '&#8249;';
-      }} else {{
-        toggleBtn.style.left = '0';
-        toggleBtn.innerHTML = '&#9776;';
-      }}
+  var _sbOpen = null;
+
+  function getSidebar() {{
+    return document.querySelector('[data-testid="stSidebar"]');
+  }}
+
+  function isOpen(sb) {{
+    return sb && sb.getAttribute('aria-expanded') !== 'false';
+  }}
+
+  function updateBtn(sb) {{
+    var btn = document.getElementById('plug-sidebar-toggle');
+    if (!btn) return;
+    var open = isOpen(sb || getSidebar());
+    if (open) {{
+      var w = (sb || getSidebar()).getBoundingClientRect().width || 300;
+      btn.style.left = w + 'px';
+      btn.innerHTML = '&#8249;';
+    }} else {{
+      btn.style.left = '0';
+      btn.innerHTML = '&#9776;';
     }}
   }}
-  setTimeout(tryOpen, 400);
+
+  function nativeToggle(sb) {{
+    // Botão de collapse DENTRO da sidebar (para fechar)
+    var closeBtn = sb && (
+      sb.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
+      sb.querySelector('button[aria-label*="sidebar"]') ||
+      sb.querySelector('button[aria-label*="collapse"]') ||
+      sb.querySelector('button[aria-label*="Collapse"]')
+    );
+    if (closeBtn) {{ closeBtn.click(); return true; }}
+
+    // Botão de expand fora da sidebar (para abrir) — Streamlit injeta no header
+    var openBtn =
+      document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
+      document.querySelector('[data-testid="collapsedControl"] button') ||
+      document.querySelector('button[aria-label*="Open"]') ||
+      document.querySelector('button[aria-label*="sidebar"]');
+    if (openBtn) {{ openBtn.click(); return true; }}
+
+    return false;
+  }}
+
+  function forceSidebarOpen(sb) {{
+    // Manipula diretamente os estilos que o Streamlit usa para esconder a sidebar
+    sb.setAttribute('aria-expanded', 'true');
+    sb.style.removeProperty('display');
+    sb.style.removeProperty('transform');
+    sb.style.removeProperty('visibility');
+    sb.style.removeProperty('width');
+    // Dispara evento para Streamlit perceber
+    sb.dispatchEvent(new Event('transitionend', {{bubbles: true}}));
+  }}
+
+  function forceSidebarClose(sb) {{
+    sb.setAttribute('aria-expanded', 'false');
+    sb.dispatchEvent(new Event('transitionend', {{bubbles: true}}));
+  }}
+
+  window.plugToggleSidebar = function() {{
+    var sb = getSidebar();
+    if (!sb) return;
+    var open = isOpen(sb);
+    var clicked = nativeToggle(sb);
+    if (!clicked) {{
+      // fallback direto
+      if (open) forceSidebarClose(sb); else forceSidebarOpen(sb);
+    }}
+    setTimeout(function() {{ updateBtn(sb); }}, 250);
+  }};
+
+  document.getElementById('plug-sidebar-toggle').addEventListener('click', window.plugToggleSidebar);
+
+  function init() {{
+    var sb = getSidebar();
+    if (!sb) {{ setTimeout(init, 200); return; }}
+
+    updateBtn(sb);
+
+    // Abre automaticamente se fechada ao carregar
+    if (!isOpen(sb)) {{
+      var clicked = nativeToggle(sb);
+      if (!clicked) forceSidebarOpen(sb);
+      setTimeout(function() {{ updateBtn(sb); }}, 300);
+    }}
+
+    // Observa mudanças de estado
+    new MutationObserver(function() {{ updateBtn(sb); }})
+      .observe(sb, {{ attributes: true, attributeFilter: ['aria-expanded', 'style'] }});
+  }}
+
+  setTimeout(init, 400);
 }})();
 </script>
 """, unsafe_allow_html=True)
