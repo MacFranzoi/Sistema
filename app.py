@@ -199,7 +199,7 @@ a, button {{ transition: all 0.15s ease !important; }}
     background: transparent !important; border: none !important;
     border-radius: 6px !important; text-align: left !important;
     padding: 7px 12px !important; margin: 1px 6px !important;
-    font-size: 0.84rem !important; font-weight: 400 !important;
+    font-size: 0.84rem !important; font-weight: 600 !important;
     color: {TXT2} !important;
     transition: background 0.12s, color 0.12s !important;
 }}
