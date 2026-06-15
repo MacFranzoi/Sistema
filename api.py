@@ -29,10 +29,9 @@ os.makedirs(DIR_LISTAS, exist_ok=True)
 DISPONIBILIDADE_FILE = os.path.join(DIR, "disponibilidade_lojas.json")
 CUSTOS_TIPO_FILE     = os.path.join(DIR, "custos_tipo.json")
 USUARIOS_FILE        = os.path.join(DIR, "usuarios.json")
+SETORES_FILE         = os.path.join(DIR, "setores.json")
 
-# Setores: definem quais abas cada perfil pode acessar
-# Índices: 0=Entrada, 1=Acerto, 2=Etiquetas, 3=Pedido, 4=Estoque, 5=Disponibilidade, 6=Preços, 7=Novo Modelo, 8=Clonar
-SETORES = {
+_SETORES_PADRAO = {
     "admin": {
         "label": "Administrador",
         "paginas": [
@@ -81,6 +80,21 @@ SETORES = {
         ],
     },
 }
+
+def carregar_setores():
+    if os.path.exists(SETORES_FILE):
+        try:
+            with open(SETORES_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return json.loads(json.dumps(_SETORES_PADRAO))
+
+def salvar_setores(setores):
+    with open(SETORES_FILE, "w", encoding="utf-8") as f:
+        json.dump(setores, f, ensure_ascii=False, indent=2)
+
+SETORES = carregar_setores()
 
 USUARIOS_PADRAO = {
     "gustavo": {"nome": "Gustavo", "senha": "admin", "setor": "admin"},

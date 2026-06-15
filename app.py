@@ -517,7 +517,8 @@ _user        = st.session_state.usuario_logado
 _usuarios_db = api.carregar_usuarios()
 _user_data   = _usuarios_db.get(_user, {})
 _setor       = _user_data.get("setor", "vendas")
-_setor_cfg   = api.SETORES.get(_setor, api.SETORES["vendas"])
+_setores_db  = api.carregar_setores()
+_setor_cfg   = _setores_db.get(_setor, _setores_db.get("vendas", {"label": _setor, "paginas": []}))
 _paginas_perm = set(_setor_cfg.get("paginas", []))
 _nome_usr    = _user_data.get("nome", _user)
 _is_admin    = _setor == "admin"
@@ -3550,7 +3551,8 @@ if _pg == "usuarios":
     st.subheader("👥 Gerenciamento de Usuários")
 
     _usuarios_db = api.carregar_usuarios()
-    setores_opcoes = {v["label"]: k for k, v in api.SETORES.items()}
+    _setores_vivos = api.carregar_setores()
+    setores_opcoes = {v["label"]: k for k, v in _setores_vivos.items()}
 
     # ── Tabela de usuários existentes ──────────
     st.markdown("### Usuários cadastrados")
@@ -3560,8 +3562,8 @@ if _pg == "usuarios":
         rows.append({
             "Login": login,
             "Nome": ud.get("nome", ""),
-            "Setor": api.SETORES.get(setor_k, {}).get("label", setor_k),
-            "Páginas": ", ".join(api.SETORES.get(setor_k, {}).get("paginas", [])),
+            "Setor": _setores_vivos.get(setor_k, {}).get("label", setor_k),
+            "Páginas": ", ".join(_setores_vivos.get(setor_k, {}).get("paginas", [])),
         })
     st.dataframe(rows, use_container_width=True, hide_index=True)
 
@@ -3597,7 +3599,7 @@ if _pg == "usuarios":
         st.markdown("### ✏️ Editar usuário")
         login_sel = st.selectbox("Selecionar usuário", list(_usuarios_db.keys()), key="sel_editar_usr")
         ud_sel = _usuarios_db.get(login_sel, {})
-        setor_atual_label = api.SETORES.get(ud_sel.get("setor","vendas"), {}).get("label","Vendas")
+        setor_atual_label = _setores_vivos.get(ud_sel.get("setor","vendas"), {}).get("label","Vendas")
         with st.form("form_edit_usuario"):
             ed_nome  = st.text_input("Nome", value=ud_sel.get("nome",""))
             ed_setor = st.selectbox("Setor", list(setores_opcoes.keys()),
@@ -3627,14 +3629,84 @@ if _pg == "usuarios":
                 st.success(f"Usuário '{login_sel}' removido.")
                 st.rerun()
 
-    # ── Referência de setores ──────────────────
+    # ── Gerenciar setores e permissões ────────
     st.divider()
-    st.markdown("### 📋 Setores e permissões")
+    st.markdown("### 🔐 Setores e permissões")
+
     _label_por_id = {m[0]: f"{m[1]} {m[2]}" for m in _MENU_FULL}
-    setor_rows = []
-    for k, v in api.SETORES.items():
-        setor_rows.append({
-            "Setor": v["label"],
-            "Páginas": ", ".join(_label_por_id.get(p, p) for p in v.get("paginas", [])),
-        })
-    st.dataframe(setor_rows, use_container_width=True, hide_index=True)
+    _id_por_label = {v: k for k, v in _label_por_id.items()}
+    _todas_paginas_labels = [_label_por_id[m[0]] for m in _MENU_FULL if not m[5]]
+
+    _setores_edit = api.carregar_setores()
+
+    # Seletor de setor a editar
+    _opcoes_setores = list(_setores_edit.keys())
+    _col_sel, _col_novo = st.columns([3, 2])
+    _setor_sel_key = _col_sel.selectbox(
+        "Setor", _opcoes_setores,
+        format_func=lambda k: f"{_setores_edit[k]['label']} ({k})",
+        key="setores_sel"
+    )
+
+    # Criar novo setor
+    with _col_novo.popover("➕ Novo setor"):
+        _ns_key   = st.text_input("ID (sem espaços, ex: financeiro)", key="ns_key").strip().lower()
+        _ns_label = st.text_input("Nome exibido", key="ns_label").strip()
+        if st.button("Criar", key="ns_criar"):
+            if not _ns_key or not _ns_label:
+                st.error("Preencha ID e nome.")
+            elif _ns_key in _setores_edit:
+                st.error("ID já existe.")
+            elif _ns_key == "admin":
+                st.error("Não é possível criar outro admin.")
+            else:
+                _setores_edit[_ns_key] = {"label": _ns_label, "paginas": []}
+                api.salvar_setores(_setores_edit)
+                api.SETORES = api.carregar_setores()
+                st.success(f"Setor '{_ns_label}' criado.")
+                st.rerun()
+
+    if _setor_sel_key:
+        _setor_obj = _setores_edit[_setor_sel_key]
+        st.markdown(f"**Editando:** {_setor_obj['label']}")
+
+        _c_nome, _c_del = st.columns([4, 1])
+        _novo_label = _c_nome.text_input("Nome do setor", value=_setor_obj["label"], key="setor_label_edit")
+
+        # Excluir setor (não admin)
+        if _setor_sel_key != "admin":
+            with _c_del.popover("🗑️"):
+                st.warning(f"Excluir **{_setor_obj['label']}**?")
+                if st.button("Confirmar", key="setor_del_btn", type="primary"):
+                    del _setores_edit[_setor_sel_key]
+                    # Usuários desse setor vão para 'vendas'
+                    _udb = api.carregar_usuarios()
+                    for _u in _udb.values():
+                        if _u.get("setor") == _setor_sel_key:
+                            _u["setor"] = "vendas"
+                    api.salvar_usuarios(_udb)
+                    api.salvar_setores(_setores_edit)
+                    api.SETORES = api.carregar_setores()
+                    st.success("Setor removido.")
+                    st.rerun()
+
+        # Multiselect de páginas
+        _pags_atuais = _setor_obj.get("paginas", [])
+        _pags_labels_atuais = [_label_por_id[p] for p in _pags_atuais if p in _label_por_id]
+        _pags_novas_labels = st.multiselect(
+            "Páginas permitidas",
+            options=_todas_paginas_labels,
+            default=_pags_labels_atuais,
+            key=f"setor_pags_{_setor_sel_key}",
+            disabled=(_setor_sel_key == "admin"),
+            help="Admin sempre tem acesso a tudo."
+        )
+
+        if st.button("💾 Salvar permissões", key="setor_salvar", use_container_width=True,
+                     disabled=(_setor_sel_key == "admin")):
+            _setores_edit[_setor_sel_key]["label"]   = _novo_label.strip() or _setor_obj["label"]
+            _setores_edit[_setor_sel_key]["paginas"]  = [_id_por_label[l] for l in _pags_novas_labels]
+            api.salvar_setores(_setores_edit)
+            api.SETORES = api.carregar_setores()
+            st.success("Permissões salvas! Usuários desse setor verão as mudanças no próximo login.")
+            st.rerun()
