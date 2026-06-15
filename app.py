@@ -580,7 +580,7 @@ st.markdown(f"""
     left: 0;
     transform: translateY(-50%);
     z-index: 99999;
-    background: {ACCENT};
+    background: {ACC};
     color: #fff;
     border: none;
     border-radius: 0 8px 8px 0;
@@ -598,7 +598,7 @@ st.markdown(f"""
 }}
 #plug-sidebar-toggle:hover {{
     width: 28px;
-    background: {ACCENT}dd;
+    background: {ACC}dd;
 }}
 /* Quando a sidebar está aberta o botão fica colado na borda dela */
 [data-testid="stSidebar"][aria-expanded="true"] ~ * #plug-sidebar-toggle,
