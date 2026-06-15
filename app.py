@@ -557,8 +557,10 @@ _MENU_VISIVEL = [
     and m[0] in _paginas_perm
 ]
 
-if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for m in _MENU_VISIVEL]:
-    st.session_state.pagina = _MENU_VISIVEL[0][0]
+_pids_validas = [m[0] for m in _MENU_VISIVEL]
+if "pagina" not in st.session_state or st.session_state.pagina not in _pids_validas:
+    _pg_url = st.query_params.get("p", "")
+    st.session_state.pagina = _pg_url if _pg_url in _pids_validas else _MENU_VISIVEL[0][0]
 
 # ────────────────────────────────────────────────────────────
 # SIDEBAR
@@ -628,7 +630,9 @@ _loja_idx    = _lojas_ids.index(loja_id) if loja_id in _lojas_ids else 0
 def _on_nav_change():
     _lbl = st.session_state["nav_pagina"]
     if _lbl in _todas_labels:
-        st.session_state.pagina = _todas_pids[_todas_labels.index(_lbl)]
+        _nova_pg = _todas_pids[_todas_labels.index(_lbl)]
+        st.session_state.pagina = _nova_pg
+        st.query_params["p"] = _nova_pg
 
 def _on_loja_change():
     _n = st.session_state["nav_loja"]
