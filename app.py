@@ -75,19 +75,23 @@ st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initia
 
 # ── Tema ──
 if "tema" not in st.session_state:
-    st.session_state.tema = "dark"
+    st.session_state.tema = "light"
 _dark = st.session_state.tema == "dark"
 
-BG      = "#111111" if _dark else "#f2f3f5"
-SB      = "#0a0a0a" if _dark else "#ffffff"
-SB2     = "#1a1a1a" if _dark else "#f8f8f8"
-CARD    = "#1a1a1a" if _dark else "#ffffff"
-BOR     = "#2a2a2a" if _dark else "#e3e3e3"
-TXT     = "#f0f0f0" if _dark else "#1a1a1a"
-TXT2    = "#999999"
-YEL     = "#FFD600"
-YEL_BG  = "rgba(255,214,0,0.10)"
-TOPBAR  = "#000000" if _dark else "#000000"
+# Paleta clean — azul-acinzentado suave como acento
+BG      = "#1e2130" if _dark else "#f5f6fa"
+SB      = "#161824" if _dark else "#ffffff"
+SB2     = "#1e2130" if _dark else "#f5f6fa"
+CARD    = "#252840" if _dark else "#ffffff"
+BOR     = "#2e3250" if _dark else "#e8eaf0"
+TXT     = "#e8eaf0" if _dark else "#1e2130"
+TXT2    = "#7c83a0" if _dark else "#8a90aa"
+ACC     = "#5b6af0"          # índigo suave — acento principal
+ACC_LT  = "rgba(91,106,240,0.10)"
+TOPBAR  = "#161824" if _dark else "#ffffff"
+# mantém YEL como alias do acento pra não quebrar referências no CSS
+YEL     = ACC
+YEL_BG  = ACC_LT
 
 st.markdown(f"""
 <style>
@@ -132,7 +136,7 @@ html, body, [class*="css"] {{
     position: sticky; top: 0; z-index: 10;
 }}
 .sb-logo-mark {{
-    background: {YEL}; color: #000;
+    background: {YEL}; color: #fff;
     width: 30px; height: 30px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
     font-weight: 900; font-size: 1rem; letter-spacing: -1px;
@@ -196,7 +200,7 @@ html, body, [class*="css"] {{
 }}
 .sb-avatar {{
     width: 30px; height: 30px; border-radius: 50%;
-    background: {YEL}; color: #000;
+    background: {YEL}; color: #fff;
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
 }}
@@ -294,11 +298,11 @@ html, body, [class*="css"] {{
     font-weight: 500 !important; transition: all 0.15s !important;
 }}
 .main .stButton > button[kind="primary"], .stFormSubmitButton > button {{
-    background: {YEL} !important; color: #000 !important;
+    background: {YEL} !important; color: #fff !important;
     border-color: {YEL} !important; font-weight: 600 !important;
 }}
 .main .stButton > button:hover {{ border-color: {YEL} !important; color: {YEL} !important; }}
-.main .stButton > button[kind="primary"]:hover {{ background: #ffe033 !important; color: #000 !important; }}
+.main .stButton > button[kind="primary"]:hover {{ background: #7b88f4 !important; color: #fff !important; }}
 
 /* ── EXPANDER ── */
 .stExpander {{ border: 1px solid {BOR} !important; border-radius: 8px !important; background: {CARD} !important; }}
@@ -331,7 +335,7 @@ hr {{ border-color: {BOR} !important; margin: 12px 0 !important; }}
 .login-logo {{ display: flex; align-items: center; gap: 10px; margin-bottom: 1.6rem; }}
 .login-logo-mark {{
     width: 44px; height: 44px; border-radius: 10px;
-    background: {YEL}; color: #000;
+    background: {YEL}; color: #fff;
     display: flex; align-items: center; justify-content: center;
     font-weight: 900; font-size: 1.3rem;
 }}
@@ -344,7 +348,7 @@ div[data-testid="stForm"] > div {{ gap: 0.5rem !important; }}
 div[data-testid="stForm"] label p {{ font-size: 0.65rem !important; font-weight: 700 !important; letter-spacing: .08em !important; color: {TXT2} !important; }}
 /* Submit button amarelo */
 div[data-testid="stForm"] button[type="submit"] {{
-    background: {YEL} !important; color: #000 !important;
+    background: {YEL} !important; color: #fff !important;
     font-weight: 700 !important; border-radius: 6px !important;
     border: none !important; margin-top: 0.4rem !important;
 }}
@@ -396,7 +400,7 @@ if st.session_state.usuario_logado is None:
                     box-shadow:0 4px 32px rgba(0,0,0,.4)">
           <div style="display:flex;align-items:center;gap:12px">
             <div style="width:44px;height:44px;border-radius:10px;background:{YEL};
-                        color:#000;display:flex;align-items:center;justify-content:center;
+                        color:#fff;display:flex;align-items:center;justify-content:center;
                         font-weight:900;font-size:1.4rem">⚡</div>
             <div>
               <div style="font-size:1.1rem;font-weight:800;color:{YEL}">PLUG ERP</div>
@@ -424,7 +428,7 @@ if st.session_state.usuario_logado is None:
             box-shadow:0 4px 32px rgba(0,0,0,.4);
         }}
         [data-testid="stForm"] button[type="submit"] {{
-            background:{YEL} !important;color:#000 !important;
+            background:{YEL} !important;color:#fff !important;
             font-weight:700 !important;border:none !important;
             border-radius:6px !important;margin-top:0.6rem !important;
         }}
