@@ -495,7 +495,7 @@ def sincronizar_listas_do_github():
 # Listas salvas
 # ──────────────────────────────────────────────
 
-def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None, criado_por=None):
+def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
     # Descobre a maior ordem atual para esse tipo
     max_ordem = 0
     try:
@@ -518,7 +518,6 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None, criado_por=Non
         "loja_id": loja_id,
         "loja_nome": loja_nome,
         "criado_em": datetime.now().isoformat(),
-        "criado_por": criado_por or "",
         "ordem": max_ordem + 1,
         "itens": itens
     }
