@@ -1844,8 +1844,29 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                             _parsed = _json.loads(_m.group() if _m else _raw)
 
                             # Expande cada entrada nos itens reais (cor × qtd) usando os kits
-                            _prods_map = {p.get("codigo_interno"): p for p in _prods_all}
+                            # Mapas case-insensitive para lookup robusto
+                            _prods_map_ci   = {p.get("codigo_interno","").lower(): p for p in _prods_all}
+                            _prods_map_nome = {p.get("nome","").lower().strip(): p for p in _prods_all}
                             _linhas_expandidas = []
+
+                            def _achar_produto(cod, nome_ai):
+                                """Busca produto por cod (case-insensitive) e fallback por nome."""
+                                if cod:
+                                    p = _prods_map_ci.get(cod.lower())
+                                    if p:
+                                        return p
+                                # fallback: nome exato
+                                if nome_ai:
+                                    p = _prods_map_nome.get(nome_ai.lower().strip())
+                                    if p:
+                                        return p
+                                    # fallback: nome contém
+                                    _nl = nome_ai.lower().strip()
+                                    for _k, _p in _prods_map_nome.items():
+                                        if _nl in _k or _k in _nl:
+                                            return _p
+                                return None
+
                             for _entry in _parsed:
                                 _cod  = _entry.get("cod_interno") or ""
                                 _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
@@ -1853,7 +1874,11 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                                 _conf = _entry.get("confianca", "baixa")
                                 _excluir = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
                                 _cores_kit = _WPP_KITS.get(_kit, [])
-                                _prod_obj  = _prods_map.get(_cod)
+                                _prod_obj  = _achar_produto(_cod, _nome)
+                                # Atualiza cod e nome com o que foi encontrado no cache
+                                if _prod_obj:
+                                    _cod  = _prod_obj.get("codigo_interno", _cod)
+                                    _nome = _prod_obj.get("nome", _nome)
 
                                 for _cor, _qtd in _cores_kit:
                                     # Aplica exclusões ("menos preta" → pula "preto"/"preta")
