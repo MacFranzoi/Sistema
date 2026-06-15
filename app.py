@@ -1732,14 +1732,36 @@ if _pg == "pedido":
     st.subheader("Pedido de Compra ao Fornecedor")
 
     # ── Importação via WhatsApp + IA ──────────────────────────────
-    # Kits predefinidos (mesmos do painel manual abaixo)
+    # Kits predefinidos — termos em lista = todos devem estar presentes no nome da variação
+    # Formato: (termos_busca, quantidade)  →  ["preto","aveludada"] busca variação que contenha ambos
     _WPP_KITS = {
-        "masculino":        [("preto", 2), ("marrom", 1), ("azul marinho", 1), ("cinza chumbo", 1)],
-        "feminino":         [("lilás", 1), ("marsala", 1), ("marrom", 1)],
-        "pacote masculino": [("preto", 3), ("azul marinho", 2), ("verde militar", 1),
-                             ("marrom", 1), ("cinza chumbo", 2)],
-        "pacote feminino":  [("lilás", 2), ("pink", 1), ("rosa", 1), ("marsala", 2),
-                             ("vinho", 1), ("roxo", 1), ("marrom", 1), ("nude", 1)],
+        "masculino":        [(["preto",       "aveludada"], 2),
+                             (["marrom",      "aveludada"], 1),
+                             (["azul marinho","aveludada"], 1),
+                             (["cinza chumbo","aveludada"], 1)],
+        "feminino":         [(["lilás",       "aveludada"], 1),
+                             (["marsala",     "aveludada"], 1),
+                             (["marrom",      "aveludada"], 1)],
+        "brilho":           [(["preto",        "space 2"], 1),
+                             (["azul marinho", "space 2"], 1),
+                             (["azul tiffany", "space 2"], 1),
+                             (["marsala",      "space 2"], 1),
+                             (["lilás",        "space 2"], 1),
+                             (["rosa",         "space 2"], 1),
+                             (["verde militar","space 2"], 1)],
+        "pacote masculino": [(["preto",        "aveludada"], 3),
+                             (["azul marinho", "aveludada"], 2),
+                             (["verde militar","aveludada"], 1),
+                             (["marrom",       "aveludada"], 1),
+                             (["cinza chumbo", "aveludada"], 2)],
+        "pacote feminino":  [(["lilás",        "aveludada"], 2),
+                             (["pink",         "aveludada"], 1),
+                             (["rosa",         "aveludada"], 1),
+                             (["marsala",      "aveludada"], 2),
+                             (["vinho",        "aveludada"], 1),
+                             (["roxo",         "aveludada"], 1),
+                             (["marrom",       "aveludada"], 1),
+                             (["nude",         "aveludada"], 1)],
     }
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
@@ -1791,7 +1813,7 @@ REGRAS DE KIT:
 - "femininas/femininos/fem" → kit "feminino"
 - "pacote masc" → kit "pacote masculino"
 - "pacote fem" → kit "pacote feminino"
-- "brilho/brilhos/glitter" → kit "masculino" (brilho segue kit masculino)
+- "brilho/brilhos/glitter/space 2/space" → kit "brilho" (kit próprio com cores do Space 2)
 - Se pedir 2 kits em uma linha, gere 2 entradas separadas para o mesmo aparelho
 
 EXCLUSÕES: se a linha contiver "menos [cor]" ou "exceto [cor]" ou "sem [cor]", inclua essas cores em "excluir_cores".
