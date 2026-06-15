@@ -1788,11 +1788,14 @@ if _pg == "pedido":
         with st.expander("⚙️ Regras personalizadas", expanded=False):
             st.markdown(f"<p style='color:{TXT2};font-size:0.82rem'>Uma regra por linha. Formato: <code>kit [marca/palavra] = kit_substituto</code><br>Exemplos: <code>sl iphone = vr</code> &nbsp;|&nbsp; <code>sl apple = vr</code></p>", unsafe_allow_html=True)
             wpp_regras = st.text_area("Regras", placeholder="sl iphone = vr\nsl apple = vr", height=80, key="wpp_regras", label_visibility="collapsed")
+        with st.expander("➕ Itens avulsos diretos", expanded=False):
+            st.markdown(f"<p style='color:{TXT2};font-size:0.82rem'>Cada linha vira um item avulso (sem busca no catálogo). Formato: <code>Descrição | Qtd</code> ou só <code>Descrição</code> (qtd=1).<br>Exemplos: <code>iPhone 16 / Carteira | 2</code> &nbsp;|&nbsp; <code>Samsung A15 / Película</code></p>", unsafe_allow_html=True)
+            wpp_avulsos_diretos_txt = st.text_area("Avulsos", placeholder="iPhone 16 / Carteira | 2\nSamsung A15 / Película", height=100, key="wpp_avulsos_txt", label_visibility="collapsed")
         col_ia1, col_ia2 = st.columns([3, 1])
         fornecedor_wpp = col_ia1.text_input("Fornecedor (opcional)", placeholder="ex: Distribuidora ABC", key="wpp_forn")
         gerar = col_ia2.button("✨ Gerar pré-pedido", type="primary", use_container_width=True, key="wpp_gerar")
 
-        if gerar and wpp_texto.strip():
+        if gerar and (wpp_texto.strip() or (wpp_avulsos_diretos_txt or "").strip()):
             if not cache:
                 st.warning("Sincronize os produtos primeiro.")
             else:
@@ -1838,6 +1841,24 @@ if _pg == "pedido":
                     # Resultado separado: linhas para IA vs avulsos diretos (space/transparente)
                     _linhas_ia      = []   # vão para o prompt da IA
                     _avulsos_diretos = []  # criados diretamente sem IA
+
+                    # Parseia avulsos digitados manualmente no campo "Itens avulsos diretos"
+                    for _av_ln in (wpp_avulsos_diretos_txt or "").splitlines():
+                        _av_ln = _av_ln.strip()
+                        if not _av_ln:
+                            continue
+                        if "|" in _av_ln:
+                            _av_desc, _av_qtd_s = _av_ln.rsplit("|", 1)
+                            try:
+                                _av_qtd = int(_av_qtd_s.strip())
+                            except ValueError:
+                                _av_qtd = 1
+                            _av_desc = _av_desc.strip()
+                        else:
+                            _av_desc = _av_ln.strip()
+                            _av_qtd = 1
+                        if _av_desc:
+                            _avulsos_diretos.append({"desc": _av_desc, "qtd": _av_qtd, "kit": "avulso"})
 
                     _secao    = ""
                     _marca    = ""  # Samsung / Motorola / Apple etc.
@@ -1995,187 +2016,189 @@ Retorne SOMENTE JSON válido, sem markdown:
 [{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
 
                     try:
-                        _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
-                        if not _ant_key:
-                            st.error("Configure ANTHROPIC_API_KEY nos secrets do Streamlit.")
-                        else:
-                            import anthropic as _ant
-                            _client = _ant.Anthropic(api_key=_ant_key)
-                            _msg = _client.messages.create(
-                                model="claude-sonnet-4-6",
-                                max_tokens=8192,
-                                messages=[{"role": "user", "content": _prompt}]
-                            )
-                            _raw = _msg.content[0].text.strip()
-                            # Extrai o array JSON — tenta completo primeiro, depois recupera parcial
-                            _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
-                            _json_str = _m.group() if _m else _raw
-                            try:
-                                _parsed = _json.loads(_json_str)
-                            except _json.JSONDecodeError:
-                                # JSON truncado: encontra o último objeto completo e fecha o array
-                                _ultimo_ok = _json_str.rfind('},')
-                                if _ultimo_ok == -1:
-                                    _ultimo_ok = _json_str.rfind('}')
-                                if _ultimo_ok > 0:
-                                    _json_rec = _json_str[:_ultimo_ok + 1] + ']'
-                                    _parsed = _json.loads(_json_rec)
-                                    st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas. Cole o restante do texto e gere novamente.")
-                                else:
-                                    raise
+                        _parsed = []  # preenchido pela IA se houver texto WPP
+                        if _texto_proc.strip():
+                            _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
+                            if not _ant_key:
+                                st.error("Configure ANTHROPIC_API_KEY nos secrets do Streamlit.")
+                            else:
+                                import anthropic as _ant
+                                _client = _ant.Anthropic(api_key=_ant_key)
+                                _msg = _client.messages.create(
+                                    model="claude-sonnet-4-6",
+                                    max_tokens=8192,
+                                    messages=[{"role": "user", "content": _prompt}]
+                                )
+                                _raw = _msg.content[0].text.strip()
+                                # Extrai o array JSON — tenta completo primeiro, depois recupera parcial
+                                _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
+                                _json_str = _m.group() if _m else _raw
+                                try:
+                                    _parsed = _json.loads(_json_str)
+                                except _json.JSONDecodeError:
+                                    # JSON truncado: encontra o último objeto completo e fecha o array
+                                    _ultimo_ok = _json_str.rfind('},')
+                                    if _ultimo_ok == -1:
+                                        _ultimo_ok = _json_str.rfind('}')
+                                    if _ultimo_ok > 0:
+                                        _json_rec = _json_str[:_ultimo_ok + 1] + ']'
+                                        _parsed = _json.loads(_json_rec)
+                                        st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas. Cole o restante do texto e gere novamente.")
+                                    else:
+                                        raise
 
-                            # Expande cada entrada nos itens reais (cor × qtd) usando os kits
-                            # Mapas case-insensitive para lookup robusto
-                            _prods_map_ci   = {p.get("codigo_interno","").lower(): p for p in _prods_all}
-                            _prods_map_nome = {p.get("nome","").lower().strip(): p for p in _prods_all}
-                            _linhas_expandidas = []
+                        # Expande cada entrada nos itens reais (cor × qtd) usando os kits
+                        # Mapas case-insensitive para lookup robusto
+                        _prods_map_ci   = {p.get("codigo_interno","").lower(): p for p in _prods_all}
+                        _prods_map_nome = {p.get("nome","").lower().strip(): p for p in _prods_all}
+                        _linhas_expandidas = []
 
-                            def _achar_produto(cod, nome_ai):
-                                """Busca produto por cod (case-insensitive) e fallback por nome."""
-                                if cod:
-                                    p = _prods_map_ci.get(cod.lower())
-                                    if p:
-                                        return p
-                                # fallback: nome exato
-                                if nome_ai:
-                                    p = _prods_map_nome.get(nome_ai.lower().strip())
-                                    if p:
-                                        return p
-                                    # fallback: nome contém
-                                    _nl = nome_ai.lower().strip()
-                                    for _k, _p in _prods_map_nome.items():
-                                        if _nl in _k or _k in _nl:
-                                            return _p
-                                return None
+                        def _achar_produto(cod, nome_ai):
+                            """Busca produto por cod (case-insensitive) e fallback por nome."""
+                            if cod:
+                                p = _prods_map_ci.get(cod.lower())
+                                if p:
+                                    return p
+                            # fallback: nome exato
+                            if nome_ai:
+                                p = _prods_map_nome.get(nome_ai.lower().strip())
+                                if p:
+                                    return p
+                                # fallback: nome contém
+                                _nl = nome_ai.lower().strip()
+                                for _k, _p in _prods_map_nome.items():
+                                    if _nl in _k or _k in _nl:
+                                        return _p
+                            return None
 
-                            _nao_compreendidos = []
-                            for _entry in _parsed:
-                                _cod  = _entry.get("cod_interno") or ""
-                                _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
-                                _kit  = (_entry.get("kit") or "").lower()
-                                _conf = _entry.get("confianca", "baixa")
-                                _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
-                                _qtd_fixa  = _entry.get("quantidade_fixa")
-                                _nao_comp  = _entry.get("nao_compreendido", False)
-                                _motivo    = _entry.get("motivo", "")
-                                _nome_lower = (_entry.get("nome_produto") or _entry.get("modelo_digitado","")).lower()
+                        _nao_compreendidos = []
+                        for _entry in _parsed:
+                            _cod  = _entry.get("cod_interno") or ""
+                            _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                            _kit  = (_entry.get("kit") or "").lower()
+                            _conf = _entry.get("confianca", "baixa")
+                            _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
+                            _qtd_fixa  = _entry.get("quantidade_fixa")
+                            _nao_comp  = _entry.get("nao_compreendido", False)
+                            _motivo    = _entry.get("motivo", "")
+                            _nome_lower = (_entry.get("nome_produto") or _entry.get("modelo_digitado","")).lower()
 
-                                # Aplica regras personalizadas: ex "sl iphone = vr"
-                                for _r_kit, _r_palavra, _r_sub in _regras_kit:
-                                    if _kit.startswith(_r_kit) and _r_palavra in _nome_lower:
-                                        # Substitui prefixo do kit: "sl masculino" → "vr masculino"
-                                        _kit = _kit.replace(_r_kit, _r_sub, 1)
-                                        break
+                            # Aplica regras personalizadas: ex "sl iphone = vr"
+                            for _r_kit, _r_palavra, _r_sub in _regras_kit:
+                                if _kit.startswith(_r_kit) and _r_palavra in _nome_lower:
+                                    # Substitui prefixo do kit: "sl masculino" → "vr masculino"
+                                    _kit = _kit.replace(_r_kit, _r_sub, 1)
+                                    break
 
-                                if _nao_comp or not _kit:
-                                    _nao_compreendidos.append(
-                                        f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or 'não identificado'}"
-                                    )
-                                    continue
+                            if _nao_comp or not _kit:
+                                _nao_compreendidos.append(
+                                    f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or 'não identificado'}"
+                                )
+                                continue
 
-                                # Kit avulso (carteira, película, etc.) ou kit desconhecido → avulso automático
-                                if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
-                                    _prod_obj_av = _achar_produto(_cod, _nome)
-                                    _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
-                                    _desc_av  = f"{_nome_av} / {_kit.title()}"
-                                    _linhas_expandidas.append({
-                                        "✓": False, "_cod": _cod, "_nome": _nome_av,
-                                        "_kit": _kit, "_conf": _conf, "_achado": False,
-                                        "_avulso_auto": True, "_obs": "",
-                                        "_var_id": "", "_var_cod": "",
-                                        "_prod_id": _prod_obj_av.get("id","") if _prod_obj_av else "",
-                                        "_custo": 0.0,
-                                        "Aparelho": _nome_av, "Kit": _kit.title(),
-                                        "Variação": f"⚠ {_desc_av}",
-                                        "Qtd": int(_qtd_fixa) if _qtd_fixa else 1,
-                                        "Status": "⚠",
-                                        "_desc_avulso": _desc_av,
-                                    })
-                                    continue
-
-                                _cores_kit = _WPP_KITS.get(_kit, [])
-                                _prod_obj  = _achar_produto(_cod, _nome)
-                                if not _prod_obj:
-                                    # Modelo não encontrado → avulso automático
-                                    _desc_av = f"{_nome} / {_kit.title()}"
-                                    _linhas_expandidas.append({
-                                        "✓": False, "_cod": "", "_nome": _nome,
-                                        "_kit": _kit, "_conf": _conf, "_achado": False,
-                                        "_avulso_auto": True,
-                                        "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
-                                        "Aparelho": _nome, "Kit": _kit.title(),
-                                        "Variação": f"⚠ {_desc_av}",
-                                        "Qtd": 1,
-                                        "Status": "⚠",
-                                        "_desc_avulso": _desc_av,
-                                    })
-                                    continue
-                                # Atualiza cod e nome com o que foi encontrado no cache
-                                _cod  = _prod_obj.get("codigo_interno", _cod)
-                                _nome = _prod_obj.get("nome", _nome)
-
-                                for _cor, _qtd in _cores_kit:
-                                    # quantidade_fixa sobrepõe a qtd do kit (ex: Space +5)
-                                    if _qtd_fixa:
-                                        _qtd = int(_qtd_fixa)
-                                    # Aplica exclusões ("menos preta" → pula "preto"/"preta")
-                                    _cor_lower = (_cor if isinstance(_cor, str) else " ".join(_cor)).lower()
-                                    if any(_ex in _cor_lower or _cor_lower in _ex for _ex in _excluir):
-                                        continue
-                                    _termos = [_cor] if isinstance(_cor, str) else _cor
-                                    # Busca a variação EXATA no catálogo pelo nome
-                                    _var_match = None
-                                    if _prod_obj:
-                                        for _v in _prod_obj.get("variacoes", []):
-                                            _vd = _v.get("variacao", {})
-                                            _vn = _vd.get("nome", "").lower()
-                                            if all(t.lower() in _vn for t in _termos):
-                                                _var_match = _vd
-                                                break
-
-                                    _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
-                                    _obs_kit = ("Very Rio" if _kit.startswith("vr ") else
-                                                ("MagSafe" if _kit == "magsafe" else ""))
-                                    _desc_av_var = f"{_nome} / {_kit.title()} / {'/'.join(_termos)}"
-                                    _linhas_expandidas.append({
-                                        "✓":           _encontrado,
-                                        "_cod":        _cod,
-                                        "_nome":       _nome,
-                                        "_kit":        _kit,
-                                        "_conf":       _conf,
-                                        "_achado":     _encontrado,
-                                        "_avulso_auto": not _encontrado,
-                                        "_obs":        _obs_kit,
-                                        "_var_id":     _var_match.get("id", "") if _var_match else "",
-                                        "_var_cod":    _var_match.get("codigo", "") if _var_match else "",
-                                        "_prod_id":    _prod_obj.get("id", "") if _prod_obj else "",
-                                        "_custo":      float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
-                                        "Aparelho":    _nome,
-                                        "Kit":         _kit.title(),
-                                        "Variação":    _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
-                                        "Qtd":         _qtd,
-                                        "Status":      "✓" if _encontrado else "⚠",
-                                        "_desc_avulso": _desc_av_var,
-                                    })
-
-                            # Injeta avulsos diretos (Space / Transparente) parseados sem IA
-                            for _av in _avulsos_diretos:
+                            # Kit avulso (carteira, película, etc.) ou kit desconhecido → avulso automático
+                            if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
+                                _prod_obj_av = _achar_produto(_cod, _nome)
+                                _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
+                                _desc_av  = f"{_nome_av} / {_kit.title()}"
                                 _linhas_expandidas.append({
-                                    "✓": False,
-                                    "_cod": "", "_nome": _av["desc"],
-                                    "_kit": _av["kit"], "_conf": "alta",
-                                    "_achado": False, "_avulso_auto": True, "_obs": "",
-                                    "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
-                                    "Aparelho": _av["desc"],
-                                    "Kit": _av["kit"].title(),
-                                    "Variação": f"⚠ {_av['desc']}",
-                                    "Qtd": _av["qtd"],
+                                    "✓": False, "_cod": _cod, "_nome": _nome_av,
+                                    "_kit": _kit, "_conf": _conf, "_achado": False,
+                                    "_avulso_auto": True, "_obs": "",
+                                    "_var_id": "", "_var_cod": "",
+                                    "_prod_id": _prod_obj_av.get("id","") if _prod_obj_av else "",
+                                    "_custo": 0.0,
+                                    "Aparelho": _nome_av, "Kit": _kit.title(),
+                                    "Variação": f"⚠ {_desc_av}",
+                                    "Qtd": int(_qtd_fixa) if _qtd_fixa else 1,
                                     "Status": "⚠",
-                                    "_desc_avulso": _av["desc"],
+                                    "_desc_avulso": _desc_av,
+                                })
+                                continue
+
+                            _cores_kit = _WPP_KITS.get(_kit, [])
+                            _prod_obj  = _achar_produto(_cod, _nome)
+                            if not _prod_obj:
+                                # Modelo não encontrado → avulso automático
+                                _desc_av = f"{_nome} / {_kit.title()}"
+                                _linhas_expandidas.append({
+                                    "✓": False, "_cod": "", "_nome": _nome,
+                                    "_kit": _kit, "_conf": _conf, "_achado": False,
+                                    "_avulso_auto": True,
+                                    "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                    "Aparelho": _nome, "Kit": _kit.title(),
+                                    "Variação": f"⚠ {_desc_av}",
+                                    "Qtd": 1,
+                                    "Status": "⚠",
+                                    "_desc_avulso": _desc_av,
+                                })
+                                continue
+                            # Atualiza cod e nome com o que foi encontrado no cache
+                            _cod  = _prod_obj.get("codigo_interno", _cod)
+                            _nome = _prod_obj.get("nome", _nome)
+
+                            for _cor, _qtd in _cores_kit:
+                                # quantidade_fixa sobrepõe a qtd do kit (ex: Space +5)
+                                if _qtd_fixa:
+                                    _qtd = int(_qtd_fixa)
+                                # Aplica exclusões ("menos preta" → pula "preto"/"preta")
+                                _cor_lower = (_cor if isinstance(_cor, str) else " ".join(_cor)).lower()
+                                if any(_ex in _cor_lower or _cor_lower in _ex for _ex in _excluir):
+                                    continue
+                                _termos = [_cor] if isinstance(_cor, str) else _cor
+                                # Busca a variação EXATA no catálogo pelo nome
+                                _var_match = None
+                                if _prod_obj:
+                                    for _v in _prod_obj.get("variacoes", []):
+                                        _vd = _v.get("variacao", {})
+                                        _vn = _vd.get("nome", "").lower()
+                                        if all(t.lower() in _vn for t in _termos):
+                                            _var_match = _vd
+                                            break
+
+                                _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
+                                _obs_kit = ("Very Rio" if _kit.startswith("vr ") else
+                                            ("MagSafe" if _kit == "magsafe" else ""))
+                                _desc_av_var = f"{_nome} / {_kit.title()} / {'/'.join(_termos)}"
+                                _linhas_expandidas.append({
+                                    "✓":           _encontrado,
+                                    "_cod":        _cod,
+                                    "_nome":       _nome,
+                                    "_kit":        _kit,
+                                    "_conf":       _conf,
+                                    "_achado":     _encontrado,
+                                    "_avulso_auto": not _encontrado,
+                                    "_obs":        _obs_kit,
+                                    "_var_id":     _var_match.get("id", "") if _var_match else "",
+                                    "_var_cod":    _var_match.get("codigo", "") if _var_match else "",
+                                    "_prod_id":    _prod_obj.get("id", "") if _prod_obj else "",
+                                    "_custo":      float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
+                                    "Aparelho":    _nome,
+                                    "Kit":         _kit.title(),
+                                    "Variação":    _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
+                                    "Qtd":         _qtd,
+                                    "Status":      "✓" if _encontrado else "⚠",
+                                    "_desc_avulso": _desc_av_var,
                                 })
 
-                            st.session_state["wpp_expandido"]      = _linhas_expandidas
-                            st.session_state["wpp_nao_comp"] = _nao_compreendidos
+                        # Injeta avulsos diretos (Space / Transparente) parseados sem IA
+                        for _av in _avulsos_diretos:
+                            _linhas_expandidas.append({
+                                "✓": False,
+                                "_cod": "", "_nome": _av["desc"],
+                                "_kit": _av["kit"], "_conf": "alta",
+                                "_achado": False, "_avulso_auto": True, "_obs": "",
+                                "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                "Aparelho": _av["desc"],
+                                "Kit": _av["kit"].title(),
+                                "Variação": f"⚠ {_av['desc']}",
+                                "Qtd": _av["qtd"],
+                                "Status": "⚠",
+                                "_desc_avulso": _av["desc"],
+                            })
+
+                        st.session_state["wpp_expandido"]      = _linhas_expandidas
+                        st.session_state["wpp_nao_comp"] = _nao_compreendidos
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
 
