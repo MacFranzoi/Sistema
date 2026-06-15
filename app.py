@@ -1755,14 +1755,9 @@ if _pg == "pedido":
                                (["rosa",   "silicone"], 1), (["marsala","silicone"], 2),
                                (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
                                (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
-        # ── Space 2 / Brilho ── Space 2 é o tipo "brilho" nas variações
-        "brilho":            [(["preto",        "space 2"], 1), (["azul marinho", "space 2"], 1),
-                              (["azul tiffany", "space 2"], 1), (["marsala",      "space 2"], 1),
-                              (["lilás",        "space 2"], 1), (["rosa",         "space 2"], 1),
-                              (["verde militar","space 2"], 1)],
         # ── Diversos ── mesmos que os botões Diversos da página
-        "diversos brilho":   [(["59,99", "diversos"], 3)],
-        "diversos masculino":[(["39,99", "diversos"], 3)],
+        "brilho":            [(["59,99", "diversos"], 3)],   # ✨ Diversos Brilho ×3
+        "diversos masculino":[(["39,99", "diversos"], 3)],   # 💪 Diversos Masculino ×3
     }
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
@@ -1820,9 +1815,8 @@ Kits disponíveis: {list(_WPP_KITS.keys())}
 - "sl fem/silicone fem/silicone feminino" → "sl feminino"
 - "sl pacote masc" → "sl pacote masculino"
 - "sl pacote fem" → "sl pacote feminino"
-- "brilho/brilhos/glitter/space/space2" → "brilho"  (Space 2 = capa com brilho)
-- "diversos brilho/div brilho" → "diversos brilho"
-- "diversos masc/div masc" → "diversos masculino"
+- "brilho/brilhos/glitter/div brilho/diversos brilho" → "brilho"  (= botão ✨ Diversos Brilho ×3, adiciona R$59,99/Diversos × 3)
+- "diversos masc/div masc/diversos masculino" → "diversos masculino"
 - Se pedir 2 ou mais kits numa linha, gere uma entrada por kit para o mesmo aparelho
 
 EXCLUSÕES: se a linha contiver "menos [cor]" ou "exceto [cor]" ou "sem [cor]", inclua essas cores em "excluir_cores".
