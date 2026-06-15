@@ -562,139 +562,24 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* ── Header: sem altura, sem cor, mas botões visíveis ── */
 [data-testid="stHeader"] {{
-    background: transparent !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-    border: none !important;
+    background: {SB} !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    border-bottom: 1px solid {BOR} !important;
+}}
+[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
+    color: {TXT2} !important; fill: {TXT2} !important;
 }}
 [data-testid="stToolbar"] {{ display: none !important; }}
-
 [data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
-    padding-top: 0 !important;
+    padding-top: 40px !important;
 }}
 .main .block-container {{
-    padding-top: 22px !important;
-    padding-bottom: 40px !important;
+    padding-top: 22px !important; padding-bottom: 40px !important;
     max-width: 100% !important;
 }}
-
-/* ── Reposiciona o botão nativo de toggle da sidebar ──
-   Streamlit 1.x usa [data-testid="stSidebarNavToggleButton"]
-   dentro do header quando a sidebar está fechada, e
-   [data-testid="stSidebarCollapseButton"] dentro da sidebar quando aberta.
-   Tornamos AMBOS fixos no centro vertical da tela. ── */
-
-[data-testid="stSidebarNavToggleButton"],
-[data-testid="stSidebarCollapseButton"] {{
-    position: fixed !important;
-    top: 50% !important;
-    left: 0 !important;
-    transform: translateY(-50%) !important;
-    z-index: 99999 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}}
-
-[data-testid="stSidebarNavToggleButton"] button,
-[data-testid="stSidebarCollapseButton"] button {{
-    background: {ACC} !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 0 8px 8px 0 !important;
-    width: 22px !important;
-    height: 56px !important;
-    min-height: unset !important;
-    padding: 0 !important;
-    box-shadow: 2px 0 8px rgba(0,0,0,.30) !important;
-    transition: width .15s !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}}
-[data-testid="stSidebarNavToggleButton"] button:hover,
-[data-testid="stSidebarCollapseButton"] button:hover {{
-    width: 28px !important;
-    background: {ACC}cc !important;
-}}
-[data-testid="stSidebarNavToggleButton"] button svg,
-[data-testid="stSidebarCollapseButton"] button svg {{
-    fill: #fff !important;
-    color: #fff !important;
-    width: 16px !important;
-    height: 16px !important;
-}}
-
-/* Quando a sidebar está aberta o botão fica colado na borda direita dela */
-[data-testid="stSidebar"][aria-expanded="true"] [data-testid="stSidebarCollapseButton"] {{
-    left: 100% !important;
-    border-radius: 0 8px 8px 0 !important;
-}}
-
-/* Botão de emergência — abre sidebar à força */
-#plug-open-sb {{
-    position: fixed;
-    bottom: 18px;
-    left: 12px;
-    z-index: 99999;
-    background: {ACC};
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 13px;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,.35);
-    opacity: 0.85;
-}}
-#plug-open-sb:hover {{ opacity: 1; }}
 </style>
-
-<button id="plug-open-sb" onclick="plugForceSidebar()" title="Abrir menu lateral">☰ Menu</button>
-
-<script>
-function plugForceSidebar() {{
-  // 1. tenta todos os botões nativos conhecidos do Streamlit
-  var selectors = [
-    '[data-testid="stSidebarNavToggleButton"] button',
-    '[data-testid="stSidebarCollapseButton"] button',
-    '[data-testid="collapsedControl"] button',
-    '[data-testid="stBaseButton-headerNoPadding"]',
-    'button[aria-label="Open sidebar"]',
-    'button[aria-label="Expand sidebar"]',
-    '[data-testid="stHeader"] button',
-    'section[data-testid="stSidebar"] ~ div button'
-  ];
-  for (var i = 0; i < selectors.length; i++) {{
-    var btn = document.querySelector(selectors[i]);
-    if (btn) {{ btn.click(); console.log('clicked', selectors[i]); return; }}
-  }}
-  // 2. fallback: força visibilidade da sidebar via CSS
-  var sb = document.querySelector('[data-testid="stSidebar"]');
-  if (sb) {{
-    sb.style.cssText = 'transform:none!important;visibility:visible!important;display:block!important;width:300px!important;min-width:300px!important;position:fixed!important;left:0!important;top:0!important;height:100%!important;z-index:9999!important;';
-    sb.setAttribute('aria-expanded','true');
-    console.log('forced sidebar open via style');
-  }}
-}}
-
-// Auto-oculta o botão quando sidebar está aberta
-(function() {{
-  function watchSidebar() {{
-    var sb = document.querySelector('[data-testid="stSidebar"]');
-    var btn = document.getElementById('plug-open-sb');
-    if (!sb || !btn) {{ setTimeout(watchSidebar, 300); return; }}
-    function sync() {{
-      btn.style.display = (sb.getAttribute('aria-expanded') === 'false') ? 'block' : 'none';
-    }}
-    sync();
-    new MutationObserver(sync).observe(sb, {{attributes:true, attributeFilter:['aria-expanded','style']}});
-  }}
-  setTimeout(watchSidebar, 500);
-}})();
-</script>
 """, unsafe_allow_html=True)
 
 # ── Sidebar ──
