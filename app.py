@@ -2202,30 +2202,70 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 )
                                 continue
 
-                            # Kit avulso (carteira, película, cor etc.) ou kit desconhecido → avulso automático
+                            # Kit avulso (carteira, película, cor etc.) ou kit desconhecido
                             if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
                                 _prod_obj_av = _achar_produto(_cod, _nome)
                                 _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
                                 _desc_avulso_extra = _entry.get("descricao_avulso") or ""
-                                if _kit == "avulso cor" and _desc_avulso_extra:
+                                _qtd_av = int(_qtd_fixa) if _qtd_fixa else 1
+
+                                # Para "avulso cor": tenta achar a variação pelo nome da cor no catálogo
+                                # Normaliza gênero: preta→preto, branca→branco, vermelha→vermelho, etc.
+                                _var_match_av = None
+                                if _kit == "avulso cor" and _desc_avulso_extra and _prod_obj_av:
+                                    _cor_busca = _desc_avulso_extra.lower().strip()
+                                    # variantes de gênero para busca mais ampla
+                                    _cor_variantes = {_cor_busca}
+                                    _genero_map = {"preta":"preto","branca":"branco","vermelha":"vermelho",
+                                                   "dourada":"dourado","rosada":"rosado","cinza":"cinza",
+                                                   "lilás":"lilas","lilas":"lilás"}
+                                    if _cor_busca in _genero_map:
+                                        _cor_variantes.add(_genero_map[_cor_busca])
+                                    # remove plural simples
+                                    if _cor_busca.endswith("s") and len(_cor_busca) > 3:
+                                        _cor_variantes.add(_cor_busca[:-1])
+                                    for _v in _prod_obj_av.get("variacoes", []):
+                                        _vn = _v.get("variacao", {}).get("nome", "").lower()
+                                        if any(c in _vn for c in _cor_variantes):
+                                            _var_match_av = _v.get("variacao", {})
+                                            break
+
+                                if _var_match_av:
+                                    # Variação encontrada no catálogo
                                     _desc_av = f"{_nome_av} / {_desc_avulso_extra.title()}"
+                                    _linhas_expandidas.append({
+                                        "✓": True, "_cod": _prod_obj_av.get("codigo_interno",""),
+                                        "_nome": _nome_av, "_kit": _kit, "_conf": _conf,
+                                        "_achado": True, "_avulso_auto": False, "_obs": "",
+                                        "_var_id":  _var_match_av.get("id", ""),
+                                        "_var_cod": _var_match_av.get("codigo", ""),
+                                        "_prod_id": _prod_obj_av.get("id", ""),
+                                        "_custo":   float(_prod_obj_av.get("valor_custo") or 0),
+                                        "Aparelho": _nome_av, "Kit": _desc_avulso_extra.title(),
+                                        "Variação": _var_match_av.get("nome", _desc_avulso_extra.title()),
+                                        "Qtd": _qtd_av, "Status": "✓",
+                                        "_desc_avulso": _desc_av,
+                                    })
                                 else:
-                                    _desc_av = f"{_nome_av} / {_kit.title()}"
-                                    if _desc_avulso_extra:
-                                        _desc_av += f" {_desc_avulso_extra.title()}"
-                                _linhas_expandidas.append({
-                                    "✓": False, "_cod": _cod, "_nome": _nome_av,
-                                    "_kit": _kit, "_conf": _conf, "_achado": False,
-                                    "_avulso_auto": True, "_obs": "",
-                                    "_var_id": "", "_var_cod": "",
-                                    "_prod_id": _prod_obj_av.get("id","") if _prod_obj_av else "",
-                                    "_custo": 0.0,
-                                    "Aparelho": _nome_av, "Kit": _kit.title(),
-                                    "Variação": f"⚠ {_desc_av}",
-                                    "Qtd": int(_qtd_fixa) if _qtd_fixa else 1,
-                                    "Status": "⚠",
-                                    "_desc_avulso": _desc_av,
-                                })
+                                    # Não encontrou → avulso
+                                    if _kit == "avulso cor" and _desc_avulso_extra:
+                                        _desc_av = f"{_nome_av} / {_desc_avulso_extra.title()}"
+                                    else:
+                                        _desc_av = f"{_nome_av} / {_kit.title()}"
+                                        if _desc_avulso_extra:
+                                            _desc_av += f" {_desc_avulso_extra.title()}"
+                                    _linhas_expandidas.append({
+                                        "✓": False, "_cod": _cod, "_nome": _nome_av,
+                                        "_kit": _kit, "_conf": _conf, "_achado": False,
+                                        "_avulso_auto": True, "_obs": "",
+                                        "_var_id": "", "_var_cod": "",
+                                        "_prod_id": _prod_obj_av.get("id","") if _prod_obj_av else "",
+                                        "_custo": 0.0,
+                                        "Aparelho": _nome_av, "Kit": _kit.title(),
+                                        "Variação": f"⚠ {_desc_av}",
+                                        "Qtd": _qtd_av, "Status": "⚠",
+                                        "_desc_avulso": _desc_av,
+                                    })
                                 continue
 
                             _cores_kit = _WPP_KITS.get(_kit, [])
