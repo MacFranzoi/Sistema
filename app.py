@@ -72,12 +72,77 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
     return bytes(pdf.output())
 
 st.set_page_config(page_title="Sistema de Estoque", page_icon="📦", layout="wide")
+
+# ──────────────────────────────────────────────
+# Login
+# ──────────────────────────────────────────────
+USUARIOS = {
+    "gustavo": {
+        "senha": "admin",
+        "nome": "Gustavo",
+        "abas": [0, 1, 2, 3, 4, 5, 6, 7, 8],  # acesso total
+    },
+    "vendas": {
+        "senha": "vendas123",
+        "nome": "Vendas",
+        "abas": [2, 4],  # Etiquetas + Estoque por Loja
+    },
+    "estoque": {
+        "senha": "estoque123",
+        "nome": "Estoque",
+        "abas": [0, 1, 2, 3, 4, 5],  # tudo menos Preços, Novo Modelo, Clonar
+    },
+}
+
+TODAS_ABAS = [
+    "📦 Entrada de Mercadoria",
+    "📊 Acerto de Estoque",
+    "🏷️ Etiquetas",
+    "🛒 Pedido de Compra",
+    "🏪 Estoque por Loja",
+    "🔘 Disponibilidade por Loja",
+    "💰 Preços",
+    "➕ Novo Modelo",
+    "🔁 Clonar Modelo",
+]
+
+if "usuario_logado" not in st.session_state:
+    st.session_state.usuario_logado = None
+
+if st.session_state.usuario_logado is None:
+    st.title("📦 Sistema de Estoque — Loja de Acessórios")
+    st.divider()
+    col_login, _, _ = st.columns([1, 1, 1])
+    with col_login:
+        st.subheader("🔐 Login")
+        with st.form("form_login"):
+            usuario_input = st.text_input("Usuário")
+            senha_input = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
+        if entrar:
+            u = usuario_input.strip().lower()
+            if u in USUARIOS and USUARIOS[u]["senha"] == senha_input:
+                st.session_state.usuario_logado = u
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
+    st.stop()
+
+_user = st.session_state.usuario_logado
+_abas_permitidas = USUARIOS[_user]["abas"]
+_nome_usuario = USUARIOS[_user]["nome"]
+
 st.title("📦 Sistema de Estoque — Loja de Acessórios")
 
 # ──────────────────────────────────────────────
 # Sidebar
 # ──────────────────────────────────────────────
 with st.sidebar:
+    st.markdown(f"👤 **{_nome_usuario}**")
+    if st.button("🚪 Sair", use_container_width=True):
+        st.session_state.usuario_logado = None
+        st.rerun()
+    st.divider()
     st.header("🏪 Loja ativa")
     loja_opcoes = {"Todas as lojas": None, **{nome: lid for lid, nome in api.LOJAS.items()}}
     loja_sel_nome = st.selectbox("Selecionar loja:", list(loja_opcoes.keys()), key="loja_ativa")
@@ -292,23 +357,35 @@ def df_lista_resumo(itens, colunas_extras=None):
 # ──────────────────────────────────────────────
 # Abas
 # ──────────────────────────────────────────────
-aba1, aba2, aba3, aba4, aba5, aba6, aba7, aba8, aba9 = st.tabs([
-    "📦 Entrada de Mercadoria",
-    "📊 Acerto de Estoque",
-    "🏷️ Etiquetas",
-    "🛒 Pedido de Compra",
-    "🏪 Estoque por Loja",
-    "🔘 Disponibilidade por Loja",
-    "💰 Preços",
-    "➕ Novo Modelo",
-    "🔁 Clonar Modelo",
-])
+class _NullCtx:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+def _guard(tab):
+    return tab if tab is not None else _NullCtx()
+
+_abas_visiveis = [TODAS_ABAS[i] for i in _abas_permitidas]
+_tabs_widgets = st.tabs(_abas_visiveis)
+_tab_map = {i: _tabs_widgets[_abas_permitidas.index(i)] for i in _abas_permitidas}
+
+def _aba(idx):
+    return _tab_map.get(idx)
+
+aba1 = _aba(0)
+aba2 = _aba(1)
+aba3 = _aba(2)
+aba4 = _aba(3)
+aba5 = _aba(4)
+aba6 = _aba(5)
+aba7 = _aba(6)
+aba8 = _aba(7)
+aba9 = _aba(8)
 
 
 # ══════════════════════════════════════════════
 # ABA 1 — ENTRADA DE MERCADORIA (SOMA)
 # ══════════════════════════════════════════════
-with aba1:
+with _guard(aba1):
     st.subheader("Entrada de Mercadoria")
     st.caption("Soma as quantidades ao estoque atual.")
 
@@ -420,7 +497,7 @@ with aba1:
 # ══════════════════════════════════════════════
 # ABA 2 — ACERTO DE ESTOQUE (SET ABSOLUTO)
 # ══════════════════════════════════════════════
-with aba2:
+with _guard(aba2):
     st.subheader("Acerto de Estoque")
     st.caption("Define o valor absoluto do estoque (substitui o atual). Use para inventário ou correção.")
 
@@ -527,7 +604,7 @@ with aba2:
 # ══════════════════════════════════════════════
 # ABA 3 — ETIQUETAS
 # ══════════════════════════════════════════════
-with aba3:
+with _guard(aba3):
     st.subheader("Gerar Etiquetas")
     st.caption("Monte uma lista de variações + quantidades e gere o link de impressão.")
 
@@ -599,7 +676,7 @@ with aba3:
 # ══════════════════════════════════════════════
 # ABA 4 — PEDIDO DE COMPRA
 # ══════════════════════════════════════════════
-with aba4:
+with _guard(aba4):
     st.subheader("Pedido de Compra ao Fornecedor")
 
     if not cache:
@@ -1102,7 +1179,7 @@ with aba4:
 # ══════════════════════════════════════════════
 # ABA 5 — ESTOQUE POR LOJA
 # ══════════════════════════════════════════════
-with aba5:
+with _guard(aba5):
 
     st.subheader("Estoque por Loja")
     st.caption("Consulte e edite o estoque de um produto em todas as lojas.")
@@ -1214,7 +1291,7 @@ with aba5:
 # ══════════════════════════════════════════════
 # ABA 6 — DISPONIBILIDADE POR LOJA
 # ══════════════════════════════════════════════
-with aba6:
+with _guard(aba6):
     st.subheader("Disponibilidade por Loja")
     st.caption("Controle em quais lojas cada produto está ativo. Selecionar um grupo pai inclui todos os subgrupos.")
 
@@ -1356,7 +1433,7 @@ with aba6:
 # ══════════════════════════════════════════════
 # ABA 7 — PREÇOS
 # ══════════════════════════════════════════════
-with aba7:
+with _guard(aba7):
     st.subheader("Atualização de Preços")
     st.caption("Edite em lote, reajuste por %, copie um preço e aplique a toda a categoria.")
 
@@ -1518,7 +1595,7 @@ with aba7:
 # ══════════════════════════════════════════════
 # ABA 8 — NOVO MODELO
 # ══════════════════════════════════════════════
-with aba8:
+with _guard(aba8):
     st.subheader("Novo Modelo")
 
     if not cache:
@@ -1617,7 +1694,7 @@ with aba8:
 # ══════════════════════════════════════════════
 # ABA 9 — CLONAR MODELO
 # ══════════════════════════════════════════════
-with aba9:
+with _guard(aba9):
     st.subheader("Clonar Modelo")
 
     if not cache:
