@@ -1,0 +1,82 @@
+{
+  "admin": {
+    "label": "Administrador",
+    "paginas": [
+      "dashboard",
+      "clientes",
+      "fornecedores",
+      "novo_modelo",
+      "clonar_modelo",
+      "precos",
+      "vendas",
+      "orcamentos",
+      "entrada",
+      "acerto",
+      "estoque_loja",
+      "disponibilidade",
+      "etiquetas",
+      "pedido",
+      "compras_hist",
+      "financeiro",
+      "relatorios",
+      "sincronizacao",
+      "usuarios"
+    ]
+  },
+  "gerencia": {
+    "label": "Gerência",
+    "paginas": [
+      "dashboard",
+      "clientes",
+      "fornecedores",
+      "novo_modelo",
+      "clonar_modelo",
+      "precos",
+      "vendas",
+      "orcamentos",
+      "entrada",
+      "acerto",
+      "estoque_loja",
+      "disponibilidade",
+      "etiquetas",
+      "pedido",
+      "compras_hist",
+      "financeiro",
+      "relatorios"
+    ]
+  },
+  "estoque": {
+    "label": "Estoque",
+    "paginas": [
+      "dashboard",
+      "entrada",
+      "acerto",
+      "estoque_loja",
+      "disponibilidade",
+      "etiquetas",
+      "pedido",
+      "compras_hist"
+    ]
+  },
+  "compras": {
+    "label": "Compras",
+    "paginas": [
+      "dashboard",
+      "pedido",
+      "compras_hist",
+      "estoque_loja",
+      "disponibilidade"
+    ]
+  },
+  "vendas": {
+    "label": "Vendas",
+    "paginas": [
+      "dashboard",
+      "vendas",
+      "orcamentos",
+      "estoque_loja",
+      "disponibilidade",
+      "etiquetas"
+    ]
+  }
+}
