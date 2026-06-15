@@ -1973,10 +1973,12 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                         "cod_interno":   _meta["_cod"],
                         "variacao_id":   _meta["_var_id"],
                         "variacao_cod":  _meta["_var_cod"],
-                        "variacao_nome": _erow["Variação"],   # nome EXATO do catálogo
+                        "variacao_nome": _erow["Variação"],
+                        "estoque_atual": 0,
                         "quantidade":    int(_erow["Qtd"]),
                         "Qtd a Pedir":   int(_erow["Qtd"]),
                         "valor_custo":   str(_meta["_custo"]),
+                        "observacao":    "",
                     })
                     _adicionados += 1
                 del st.session_state["wpp_expandido"]
@@ -2428,6 +2430,10 @@ Ex: "Ed30 neo- brilho e masculina menos preta" → excluir_cores: ["preto"]
                     st.rerun()
             with col_b:
                 buffer = io.BytesIO()
+                for _c, _dv in [("estoque_atual", 0), ("observacao", ""), ("fornecedor", "—"),
+                                ("variacao_nome", ""), ("valor_custo", "0.00")]:
+                    if _c not in df_ped.columns:
+                        df_ped[_c] = _dv
                 df_exp = df_ped[["fornecedor", "cod_interno", "produto_nome", "variacao_nome",
                                   "observacao", "estoque_atual", "quantidade", "valor_custo", "total"]].copy()
                 df_exp.columns = ["Fornecedor", "Cód.", "Produto", "Variação",
