@@ -316,6 +316,110 @@ def gerar_url_etiquetas(entradas):
 
 
 # ──────────────────────────────────────────────
+# GitHub sync para listas
+# ──────────────────────────────────────────────
+
+import base64
+
+_GH_REPO   = "MacFranzoi/Sistema"
+_GH_BRANCH = "main"
+_GH_API    = "https://api.github.com"
+
+def _gh_headers():
+    try:
+        import streamlit as _st
+        token = _st.secrets.get("GITHUB_TOKEN", "")
+    except Exception:
+        token = os.environ.get("GITHUB_TOKEN", "")
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+_GH_HEADERS = None  # legacy alias — use _gh_headers() instead
+
+def _gh_get_sha(path):
+    """Retorna SHA do arquivo no GitHub (necessário para atualizar)."""
+    try:
+        r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{path}",
+                         headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+        if r.status_code == 200:
+            return r.json().get("sha")
+    except Exception:
+        pass
+    return None
+
+def _gh_push_arquivo(path, conteudo_str, mensagem):
+    """Cria ou atualiza um arquivo no GitHub."""
+    try:
+        sha = _gh_get_sha(path)
+        payload = {
+            "message": mensagem,
+            "content": base64.b64encode(conteudo_str.encode()).decode(),
+            "branch":  _GH_BRANCH,
+        }
+        if sha:
+            payload["sha"] = sha
+        r = requests.put(f"{_GH_API}/repos/{_GH_REPO}/contents/{path}",
+                         headers=_gh_headers(), json=payload, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+def _gh_delete_arquivo(path):
+    """Remove um arquivo do GitHub."""
+    try:
+        sha = _gh_get_sha(path)
+        if not sha:
+            return False
+        r = requests.delete(f"{_GH_API}/repos/{_GH_REPO}/contents/{path}",
+                            headers=_gh_headers(),
+                            json={"message": f"Remove lista {path}", "sha": sha, "branch": _GH_BRANCH},
+                            timeout=10)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+def _gh_listar_listas():
+    """Lista arquivos em listas/ no GitHub."""
+    try:
+        r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/listas",
+                         headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+        if r.status_code == 200:
+            return [item["name"] for item in r.json() if item["name"].endswith(".json")]
+    except Exception:
+        pass
+    return []
+
+def _gh_baixar_lista(nome_arquivo):
+    """Baixa conteúdo de uma lista do GitHub e salva localmente."""
+    try:
+        r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/listas/{nome_arquivo}",
+                         headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+        if r.status_code == 200:
+            conteudo = base64.b64decode(r.json()["content"]).decode()
+            destino = os.path.join(DIR_LISTAS, nome_arquivo)
+            with open(destino, "w", encoding="utf-8") as f:
+                f.write(conteudo)
+            return True
+    except Exception:
+        pass
+    return False
+
+def sincronizar_listas_do_github():
+    """Puxa do GitHub todos os arquivos de lista que não existem localmente (ou são mais antigos)."""
+    remotos = _gh_listar_listas()
+    baixados = 0
+    for nome in remotos:
+        local = os.path.join(DIR_LISTAS, nome)
+        if not os.path.exists(local):
+            if _gh_baixar_lista(nome):
+                baixados += 1
+    return baixados
+
+
+# ──────────────────────────────────────────────
 # Listas salvas
 # ──────────────────────────────────────────────
 
@@ -330,13 +434,19 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
     }
     slug = nome.replace(" ", "_").replace("/", "-")[:40]
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    caminho = os.path.join(DIR_LISTAS, f"{tipo}_{slug}_{ts}.json")
+    nome_arq = f"{tipo}_{slug}_{ts}.json"
+    caminho = os.path.join(DIR_LISTAS, nome_arq)
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(caminho, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    # Sobe pro GitHub em background (falha silenciosamente)
+    _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
     return caminho
 
 
 def listar_listas_salvas(tipo=None):
+    # Puxa do GitHub arquivos que ainda não existem localmente
+    sincronizar_listas_do_github()
     arquivos = sorted(
         [f for f in os.listdir(DIR_LISTAS) if f.endswith(".json")],
         reverse=True
@@ -358,6 +468,14 @@ def listar_listas_salvas(tipo=None):
 def carregar_lista(arquivo):
     with open(os.path.join(DIR_LISTAS, arquivo), encoding="utf-8") as f:
         return json.load(f)
+
+
+def excluir_lista(arquivo):
+    """Remove lista local e do GitHub."""
+    caminho = os.path.join(DIR_LISTAS, arquivo)
+    if os.path.exists(caminho):
+        os.remove(caminho)
+    _gh_delete_arquivo(f"listas/{arquivo}")
 
 
 # ──────────────────────────────────────────────

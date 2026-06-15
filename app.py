@@ -872,8 +872,10 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
                 with open(_cam, encoding="utf-8") as _f:
                     _d = _pj.load(_f)
                 _d["nome"] = _novo_nome.strip()
+                _conteudo = _pj.dumps(_d, ensure_ascii=False, indent=2)
                 with open(_cam, "w", encoding="utf-8") as _f:
-                    _pj.dump(_d, _f, ensure_ascii=False, indent=2)
+                    _f.write(_conteudo)
+                api._gh_push_arquivo(f"listas/{_lst['_arquivo']}", _conteudo, f"Renomeia lista: {_novo_nome.strip()}")
                 st.success("Renomeado!")
                 st.rerun()
 
@@ -881,9 +883,7 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
         with _cc.popover("🗑️ Excluir"):
             st.warning(f"Excluir **{_lst['nome']}**?")
             if st.button("Confirmar exclusão", key=f"ls_del_{key_suffix}", type="primary"):
-                _cam = os.path.join(api.DIR_LISTAS, _lst["_arquivo"])
-                if os.path.exists(_cam):
-                    _pos.remove(_cam)
+                api.excluir_lista(_lst["_arquivo"])
                 if arq_atual == _lst["_arquivo"]:
                     st.session_state.pop(f"lista_arq_{key_suffix}", None)
                 st.success("Excluído.")
