@@ -1773,11 +1773,9 @@ if _pg == "pedido":
         "brilho":            [(["59,99", "diversos"], 3)],   # ✨ Diversos Brilho ×3
         "diversos masculino":[(["39,99", "diversos"], 3)],   # 💪 Diversos Masculino ×3
     }
-    # Alias: "sl" sozinho → pacote masculino + feminino (inserido como dois kits pelo AI)
-    _WPP_KIT_ALIAS = {
-        "sl": ["sl pacote masculino", "sl pacote feminino"],
-        "vr": ["vr pacote masculino", "vr pacote feminino"],
-    }
+    # Kits que não têm cores predefinidas → viram avulso com descrição "Aparelho / Kit"
+    _WPP_KITS_AVULSO = {"carteira", "película", "pelicula", "couro", "clear", "transparente",
+                         "vidro", "anti-impacto", "anti impacto", "capinha", "outro"}
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
         st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
@@ -1845,9 +1843,14 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "vr pac masc/vrpm" → "vr pacote masculino"
   "vr pac fem/vrpf" → "vr pacote feminino"
   "very rio/vr" sozinho → gere 2 entradas: "vr pacote masculino" + "vr pacote feminino"
-  "magsafe/mag safe/ms/magsafe" → "magsafe"
+  "magsafe/mag safe/ms" → "magsafe"
   "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
   "div masc/diversos masc/dm" → "diversos masculino"
+  "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (será criado como avulso)
+  "película/pelicula/peliculas/pel" → "película"  (avulso)
+  "couro/leather" → "couro"  (avulso)
+  "clear/transparente/cristal" → "clear"  (avulso)
+  Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
@@ -1932,10 +1935,29 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 _nao_comp = _entry.get("nao_compreendido", False)
                                 _motivo   = _entry.get("motivo", "")
 
-                                if _nao_comp or not _kit or _kit not in _WPP_KITS:
+                                if _nao_comp or not _kit:
                                     _nao_compreendidos.append(
-                                        f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or ('kit desconhecido: ' + _kit if _kit else 'não identificado')}"
+                                        f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or 'não identificado'}"
                                     )
+                                    continue
+
+                                # Kit avulso (carteira, película, etc.) ou kit desconhecido → avulso automático
+                                if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
+                                    _prod_obj_av = _achar_produto(_cod, _nome)
+                                    _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
+                                    _desc_av  = f"{_nome_av} / {_kit.title()}"
+                                    _linhas_expandidas.append({
+                                        "✓": False, "_cod": _cod, "_nome": _nome_av,
+                                        "_kit": _kit, "_conf": _conf, "_achado": False,
+                                        "_avulso_auto": True, "_obs": "",
+                                        "_var_id": "", "_var_cod": "",
+                                        "_prod_id": _prod_obj_av.get("id","") if _prod_obj_av else "",
+                                        "_custo": 0.0,
+                                        "Aparelho": _nome_av, "Kit": _kit.title(),
+                                        "Variação": f"⚠ {_desc_av}",
+                                        "Qtd": 1, "Status": "⚠",
+                                        "_desc_avulso": _desc_av,
+                                    })
                                     continue
 
                                 _cores_kit = _WPP_KITS.get(_kit, [])
