@@ -3156,14 +3156,17 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                        use_container_width=True, key="dl_filt_pdf_c")
                 with _col_ex5:
                     if st.button("📋 Texto", use_container_width=True, key="txt_filt"):
-                        st.session_state["_show_txt_filt"] = not st.session_state.get("_show_txt_filt", False)
-                if st.session_state.get("_show_txt_filt"):
-                    _linhas_filt = [f"PEDIDO — {fornecedor_global or '—'} — {data_pedido}", "=" * 50]
-                    for _, _rf in _df_filtrado.iterrows():
-                        _obs_f = str(_rf.get("observacao", "")).strip()
-                        _obs_s = f" | {_obs_f}" if _obs_f else ""
-                        _linhas_filt.append(f"{_rf['produto_nome']} | {_rf.get('variacao_nome','')}{_obs_s} | {int(_rf['quantidade'])} un")
-                    st.text_area("Copie:", "\n".join(_linhas_filt), height=200, key="txt_filt_area")
+                        _linhas_filt = [f"PEDIDO — {fornecedor_global or '—'} — {data_pedido}", "=" * 50]
+                        for _, _rf in _df_filtrado.iterrows():
+                            _obs_f = str(_rf.get("observacao", "")).strip()
+                            _obs_s = f" | {_obs_f}" if _obs_f else ""
+                            _linhas_filt.append(f"{_rf['produto_nome']} | {_rf.get('variacao_nome','')}{_obs_s} | {int(_rf['quantidade'])} un")
+                        st.session_state["_ctxt_filt"] = "\n".join(_linhas_filt)
+                if "_ctxt_filt" in st.session_state:
+                    import streamlit.components.v1 as _cv1f, html as _hf
+                    _tf = st.session_state["_ctxt_filt"]
+                    del st.session_state["_ctxt_filt"]
+                    _cv1f.html(f'<textarea id="ct" style="position:fixed;top:-9999px">{_hf.escape(_tf)}</textarea><p style="margin:0;font:13px sans-serif;color:#28a745">✅ Texto copiado!</p><script>(function(){{var e=document.getElementById("ct");e.focus();e.select();try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}})}}catch(ex){{document.execCommand("copy")}}}})()</script>', height=35)
 
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
             # linha de exportação simplificada (produto / variação / qtd)
@@ -3187,7 +3190,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                         obs = str(r["observacao"]).strip() if r["observacao"] else ""
                         obs_s = f" | {obs}" if obs else ""
                         linhas_s.append(f"{r['produto_nome']} | {r['variacao_nome']}{obs_s} | {int(r['quantidade'])} un")
-                    st.text_area("Copie:", "\n".join(linhas_s), height=220, key="txt_simples_area")
+                    import streamlit.components.v1 as _cv1s, html as _hs
+                    _ts = "\n".join(linhas_s)
+                    _cv1s.html(f'<textarea id="ct" style="position:fixed;top:-9999px">{_hs.escape(_ts)}</textarea><p style="margin:0;font:13px sans-serif;color:#28a745">✅ Texto copiado!</p><script>(function(){{var e=document.getElementById("ct");e.focus();e.select();try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}})}}catch(ex){{document.execCommand("copy")}}}})()</script>', height=35)
             with col_s3:
                 pdf_simples = gerar_pdf_pedido(df_ped, fornecedor_global or "—", str(data_pedido), simplificado=True)
                 st.download_button("📑 PDF simplificado (fornecedor)",
@@ -3261,7 +3266,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     linhas += ["=" * 60, f"TOTAL: R$ {total_est:,.2f}"]
                     if obs_pedido:
                         linhas.append(f"OBS: {obs_pedido}")
-                    st.text_area("Copie:", "\n".join(linhas), height=250)
+                    import streamlit.components.v1 as _cv1d, html as _hd
+                    _td = "\n".join(linhas)
+                    _cv1d.html(f'<textarea id="ct" style="position:fixed;top:-9999px">{_hd.escape(_td)}</textarea><p style="margin:0;font:13px sans-serif;color:#28a745">✅ Texto copiado!</p><script>(function(){{var e=document.getElementById("ct");e.focus();e.select();try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}})}}catch(ex){{document.execCommand("copy")}}}})()</script>', height=35)
 
             # Etiquetas só dos cadastrados (têm variacao_id)
             itens_com_id = [it for it in todos_itens_ped if it.get("variacao_id")]
