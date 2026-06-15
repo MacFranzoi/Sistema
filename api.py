@@ -504,8 +504,11 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None, criado_por=Non
                 continue
             with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
                 d = json.load(f)
-            if d.get("tipo") == tipo and "ordem" in d:
-                max_ordem = max(max_ordem, d["ordem"])
+            if d.get("tipo") == tipo and d.get("ordem") is not None:
+                try:
+                    max_ordem = max(max_ordem, int(d["ordem"]))
+                except (TypeError, ValueError):
+                    pass
     except Exception:
         pass
 

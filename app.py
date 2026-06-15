@@ -853,9 +853,10 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
             if not _nome_novo.strip():
                 st.error("Digite um nome.")
             else:
+                _criado_por = st.session_state.get("usuario_logado", "")
                 _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
                                         loja_id=loja_id, loja_nome=loja_sel_nome,
-                                        criado_por=st.session_state.get("usuario_logado", ""))
+                                        criado_por=_criado_por)
                 st.session_state[f"lista_arq_{key_suffix}"] = _pos.path.basename(_cam)
                 st.success("✅ Lista salva!")
                 st.rerun()
