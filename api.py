@@ -180,14 +180,18 @@ CUSTOS_TIPO_PADRAO = {
 
 def carregar_custos_tipo():
     if not os.path.exists(CUSTOS_TIPO_FILE):
+        _gh_baixar_arquivo("custos_tipo.json", CUSTOS_TIPO_FILE)
+    if not os.path.exists(CUSTOS_TIPO_FILE):
         return dict(CUSTOS_TIPO_PADRAO)
     with open(CUSTOS_TIPO_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 
 def salvar_custos_tipo(dados):
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(CUSTOS_TIPO_FILE, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    _gh_push_arquivo("custos_tipo.json", conteudo, "Atualiza custos por tipo")
 
 
 def detectar_custo_tipo(produto_nome, grupo_nome="", custos=None):
@@ -632,14 +636,18 @@ def grupos_arvore():
 def carregar_disponibilidade():
     """Retorna {loja_id: {produto_id: bool}}"""
     if not os.path.exists(DISPONIBILIDADE_FILE):
+        _gh_baixar_arquivo("disponibilidade_lojas.json", DISPONIBILIDADE_FILE)
+    if not os.path.exists(DISPONIBILIDADE_FILE):
         return {}
     with open(DISPONIBILIDADE_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 
 def salvar_disponibilidade(dados):
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(DISPONIBILIDADE_FILE, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    _gh_push_arquivo("disponibilidade_lojas.json", conteudo, "Atualiza disponibilidade por loja")
 
 
 def toggle_produto_loja(produto_id, loja_id, ativo: bool):
