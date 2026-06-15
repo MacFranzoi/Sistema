@@ -245,6 +245,10 @@ def _post(endpoint, body, loja_id=None):
     return _request("POST", endpoint, body=body, loja_id=loja_id)
 
 
+def _delete(endpoint, loja_id=None):
+    return _request("DELETE", endpoint, loja_id=loja_id)
+
+
 # ──────────────────────────────────────────────
 # Cache de produtos
 # ──────────────────────────────────────────────
@@ -1252,3 +1256,118 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
     if m:
         return json.loads(m.group())
     return json.loads(raw)
+
+
+# ──────────────────────────────────────────────
+# Situações
+# ──────────────────────────────────────────────
+
+def buscar_situacoes_compras():
+    r = _get("situacoescompras")
+    dados = r.get("data", r) if isinstance(r, dict) else r
+    return dados if isinstance(dados, list) else []
+
+def buscar_situacoes_vendas():
+    r = _get("situacoesvendas")
+    dados = r.get("data", r) if isinstance(r, dict) else r
+    return dados if isinstance(dados, list) else []
+
+def buscar_situacoes_orcamentos():
+    r = _get("situacoesorcamentos")
+    dados = r.get("data", r) if isinstance(r, dict) else r
+    return dados if isinstance(dados, list) else []
+
+
+# ──────────────────────────────────────────────
+# Funcionários
+# ──────────────────────────────────────────────
+
+def buscar_funcionarios(termo="", limite=100):
+    params = {"limite": limite}
+    if termo:
+        params["nome"] = termo
+    r = _get("funcionarios", params=params)
+    dados = r.get("data", r) if isinstance(r, dict) else r
+    return dados if isinstance(dados, list) else []
+
+
+# ──────────────────────────────────────────────
+# CRUD Clientes
+# ──────────────────────────────────────────────
+
+def criar_cliente(dados):
+    return _post("clientes", dados)
+
+def atualizar_cliente(cliente_id, dados):
+    return _put(f"clientes/{cliente_id}", dados)
+
+def excluir_cliente(cliente_id):
+    return _delete(f"clientes/{cliente_id}")
+
+
+# ──────────────────────────────────────────────
+# CRUD Fornecedores
+# ──────────────────────────────────────────────
+
+def criar_fornecedor(dados):
+    return _post("fornecedores", dados)
+
+def atualizar_fornecedor(fornecedor_id, dados):
+    return _put(f"fornecedores/{fornecedor_id}", dados)
+
+def excluir_fornecedor(fornecedor_id):
+    return _delete(f"fornecedores/{fornecedor_id}")
+
+
+# ──────────────────────────────────────────────
+# Detalhes de compra
+# ──────────────────────────────────────────────
+
+def buscar_compra(compra_id, loja_id=None):
+    r = _get(f"pedidoscompras/{compra_id}", loja_id=loja_id)
+    return r.get("data", r) if isinstance(r, dict) else r
+
+
+# ──────────────────────────────────────────────
+# Registrar compra no GestãoClick
+# ──────────────────────────────────────────────
+
+def registrar_compra_gestaoclick(itens, fornecedor_id, data_emissao, situacao_id,
+                                  observacoes="", loja_id=None):
+    """
+    Cria um pedido de compra no GestãoClick a partir de itens do pedido local.
+    Apenas itens com produto_id + variacao_id são incluídos.
+    """
+    import time as _t
+    codigo = str(int(_t.time()) % 100000)
+
+    produtos = []
+    for item in itens:
+        if not item.get("produto_id") or not item.get("variacao_id"):
+            continue
+        custo_raw = item.get("valor_custo", "") or "0.00"
+        try:
+            custo = f"{float(str(custo_raw).replace(',', '.')):.2f}"
+        except (TypeError, ValueError):
+            custo = "0.00"
+        produtos.append({
+            "produto_id": str(item["produto_id"]),
+            "variacao_id": str(item["variacao_id"]),
+            "nome_produto": item.get("produto_nome", ""),
+            "quantidade": str(int(item.get("quantidade", 1))),
+            "valor_custo": custo,
+        })
+
+    if not produtos:
+        raise ValueError("Nenhum item cadastrado no sistema (com produto_id/variacao_id) para registrar.")
+
+    body = {
+        "codigo": codigo,
+        "fornecedor_id": str(fornecedor_id),
+        "situacao_id": str(situacao_id),
+        "data_emissao": str(data_emissao),
+        "observacoes": observacoes,
+        "produtos": produtos,
+    }
+
+    return _post("pedidoscompras", body, loja_id=loja_id)

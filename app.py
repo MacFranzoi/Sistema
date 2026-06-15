@@ -1062,6 +1062,33 @@ if _pg == "dashboard":
           <div class="stat-lbl" style="margin-top:4px">sync {s}</div>
         </div>""", unsafe_allow_html=True)
 
+    # Resumo financeiro do dia/mês
+    with st.expander("💰 Resumo financeiro rápido", expanded=False):
+        from datetime import timedelta
+        _df1, _df2, _df3 = st.columns([1, 1, 1])
+        _d_dash_ini = _df1.date_input("De", value=date.today().replace(day=1), key="dash_fi")
+        _d_dash_fim = _df2.date_input("Até", value=date.today(), key="dash_ff")
+        if _df3.button("📊 Carregar", use_container_width=True, key="dash_fin_btn"):
+            st.session_state.pop("dash_fin_cache", None)
+        if "dash_fin_cache" not in st.session_state:
+            try:
+                _rec_d = api.buscar_contas_receber(data_ini=str(_d_dash_ini), data_fim=str(_d_dash_fim), limite=500)
+                _pag_d = api.buscar_contas_pagar(data_ini=str(_d_dash_ini), data_fim=str(_d_dash_fim), limite=500)
+                if not isinstance(_rec_d, list): _rec_d = []
+                if not isinstance(_pag_d, list): _pag_d = []
+                _tr = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in _rec_d)
+                _tp = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in _pag_d)
+                st.session_state["dash_fin_cache"] = (_tr, _tp)
+            except Exception:
+                st.session_state["dash_fin_cache"] = (0.0, 0.0)
+        _tr_d, _tp_d = st.session_state.get("dash_fin_cache", (0.0, 0.0))
+        _res_d = _tr_d - _tp_d
+        _cor_res_d = GRN if _res_d >= 0 else RED
+        _dfc1, _dfc2, _dfc3 = st.columns(3)
+        _dfc1.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{GRN}">R$ {_tr_d:,.0f}</div><div class="stat-lbl">A receber</div></div>', unsafe_allow_html=True)
+        _dfc2.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{RED}">R$ {_tp_d:,.0f}</div><div class="stat-lbl">A pagar</div></div>', unsafe_allow_html=True)
+        _dfc3.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{_cor_res_d}">R$ {_res_d:,.0f}</div><div class="stat-lbl">Resultado</div></div>', unsafe_allow_html=True)
+
     if clip:
         st.info(f"📋 Área de transferência: **{clip['tipo']}** — {len(clip['itens'])} itens · de: {clip.get('origem','—')}")
         if st.button("🗑️ Limpar transferência", key="dash_clip"):
@@ -1072,10 +1099,49 @@ if _pg == "dashboard":
 # CLIENTES
 # ─────────────────────────────────────────────────────────────────
 if _pg == "clientes":
-    sc1, sc2 = st.columns([3, 1])
+    sc1, sc2, sc3 = st.columns([3, 1, 1])
     termo_cli = sc1.text_input("Buscar cliente", placeholder="Nome, CPF/CNPJ, e-mail…", key="cli_busca", label_visibility="collapsed")
     if sc2.button("🔍 Buscar", use_container_width=True, key="cli_btn"):
         st.session_state["cli_dados"] = None
+    if sc3.button("➕ Novo", use_container_width=True, key="cli_novo_btn"):
+        st.session_state["_cli_form"] = "novo"
+        st.session_state["_cli_edit_id"] = None
+
+    # Formulário criar/editar
+    _cli_form_modo = st.session_state.get("_cli_form")
+    _cli_edit_obj  = st.session_state.get("_cli_edit_obj", {})
+    if _cli_form_modo:
+        with st.expander("✏️ " + ("Novo cliente" if _cli_form_modo == "novo" else "Editar cliente"), expanded=True):
+            _cf1, _cf2 = st.columns(2)
+            _tipo_p = _cf1.selectbox("Tipo de pessoa", ["PF - Pessoa Física", "PJ - Pessoa Jurídica"],
+                                     index=0 if _cli_edit_obj.get("tipo_pessoa","PF")=="PF" else 1, key="cli_tipo")
+            _nome_c = _cf2.text_input("Nome / Razão Social", value=_cli_edit_obj.get("nome") or _cli_edit_obj.get("razao_social",""), key="cli_nome")
+            _cpf_c  = _cf1.text_input("CPF / CNPJ", value=_cli_edit_obj.get("cpf_cnpj",""), key="cli_cpf")
+            _tel_c  = _cf2.text_input("Telefone", value=_cli_edit_obj.get("telefone","") or _cli_edit_obj.get("celular",""), key="cli_tel")
+            _email_c = _cf1.text_input("E-mail", value=_cli_edit_obj.get("email",""), key="cli_email")
+            _obs_c   = _cf2.text_input("Observações", value=_cli_edit_obj.get("observacoes",""), key="cli_obs")
+            _cbf1, _cbf2 = st.columns(2)
+            if _cbf1.button("✅ Salvar", use_container_width=True, type="primary", key="cli_salvar"):
+                _tipo_v = "PF" if "PF" in _tipo_p else "PJ"
+                _body_c = {"tipo_pessoa": _tipo_v, "nome": _nome_c, "cpf_cnpj": _cpf_c,
+                           "telefone": _tel_c, "email": _email_c, "observacoes": _obs_c, "ativo": "1"}
+                try:
+                    if _cli_form_modo == "novo":
+                        api.criar_cliente(_body_c)
+                        st.success("✅ Cliente criado!")
+                    else:
+                        api.atualizar_cliente(st.session_state["_cli_edit_id"], _body_c)
+                        st.success("✅ Cliente atualizado!")
+                    st.session_state.pop("_cli_form", None)
+                    st.session_state.pop("_cli_edit_obj", None)
+                    st.session_state["cli_dados"] = None
+                    st.rerun()
+                except Exception as _e_cli:
+                    st.error(f"Erro: {_e_cli}")
+            if _cbf2.button("❌ Cancelar", use_container_width=True, key="cli_cancel"):
+                st.session_state.pop("_cli_form", None)
+                st.session_state.pop("_cli_edit_obj", None)
+                st.rerun()
 
     if "cli_dados" not in st.session_state or st.session_state.cli_dados is None:
         with st.spinner("Carregando clientes…"):
@@ -1092,19 +1158,31 @@ if _pg == "clientes":
     st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin-bottom:12px'>{len(clientes)} cliente(s) encontrado(s)</div>", unsafe_allow_html=True)
 
     if clientes:
-        import pandas as pd
-        rows = []
-        for c in clientes:
-            rows.append({
-                "Nome": c.get("nome") or c.get("razao_social", ""),
-                "CPF/CNPJ": c.get("cpf_cnpj", ""),
-                "Telefone": c.get("telefone", "") or c.get("celular", ""),
-                "E-mail": c.get("email", ""),
-                "Cidade": c.get("cidade", ""),
-                "UF": c.get("uf", ""),
-            })
-        df_cli = pd.DataFrame(rows)
-        st.dataframe(df_cli, use_container_width=True, hide_index=True)
+        for _ci, _c in enumerate(clientes):
+            _cn = _c.get("nome") or _c.get("razao_social", "")
+            _cc = _c.get("cpf_cnpj", "")
+            _ct = _c.get("telefone", "") or _c.get("celular", "")
+            _ce = _c.get("email", "")
+            _lbl_c = f"**{_cn}** · {_cc} · {_ct}"
+            with st.expander(_lbl_c):
+                _ec1, _ec2, _ec3 = st.columns(3)
+                _ec1.write(f"**E-mail:** {_ce}")
+                _ec2.write(f"**Cidade:** {_c.get('cidade','')} / {_c.get('uf','')}")
+                _ec3.write(f"**Tipo:** {_c.get('tipo_pessoa','')}")
+                _eb1, _eb2 = st.columns(2)
+                if _eb1.button("✏️ Editar", key=f"cli_ed_{_ci}", use_container_width=True):
+                    st.session_state["_cli_form"] = "editar"
+                    st.session_state["_cli_edit_id"] = _c.get("id")
+                    st.session_state["_cli_edit_obj"] = _c
+                    st.rerun()
+                if _eb2.button("🗑️ Excluir", key=f"cli_del_{_ci}", use_container_width=True):
+                    try:
+                        api.excluir_cliente(_c.get("id"))
+                        st.success("Cliente excluído.")
+                        st.session_state["cli_dados"] = None
+                        st.rerun()
+                    except Exception as _ex_c:
+                        st.error(f"Erro: {_ex_c}")
     else:
         st.info("Nenhum cliente encontrado. Use a busca acima.")
 
@@ -1112,10 +1190,48 @@ if _pg == "clientes":
 # FORNECEDORES
 # ─────────────────────────────────────────────────────────────────
 if _pg == "fornecedores":
-    sf1, sf2 = st.columns([3, 1])
+    sf1, sf2, sf3 = st.columns([3, 1, 1])
     termo_forn = sf1.text_input("Buscar fornecedor", placeholder="Nome, CNPJ…", key="forn_busca", label_visibility="collapsed")
     if sf2.button("🔍 Buscar", use_container_width=True, key="forn_btn"):
         st.session_state["forn_dados"] = None
+    if sf3.button("➕ Novo", use_container_width=True, key="forn_novo_btn"):
+        st.session_state["_forn_form"] = "novo"
+        st.session_state["_forn_edit_obj"] = {}
+
+    _forn_form_modo = st.session_state.get("_forn_form")
+    _forn_edit_obj  = st.session_state.get("_forn_edit_obj", {})
+    if _forn_form_modo:
+        with st.expander("✏️ " + ("Novo fornecedor" if _forn_form_modo == "novo" else "Editar fornecedor"), expanded=True):
+            _ff1, _ff2 = st.columns(2)
+            _tipo_f = _ff1.selectbox("Tipo de pessoa", ["PF - Pessoa Física", "PJ - Pessoa Jurídica"],
+                                     index=0 if _forn_edit_obj.get("tipo_pessoa","PJ")=="PF" else 1, key="forn_tipo")
+            _nome_f  = _ff2.text_input("Nome / Razão Social", value=_forn_edit_obj.get("razao_social") or _forn_edit_obj.get("nome",""), key="forn_nome")
+            _cnpj_f  = _ff1.text_input("CPF / CNPJ", value=_forn_edit_obj.get("cnpj") or _forn_edit_obj.get("cpf_cnpj",""), key="forn_cnpj")
+            _tel_f   = _ff2.text_input("Telefone", value=_forn_edit_obj.get("telefone","") or _forn_edit_obj.get("celular",""), key="forn_tel")
+            _email_f = _ff1.text_input("E-mail", value=_forn_edit_obj.get("email",""), key="forn_email")
+            _obs_f   = _ff2.text_input("Observações", value=_forn_edit_obj.get("observacoes",""), key="forn_obs")
+            _fbf1, _fbf2 = st.columns(2)
+            if _fbf1.button("✅ Salvar", use_container_width=True, type="primary", key="forn_salvar"):
+                _tipo_fv = "PF" if "PF" in _tipo_f else "PJ"
+                _body_f = {"tipo_pessoa": _tipo_fv, "nome": _nome_f, "cpf_cnpj": _cnpj_f,
+                           "telefone": _tel_f, "email": _email_f, "observacoes": _obs_f, "ativo": "1"}
+                try:
+                    if _forn_form_modo == "novo":
+                        api.criar_fornecedor(_body_f)
+                        st.success("✅ Fornecedor criado!")
+                    else:
+                        api.atualizar_fornecedor(st.session_state["_forn_edit_id"], _body_f)
+                        st.success("✅ Fornecedor atualizado!")
+                    st.session_state.pop("_forn_form", None)
+                    st.session_state.pop("_forn_edit_obj", None)
+                    st.session_state["forn_dados"] = None
+                    st.rerun()
+                except Exception as _e_forn:
+                    st.error(f"Erro: {_e_forn}")
+            if _fbf2.button("❌ Cancelar", use_container_width=True, key="forn_cancel"):
+                st.session_state.pop("_forn_form", None)
+                st.session_state.pop("_forn_edit_obj", None)
+                st.rerun()
 
     if "forn_dados" not in st.session_state or st.session_state.forn_dados is None:
         with st.spinner("Carregando fornecedores…"):
@@ -1132,18 +1248,29 @@ if _pg == "fornecedores":
     st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin-bottom:12px'>{len(fornecedores)} fornecedor(es)</div>", unsafe_allow_html=True)
 
     if fornecedores:
-        import pandas as pd
-        rows = []
-        for f in fornecedores:
-            rows.append({
-                "Nome / Razão Social": f.get("razao_social") or f.get("nome", ""),
-                "CNPJ": f.get("cnpj") or f.get("cpf_cnpj", ""),
-                "Telefone": f.get("telefone", "") or f.get("celular", ""),
-                "E-mail": f.get("email", ""),
-                "Cidade": f.get("cidade", ""),
-                "UF": f.get("uf", ""),
-            })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        for _fi, _f in enumerate(fornecedores):
+            _fn = _f.get("razao_social") or _f.get("nome", "")
+            _fc = _f.get("cnpj") or _f.get("cpf_cnpj", "")
+            _ft = _f.get("telefone", "") or _f.get("celular", "")
+            with st.expander(f"**{_fn}** · {_fc}"):
+                _ffe1, _ffe2, _ffe3 = st.columns(3)
+                _ffe1.write(f"**Tel:** {_ft}")
+                _ffe2.write(f"**E-mail:** {_f.get('email','')}")
+                _ffe3.write(f"**Cidade:** {_f.get('cidade','')} / {_f.get('uf','')}")
+                _fbe1, _fbe2 = st.columns(2)
+                if _fbe1.button("✏️ Editar", key=f"forn_ed_{_fi}", use_container_width=True):
+                    st.session_state["_forn_form"] = "editar"
+                    st.session_state["_forn_edit_id"] = _f.get("id")
+                    st.session_state["_forn_edit_obj"] = _f
+                    st.rerun()
+                if _fbe2.button("🗑️ Excluir", key=f"forn_del_{_fi}", use_container_width=True):
+                    try:
+                        api.excluir_fornecedor(_f.get("id"))
+                        st.success("Fornecedor excluído.")
+                        st.session_state["forn_dados"] = None
+                        st.rerun()
+                    except Exception as _ex_f:
+                        st.error(f"Erro: {_ex_f}")
     else:
         st.info("Nenhum fornecedor encontrado.")
 
@@ -1279,16 +1406,38 @@ if _pg == "compras_hist":
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
     if compras:
-        rows = []
-        for c in compras:
-            rows.append({
-                "Nº": c.get("numero", ""),
-                "Data": (c.get("data_emissao") or c.get("data", ""))[:10],
-                "Fornecedor": c.get("fornecedor_nome") or c.get("fornecedor", {}).get("nome", ""),
-                "Valor": f"R$ {float(c.get('valor_total') or 0):,.2f}",
-                "Status": c.get("status", ""),
-            })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        for _chi, _cp in enumerate(compras):
+            _cp_forn = _cp.get("fornecedor_nome") or (_cp.get("fornecedor") or {}).get("nome", "")
+            _cp_data = ((_cp.get("data_emissao") or _cp.get("data", "")) + "")[:10]
+            _cp_val  = float(_cp.get("valor_total") or 0)
+            _cp_num  = _cp.get("numero", "")
+            _cp_stat = _cp.get("status", "")
+            _lbl_cp = f"**#{_cp_num}** · {_cp_data} · {_cp_forn} · R$ {_cp_val:,.2f}"
+            with st.expander(_lbl_cp):
+                _cpx1, _cpx2, _cpx3 = st.columns(3)
+                _cpx1.write(f"**Status:** {_cp_stat}")
+                _cpx2.write(f"**NF-e:** {_cp.get('numero_nfe','—')}")
+                _cpx3.write(f"**Obs:** {_cp.get('observacoes','—')}")
+                if st.button("🔍 Ver itens detalhados", key=f"comp_det_{_chi}", use_container_width=True):
+                    with st.spinner("Carregando itens…"):
+                        try:
+                            _det = api.buscar_compra(_cp.get("id"), loja_id=loja_id)
+                            _prods_det = _det.get("produtos", [])
+                            if _prods_det:
+                                _rows_det = []
+                                for _pd in _prods_det:
+                                    _rows_det.append({
+                                        "Produto": _pd.get("nome_produto",""),
+                                        "Variação": _pd.get("nome_variacao",""),
+                                        "Qtd": _pd.get("quantidade",""),
+                                        "Custo Unit.": f"R$ {float(_pd.get('valor_custo') or 0):,.2f}",
+                                        "Total": f"R$ {float(_pd.get('valor_total') or 0):,.2f}",
+                                    })
+                                st.dataframe(pd.DataFrame(_rows_det), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Nenhum item detalhado retornado.")
+                        except Exception as _ex_det:
+                            st.error(f"Erro: {_ex_det}")
     else:
         st.info("Nenhum pedido de compra encontrado no período.")
 
@@ -3269,6 +3418,53 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     import streamlit.components.v1 as _cv1d, html as _hd
                     _td = "\n".join(linhas)
                     _cv1d.html(f'<textarea id="ct" style="position:fixed;top:-9999px">{_hd.escape(_td)}</textarea><p style="margin:0;font:13px sans-serif;color:#28a745">✅ Texto copiado!</p><script>(function(){{var e=document.getElementById("ct");e.focus();e.select();try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}})}}catch(ex){{document.execCommand("copy")}}}})()</script>', height=35)
+
+            # Registrar compra no GestãoClick
+            with st.expander("📤 Registrar Compra no GestãoClick"):
+                _itens_cad_gc = [it for it in todos_itens_ped if it.get("produto_id") and it.get("variacao_id")]
+                _itens_avs_gc = [it for it in todos_itens_ped if not it.get("produto_id")]
+                if not _itens_cad_gc:
+                    st.warning("Nenhum item cadastrado no sistema no pedido. Adicione produtos pelo catálogo para poder registrar.")
+                else:
+                    st.info(f"**{len(_itens_cad_gc)}** item(ns) cadastrado(s) serão enviados. **{len(_itens_avs_gc)}** avulso(s) ignorado(s).")
+                    _rg1, _rg2 = st.columns(2)
+                    _forn_gc = _rg1.text_input("Buscar fornecedor", value=st.session_state.get("fornecedor_global",""), key="gc_forn_busca")
+                    _data_gc = _rg2.date_input("Data da compra", value=date.today(), key="gc_data")
+                    _obs_gc  = st.text_input("Observações", key="gc_obs")
+                    if st.button("🔍 Buscar fornecedor no GestãoClick", use_container_width=True, key="gc_forn_btn"):
+                        with st.spinner("Buscando…"):
+                            try:
+                                st.session_state["_gc_forns"] = api.buscar_fornecedores(_forn_gc, limite=20)
+                            except Exception as _ex_gf:
+                                st.error(f"Erro: {_ex_gf}")
+                    _gc_forns = st.session_state.get("_gc_forns", [])
+                    if _gc_forns:
+                        _gc_forn_opts = {}
+                        for _gf in _gc_forns:
+                            _gfn = _gf.get("razao_social") or _gf.get("nome","")
+                            _gfc = _gf.get("cnpj") or _gf.get("cpf_cnpj","")
+                            _gc_forn_opts[f"{_gfn} ({_gfc})"] = _gf.get("id")
+                        _gc_forn_sel = st.selectbox("Fornecedor", list(_gc_forn_opts.keys()), key="gc_forn_sel")
+                        _gc_forn_id  = _gc_forn_opts[_gc_forn_sel]
+                        if "comp_situacoes" not in st.session_state:
+                            try:
+                                _sits_gc = api.buscar_situacoes_compras()
+                                st.session_state["comp_situacoes"] = {s.get("nome","—"): s.get("id","1") for s in _sits_gc if isinstance(s, dict) and s.get("nome")}
+                            except Exception:
+                                st.session_state["comp_situacoes"] = {"Aguardando recebimento": "1"}
+                        _sits_map = st.session_state.get("comp_situacoes", {"Aguardando recebimento": "1"})
+                        _sit_sel_gc = st.selectbox("Situação", list(_sits_map.keys()), key="gc_sit_sel")
+                        _sit_id_gc  = _sits_map[_sit_sel_gc]
+                        if st.button("✅ Confirmar e registrar compra", type="primary", use_container_width=True, key="gc_confirmar"):
+                            with st.spinner("Enviando ao GestãoClick…"):
+                                try:
+                                    _res_gc = api.registrar_compra_gestaoclick(
+                                        _itens_cad_gc, _gc_forn_id, _data_gc, _sit_id_gc, _obs_gc, loja_id
+                                    )
+                                    st.success(f"✅ Compra registrada no GestãoClick! Resp: {str(_res_gc)[:200]}")
+                                    st.session_state.pop("_gc_forns", None)
+                                except Exception as _ex_gc:
+                                    st.error(f"Erro ao registrar: {_ex_gc}")
 
             # Etiquetas só dos cadastrados (têm variacao_id)
             itens_com_id = [it for it in todos_itens_ped if it.get("variacao_id")]
