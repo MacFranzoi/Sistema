@@ -1997,6 +1997,20 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
+FORMATO TRANSCRIÇÃO DE VOZ — quando o texto parece ditado (sem pontuação, palavras soltas):
+- Padrão: "[modelo] quantidade [número por extenso ou dígito] [cor/kit] [número] [cor/kit] ..."
+- Números por extenso: "uma/um"=1, "duas/dois"=2, "três/tres"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
+- Cada par [número][cor/kit] gera uma entrada com quantidade_fixa=esse número
+- Se "quantidade" aparece antes de uma sequência, interprete o que segue como lista de pares qty+item
+- Cores isoladas (preta, lilas, verde militar, rose, azul, vinho etc.) → kit="avulso cor" com a cor na descrição
+- Kits nomeados (brilho, masculino, feminino, etc.) → kit normal com quantidade_fixa
+- Ex: "a06 quantidade uma preta duas verde militar brilho 2 lilas" →
+    {modelo:A06, kit:"avulso cor", descricao:"preta", qtd:1}
+    {modelo:A06, kit:"avulso cor", descricao:"verde militar", qtd:2}
+    {modelo:A06, kit:"brilho", qtd:2}  ← "brilho 2" = brilho com qtd 2
+    {modelo:A06, kit:"avulso cor", descricao:"lilas", qtd:1}  ← sem número antes = 1
+- Se não há número antes de um item na sequência, assuma quantidade_fixa=1
+
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
@@ -2015,7 +2029,9 @@ POSTURA — REGRA ABSOLUTA:
 Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
 
 Retorne SOMENTE JSON válido, sem markdown:
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
+
+O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nome da cor (ex: "preta", "verde militar", "lilás"). Para outros kits, deixe null."""
 
                     st.session_state.pop("wpp_truncado_resto", None)
                     try:
@@ -2114,11 +2130,17 @@ Retorne SOMENTE JSON válido, sem markdown:
                                 )
                                 continue
 
-                            # Kit avulso (carteira, película, etc.) ou kit desconhecido → avulso automático
+                            # Kit avulso (carteira, película, cor etc.) ou kit desconhecido → avulso automático
                             if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
                                 _prod_obj_av = _achar_produto(_cod, _nome)
                                 _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
-                                _desc_av  = f"{_nome_av} / {_kit.title()}"
+                                _desc_avulso_extra = _entry.get("descricao_avulso") or ""
+                                if _kit == "avulso cor" and _desc_avulso_extra:
+                                    _desc_av = f"{_nome_av} / {_desc_avulso_extra.title()}"
+                                else:
+                                    _desc_av = f"{_nome_av} / {_kit.title()}"
+                                    if _desc_avulso_extra:
+                                        _desc_av += f" {_desc_avulso_extra.title()}"
                                 _linhas_expandidas.append({
                                     "✓": False, "_cod": _cod, "_nome": _nome_av,
                                     "_kit": _kit, "_conf": _conf, "_achado": False,
