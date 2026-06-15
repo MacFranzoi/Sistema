@@ -74,31 +74,26 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # ── Tema ──
-if "tema" not in st.session_state:
-    st.session_state.tema = "light"
-_dark = st.session_state.tema == "dark"
+# ── Somente dark mode ──
+_dark = True
 
-# ── Design System: moderno, minimalista, inspirado em Linear/Vercel ──
-# Light: fundo off-white quente, sidebar branca, acento violeta-índigo
-# Dark:  grafite profundo, sidebar levemente mais clara, mesmo acento
-BG      = "#18181b" if _dark else "#fafafa"
-SB      = "#111113" if _dark else "#ffffff"
-SB2     = "#1c1c1f" if _dark else "#f4f4f5"
-CARD    = "#1c1c1f" if _dark else "#ffffff"
-BOR     = "#27272a" if _dark else "#e4e4e7"
-TXT     = "#fafafa"  if _dark else "#09090b"
-TXT2    = "#71717a"  if _dark else "#71717a"
-ACC     = "#7c3aed"               # violeta vibrante
-ACC2    = "#a855f7"               # lilás — gradiente / hover
-ACC_LT  = "rgba(124,58,237,0.08)"
-GRN     = "#16a34a"
-GRN_LT  = "rgba(22,163,74,0.10)"
-RED     = "#dc2626"
-RED_LT  = "rgba(220,38,38,0.10)"
-SB_W    = "232px"
-# aliases para não quebrar código que usa YEL/YEL_BG
-YEL     = ACC
-YEL_BG  = ACC_LT
+BG    = "#0f1117"   # fundo principal — quase preto
+SB    = "#13151a"   # sidebar — ligeiramente mais quente
+SB2   = "#1a1d24"   # hover / linha loja
+CARD  = "#1a1d24"   # cards
+BOR   = "#2a2d36"   # bordas sutis
+TXT   = "#e8eaf0"   # texto principal
+TXT2  = "#6b7280"   # texto secundário / muted
+ACC   = "#7c3aed"   # violeta — acento principal
+ACC2  = "#a855f7"   # lilás — gradiente/hover
+ACC_LT= "rgba(124,58,237,0.12)"
+GRN   = "#22c55e"
+GRN_LT= "rgba(34,197,94,0.10)"
+RED   = "#ef4444"
+RED_LT= "rgba(239,68,68,0.10)"
+SB_W  = "240px"
+YEL   = ACC
+YEL_BG= ACC_LT
 
 st.markdown(f"""
 <style>
@@ -146,80 +141,88 @@ a, button {{ transition: all 0.15s ease !important; }}
     width: {SB_W} !important; min-width: {SB_W} !important;
     padding: 0 !important;
 }}
-[data-testid="stSidebar"] > div:first-child {{ padding: 0 !important; overflow: hidden; }}
+[data-testid="stSidebar"] > div {{
+    padding: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: 100vh !important;
+    display: flex !important; flex-direction: column !important;
+    background: {SB} !important;
+}}
+[data-testid="stSidebar"] > div::-webkit-scrollbar {{ width: 3px; }}
+[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
 
-/* logo strip */
+/* remove padding/gap interno do Streamlit */
+[data-testid="stSidebar"] section, [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+    padding: 0 !important; gap: 0 !important;
+}}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {{
+    margin: 0 !important; padding: 0 !important; gap: 0 !important;
+}}
+
+/* logo */
 .sb-logo {{
     display: flex; align-items: center; gap: 10px;
-    padding: 0 18px; height: 52px;
+    padding: 0 16px; height: 52px;
     border-bottom: 1px solid {BOR};
-    position: sticky; top: 0; z-index: 10;
-    background: {SB};
+    background: {SB}; flex-shrink: 0;
 }}
 .sb-logo-mark {{
-    width: 30px; height: 30px; border-radius: 7px;
-    background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
-    color: #fff; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 1rem; flex-shrink: 0;
-    box-shadow: 0 2px 8px {ACC}55;
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, {ACC}, {ACC2});
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; font-weight: 800; color: #fff;
+    box-shadow: 0 2px 8px {ACC}55; flex-shrink: 0;
 }}
-.sb-logo-text {{
-    font-size: 0.95rem; font-weight: 700; color: {TXT};
-    letter-spacing: -0.3px;
-}}
+.sb-logo-text {{ font-size: 0.9rem; font-weight: 700; color: {TXT}; }}
 
-/* selectbox loja */
+/* selectbox loja — força cor no dark */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] {{
-    margin: 0 !important; padding: 0 !important;
+    margin: 0 !important; padding: 0 !important; flex-shrink: 0;
 }}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {{
-    border-radius: 0 !important;
-    border: none !important;
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div > div {{
+    border-radius: 0 !important; border: none !important;
     border-bottom: 1px solid {BOR} !important;
     background: {SB2} !important;
     padding: 8px 16px !important;
     font-size: 0.82rem !important; font-weight: 500 !important;
     color: {TXT} !important;
 }}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] svg {{ color: {TXT2} !important; fill: {TXT2} !important; }}
 
-/* nav group */
-.nav-group {{
-    font-size: 0.62rem; font-weight: 600; letter-spacing: 1.2px;
-    text-transform: uppercase; color: {TXT2};
-    padding: 18px 18px 5px;
-    user-select: none;
-}}
-
-/* nav buttons */
+/* todos os botões da sidebar */
 [data-testid="stSidebar"] .stButton > button {{
-    width: 100% !important; background: transparent !important;
-    border: none !important; border-radius: 7px !important;
-    text-align: left !important; padding: 7px 12px !important;
-    margin: 1px 8px !important; width: calc(100% - 16px) !important;
-    font-size: 0.85rem !important; font-weight: 400 !important;
+    width: calc(100% - 12px) !important;
+    background: transparent !important; border: none !important;
+    border-radius: 6px !important; text-align: left !important;
+    padding: 7px 12px !important; margin: 1px 6px !important;
+    font-size: 0.84rem !important; font-weight: 400 !important;
     color: {TXT2} !important;
-    transition: background 0.15s ease, color 0.12s ease !important;
+    transition: background 0.12s, color 0.12s !important;
 }}
 [data-testid="stSidebar"] .stButton > button:hover {{
     background: {SB2} !important; color: {TXT} !important;
-    transform: translateX(1px);
 }}
 
-/* footer usuário */
-.sb-footer {{
-    padding: 12px 16px; border-top: 1px solid {BOR};
-    background: {SB}; display: flex; gap: 10px; align-items: center;
-    position: sticky; bottom: 0;
+/* botão de grupo (header colapsável) — sobrescreve o padrão */
+[data-testid="stSidebar"] button[data-sb-group="1"] {{
+    font-size: 0.6rem !important; font-weight: 700 !important;
+    letter-spacing: 1.4px !important; text-transform: uppercase !important;
+    color: {TXT2} !important; padding: 14px 16px 5px !important;
+    margin: 0 !important; border-radius: 0 !important; width: 100% !important;
+    background: transparent !important;
 }}
+
+/* avatar */
 .sb-avatar {{
-    width: 32px; height: 32px; border-radius: 50%;
-    background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, {ACC}, {ACC2});
     color: #fff; display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.78rem; flex-shrink: 0;
-    box-shadow: 0 2px 6px {ACC}44;
+    font-weight: 700; font-size: 0.75rem; flex-shrink: 0;
 }}
-.sb-user-name {{ font-size: 0.82rem; font-weight: 600; color: {TXT}; line-height: 1.2; }}
-.sb-user-role {{ font-size: 0.68rem; color: {TXT2}; }}
+.sb-user-name {{ font-size: 0.8rem; font-weight: 600; color: {TXT}; line-height: 1.2; }}
+.sb-user-role {{ font-size: 0.65rem; color: {TXT2}; }}
 
 /* botões tema/sair no sidebar */
 [data-testid="stSidebar"] .stButton > button[data-testid*="btn_tema"],
@@ -555,107 +558,34 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* ── SIDEBAR SCROLL: o container real de scroll do Streamlit ── */
-[data-testid="stSidebar"] {{
-    overflow: hidden !important;
-}}
-/* O div interno que o Streamlit usa para conteúdo */
-[data-testid="stSidebar"] > div {{
-    height: 100vh !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    display: flex !important;
-    flex-direction: column !important;
-    padding: 0 !important;
-}}
-[data-testid="stSidebar"] > div::-webkit-scrollbar {{ width: 3px; }}
-[data-testid="stSidebar"] > div::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
-
-/* selectbox sem margens */
-[data-testid="stSidebar"] [data-testid="stSelectbox"] {{
-    margin: 0 !important; padding: 0 !important;
-}}
-[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {{
-    border: none !important; border-radius: 0 !important;
-    border-bottom: 1px solid {BOR} !important;
-    background: {SB2} !important;
-    padding: 9px 18px !important;
-    font-size: 0.82rem !important; font-weight: 500 !important;
-    color: {TXT} !important;
-}}
-/* remove gaps do Streamlit na sidebar */
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {{
-    margin: 0 !important; padding: 0 !important; gap: 0 !important;
-}}
-[data-testid="stSidebar"] .stButton {{ margin: 0 !important; }}
-
-/* nav-group label */
-.nav-group {{
-    font-size: 0.62rem; font-weight: 600; letter-spacing: 1.2px;
-    text-transform: uppercase; color: {TXT2};
-    padding: 14px 18px 4px; user-select: none;
-}}
-/* nav buttons */
-[data-testid="stSidebar"] .stButton > button {{
-    width: calc(100% - 16px) !important;
-    background: transparent !important;
-    border: none !important; border-radius: 7px !important;
-    text-align: left !important; padding: 7px 12px !important;
-    margin: 1px 8px !important;
-    font-size: 0.85rem !important; font-weight: 400 !important;
-    color: {TXT2} !important;
-    transition: background 0.15s ease, color 0.12s ease !important;
-}}
-[data-testid="stSidebar"] .stButton > button:hover {{
-    background: {SB2} !important; color: {TXT} !important;
-}}
-/* botões que são headers de grupo (começam com ▾ ou ▸) */
-[data-testid="stSidebar"] .stButton > button[data-testid^="grp_"],
-[data-testid="stSidebar"] button[key^="grp_"] {{
-    font-size: 0.62rem !important; font-weight: 700 !important;
-    letter-spacing: 1.2px !important; text-transform: uppercase !important;
-    color: {TXT2} !important; padding: 14px 18px 4px !important;
-    margin: 0 !important; border-radius: 0 !important;
-    background: transparent !important;
-}}
-
-/* ── PÁGINA: alinha ao topo sem espaço em branco ── */
-/* Streamlit injeta padding-top = altura do header no stMain */
-[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
-    padding-top: 0 !important;
-    margin-top: 0 !important;
-}}
-.main .block-container {{
-    padding-top: 20px !important;
-    padding-bottom: 40px !important;
-    margin-top: 0 !important;
-    max-width: 100% !important;
-}}
-/* Header: altura mínima, mantém botão de toggle da sidebar */
+/* Header mínimo — mantém toggle da sidebar */
 [data-testid="stHeader"] {{
-    background: {SB} !important;
-    height: 38px !important;
-    min-height: 38px !important;
-    border-bottom: 1px solid {BOR} !important;
+    background: {SB} !important; height: 40px !important;
+    min-height: 40px !important; border-bottom: 1px solid {BOR} !important;
+}}
+[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
+    color: {TXT2} !important; fill: {TXT2} !important;
 }}
 [data-testid="stToolbar"] {{ display: none !important; }}
-/* Reduz o espaço que o header reserva abaixo dele */
 [data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
-    padding-top: 38px !important;
+    padding-top: 40px !important;
+}}
+.main .block-container {{
+    padding-top: 22px !important; padding-bottom: 40px !important;
+    max-width: 100% !important;
 }}
 </style>
 <script>
-// Força sidebar expandida após login
 (function() {{
-    const check = setInterval(() => {{
-        const sb = document.querySelector('[data-testid="stSidebar"]');
-        if (sb && sb.getAttribute('aria-expanded') === 'false') {{
-            const btn = document.querySelector('button[aria-controls="stSidebar"]') ||
-                        document.querySelector('[data-testid="stSidebarNavToggleButton"] button');
-            if (btn) btn.click();
-        }}
-        if (sb) clearInterval(check);
-    }}, 200);
+  function openSidebar() {{
+    const sb = document.querySelector('[data-testid="stSidebar"]');
+    if (sb && sb.getAttribute('aria-expanded') === 'false') {{
+      const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
+                  document.querySelector('button[aria-controls*="sidebar"]');
+      if (btn) btn.click();
+    }}
+  }}
+  setTimeout(openSidebar, 300);
 }})();
 </script>
 """, unsafe_allow_html=True)
@@ -675,123 +605,86 @@ with st.sidebar:
     loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
     loja_id = loja_opcoes[loja_sel_nome]
 
-    # Menu agrupado com submenus colapsáveis
+    # ── Menu colapsável ──
     _pg_ativo = st.session_state.pagina
-
-    # grupos na ordem em que aparecem
-    _grupos_ordem = []
-    for _, _, _, grupo, _, _ in _MENU_VISIVEL:
-        if grupo not in _grupos_ordem:
-            _grupos_ordem.append(grupo)
-
-    # qual grupo contém a página ativa
+    _grupos_ordem = list(dict.fromkeys(m[3] for m in _MENU_VISIVEL))
     _grp_ativo = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _grupos_ordem[0])
 
-    # estado de abertura: por padrão abre o grupo da página ativa
-    if "sb_grupos_abertos" not in st.session_state:
-        st.session_state.sb_grupos_abertos = {_grp_ativo}
-    # garante que o grupo da página ativa sempre está aberto
-    st.session_state.sb_grupos_abertos.add(_grp_ativo)
+    if "sb_abertos" not in st.session_state:
+        st.session_state.sb_abertos = {_grp_ativo}
+    st.session_state.sb_abertos.add(_grp_ativo)  # grupo ativo sempre aberto
 
     for grupo in _grupos_ordem:
-        aberto = grupo in st.session_state.sb_grupos_abertos
+        aberto = grupo in st.session_state.sb_abertos
         seta = "▾" if aberto else "▸"
-        # botão do grupo (toggle)
-        st.markdown(f"""
-        <style>
-        button[data-testid="baseButton-secondary"][kind="secondary"][key="grp_{grupo}"] {{
-            background: transparent !important; border: none !important;
-            text-align: left !important; width: 100% !important;
-            font-size: 0.62rem !important; font-weight: 700 !important;
-            letter-spacing: 1.2px !important; text-transform: uppercase !important;
-            color: {TXT2} !important; padding: 14px 18px 4px !important;
-            margin: 0 !important; border-radius: 0 !important;
-            cursor: pointer !important;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
         if st.button(f"{seta}  {grupo}", key=f"grp_{grupo}", use_container_width=True):
-            abertos = st.session_state.sb_grupos_abertos
-            if grupo in abertos:
-                abertos.discard(grupo)
-            else:
-                abertos.add(grupo)
+            s = st.session_state.sb_abertos
+            s.discard(grupo) if grupo in s else s.add(grupo)
             st.rerun()
-
         if aberto:
-            itens_grupo = [m for m in _MENU_VISIVEL if m[3] == grupo]
-            for pid, icon, label, _, aba_idx, _ in itens_grupo:
+            for pid, icon, label, grp, _, _ in _MENU_VISIVEL:
+                if grp != grupo: continue
+                ativo = pid == _pg_ativo
                 if st.button(f"  {icon}  {label}", key=f"nav_{pid}", use_container_width=True):
                     st.session_state.pagina = pid
                     st.rerun()
 
-    # JS: colore o botão ativo + estiliza headers de grupo
+    # JS: aplica visual de ativo e de header-de-grupo via MutationObserver
     _pg_label = next((f"  {m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
-    st.markdown(f"""
-    <script>
-    (function() {{
-      function applyActive() {{
-        // remove ativo anterior
-        document.querySelectorAll('[data-testid="stSidebar"] button.__nav_active')
-          .forEach(b => {{
-            b.classList.remove('__nav_active');
-            b.style.cssText = '';
-          }});
-        // aplica no item correto pelo texto
-        const label = {repr(_pg_label)};
-        document.querySelectorAll('[data-testid="stSidebar"] button').forEach(b => {{
-          if (b.innerText.trim() === label) {{
-            b.classList.add('__nav_active');
-            b.style.background = '{ACC_LT}';
-            b.style.color = '{ACC}';
-            b.style.fontWeight = '600';
-            b.style.borderLeft = '3px solid {ACC}';
-            b.style.paddingLeft = '9px';
-          }}
-        }});
-      }}
-      // Sidebar sempre aberta
-      function openSidebar() {{
-        const sb = document.querySelector('[data-testid="stSidebar"]');
-        if (sb && sb.getAttribute('aria-expanded') === 'false') {{
-          const btn = document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
-                      document.querySelector('button[aria-controls*="sidebar"]');
-          if (btn) btn.click();
-        }}
-      }}
-      if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', () => {{ applyActive(); openSidebar(); }});
+    _grp_labels = [f"▾  {g}" for g in st.session_state.sb_abertos] + \
+                  [f"▸  {g}" for g in _grupos_ordem if g not in st.session_state.sb_abertos]
+    st.markdown(f"""<script>
+(function() {{
+  const ACC    = '{ACC}';
+  const ACC_LT = '{ACC_LT}';
+  const TXT2   = '{TXT2}';
+  const SB2    = '{SB2}';
+  const activeLabel = {repr(_pg_label)};
+  const grpPrefixes = ['▾', '▸'];
+
+  function styleAll() {{
+    const sb = document.querySelector('[data-testid="stSidebar"]');
+    if (!sb) return;
+    sb.querySelectorAll('button').forEach(btn => {{
+      const t = btn.innerText.trim();
+      const firstChar = t[0];
+      if (grpPrefixes.includes(firstChar)) {{
+        // header de grupo
+        btn.style.cssText = `font-size:0.6rem!important;font-weight:700!important;
+          letter-spacing:1.3px!important;text-transform:uppercase!important;
+          color:{TXT2}!important;padding:14px 16px 5px!important;
+          margin:0!important;border-radius:0!important;width:100%!important;
+          background:transparent!important;border:none!important;`;
+      }} else if (t === activeLabel.trim()) {{
+        btn.style.cssText = `background:${{ACC_LT}}!important;color:${{ACC}}!important;
+          font-weight:600!important;border-left:3px solid ${{ACC}}!important;
+          padding-left:9px!important;border-radius:6px!important;`;
       }} else {{
-        applyActive(); openSidebar();
+        btn.style.cssText = '';
       }}
-      // re-aplica após reruns do Streamlit
-      const obs = new MutationObserver(() => {{ applyActive(); openSidebar(); }});
-      obs.observe(document.body, {{ childList: true, subtree: true }});
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
+    }});
+  }}
+  const obs = new MutationObserver(styleAll);
+  obs.observe(document.body, {{childList:true, subtree:true}});
+  styleAll();
+}})();
+</script>""", unsafe_allow_html=True)
 
-    st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
-
-    # Footer
+    # Footer com sair
     ini = (_nome_usr[0] if _nome_usr else "U").upper()
     st.markdown(f"""
-    <div style="border-top:1px solid {BOR};padding:10px 16px;background:{SB};
-         display:flex;align-items:center;justify-content:space-between;gap:8px">
-      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+    <div style="margin-top:12px;border-top:1px solid {BOR};padding:10px 14px;
+         display:flex;align-items:center;justify-content:space-between;gap:6px">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
         <div class="sb-avatar">{ini}</div>
-        <div style="min-width:0">
+        <div>
           <div class="sb-user-name">{_nome_usr}</div>
           <div class="sb-user-role">{_setor_lbl}</div>
         </div>
       </div>
     </div>
     """, unsafe_allow_html=True)
-    col_t, col_s = st.columns(2)
-    if col_t.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
-        st.session_state.tema = "light" if _dark else "dark"
-        st.rerun()
-    if col_s.button("Sair", key="btn_sair", use_container_width=True):
+    if st.button("Sair →", key="btn_sair", use_container_width=True):
         st.session_state.usuario_logado = None
         st.rerun()
 
