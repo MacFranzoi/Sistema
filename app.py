@@ -2569,6 +2569,30 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
             st.session_state.pedido_avulsos = [i for i in _itens_ped_load if i.get("_avulso")]
             st.rerun()
 
+        # ── Banner de salvar lista aberta ─────────────────────────────────
+        _arq_ped_aberto = st.session_state.get("lista_arq_ped")
+        if _arq_ped_aberto:
+            import os as _os_sv, json as _json_sv
+            _cam_sv = _os_sv.path.join(api.DIR_LISTAS, _arq_ped_aberto)
+            if _os_sv.path.exists(_cam_sv):
+                with open(_cam_sv, encoding="utf-8") as _f_sv:
+                    _d_sv = _json_sv.load(_f_sv)
+                _nome_lista_sv = _d_sv.get("nome", _arq_ped_aberto)
+                _sv1, _sv2 = st.columns([5, 1])
+                _sv1.info(f"📂 Lista aberta: **{_nome_lista_sv}**")
+                if _sv2.button("💾 Salvar", use_container_width=True, key="ped_sv_lista"):
+                    _d_sv["itens"] = (
+                        st.session_state.get("pedido_itens", []) +
+                        st.session_state.get("pedido_avulsos", [])
+                    )
+                    _d_sv["atualizado_em"] = datetime.now().isoformat()
+                    _sv_str = _json_sv.dumps(_d_sv, ensure_ascii=False, indent=2)
+                    with open(_cam_sv, "w", encoding="utf-8") as _f_sv:
+                        _f_sv.write(_sv_str)
+                    api._gh_push_arquivo(f"listas/{_arq_ped_aberto}", _sv_str, f"Salva lista: {_nome_lista_sv}")
+                    st.success(f"✅ **{_nome_lista_sv}** salva!")
+                    st.rerun()
+
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             fornecedor_global = st.text_input("🏭 Fornecedor", placeholder="ex: Distribuidora ABC",
@@ -3014,7 +3038,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 if "total" not in _df_filtrado.columns:
                     _df_filtrado["total"] = _df_filtrado["quantidade"] * pd.to_numeric(_df_filtrado["valor_custo"], errors="coerce").fillna(0)
 
-                _col_ex1, _col_ex2, _col_ex3, _col_ex4 = st.columns(4)
+                _col_ex1, _col_ex2, _col_ex3, _col_ex4, _col_ex5 = st.columns(5)
                 with _col_ex1:
                     _buf_filt = io.BytesIO()
                     _df_exp_filt = _df_filtrado[["fornecedor", "cod_interno", "produto_nome", "variacao_nome",
@@ -3051,6 +3075,16 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                        file_name=f"pedido_completo_filtrado_{data_pedido}.pdf",
                                        mime="application/pdf",
                                        use_container_width=True, key="dl_filt_pdf_c")
+                with _col_ex5:
+                    if st.button("📋 Texto", use_container_width=True, key="txt_filt"):
+                        st.session_state["_show_txt_filt"] = not st.session_state.get("_show_txt_filt", False)
+                if st.session_state.get("_show_txt_filt"):
+                    _linhas_filt = [f"PEDIDO — {fornecedor_global or '—'} — {data_pedido}", "=" * 50]
+                    for _, _rf in _df_filtrado.iterrows():
+                        _obs_f = str(_rf.get("observacao", "")).strip()
+                        _obs_s = f" | {_obs_f}" if _obs_f else ""
+                        _linhas_filt.append(f"{_rf['produto_nome']} | {_rf.get('variacao_nome','')}{_obs_s} | {int(_rf['quantidade'])} un")
+                    st.text_area("Copie:", "\n".join(_linhas_filt), height=200, key="txt_filt_area")
 
             col_a, col_b, col_c, col_d, col_e = st.columns(5)
             # linha de exportação simplificada (produto / variação / qtd)
