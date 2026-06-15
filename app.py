@@ -562,147 +562,77 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-/* Esconde header e toolbar do Streamlit mas mantém o collapsedControl funcional */
-[data-testid="stHeader"] {{ visibility: hidden !important; height: 0 !important; min-height: 0 !important; }}
+/* ── Header: sem altura, sem cor, mas botões visíveis ── */
+[data-testid="stHeader"] {{
+    background: transparent !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+}}
 [data-testid="stToolbar"] {{ display: none !important; }}
-[data-testid="collapsedControl"] {{ display: none !important; }}
+
 [data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{
     padding-top: 0 !important;
 }}
 .main .block-container {{
-    padding-top: 22px !important; padding-bottom: 40px !important;
+    padding-top: 22px !important;
+    padding-bottom: 40px !important;
     max-width: 100% !important;
 }}
 
-/* Botão flutuante de toggle da sidebar */
-#plug-sidebar-toggle {{
-    position: fixed;
-    top: 50%;
-    left: 0;
-    transform: translateY(-50%);
-    z-index: 99999;
-    background: {ACC};
-    color: #fff;
-    border: none;
-    border-radius: 0 8px 8px 0;
-    width: 22px;
-    height: 56px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    box-shadow: 2px 0 8px rgba(0,0,0,.30);
-    transition: left .2s ease, width .15s, background .15s;
-    padding: 0;
-    line-height: 1;
+/* ── Reposiciona o botão nativo de toggle da sidebar ──
+   Streamlit 1.x usa [data-testid="stSidebarNavToggleButton"]
+   dentro do header quando a sidebar está fechada, e
+   [data-testid="stSidebarCollapseButton"] dentro da sidebar quando aberta.
+   Tornamos AMBOS fixos no centro vertical da tela. ── */
+
+[data-testid="stSidebarNavToggleButton"],
+[data-testid="stSidebarCollapseButton"] {{
+    position: fixed !important;
+    top: 50% !important;
+    left: 0 !important;
+    transform: translateY(-50%) !important;
+    z-index: 99999 !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }}
-#plug-sidebar-toggle:hover {{
-    width: 28px;
-    background: {ACC}cc;
+
+[data-testid="stSidebarNavToggleButton"] button,
+[data-testid="stSidebarCollapseButton"] button {{
+    background: {ACC} !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 0 8px 8px 0 !important;
+    width: 22px !important;
+    height: 56px !important;
+    min-height: unset !important;
+    padding: 0 !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,.30) !important;
+    transition: width .15s !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}}
+[data-testid="stSidebarNavToggleButton"] button:hover,
+[data-testid="stSidebarCollapseButton"] button:hover {{
+    width: 28px !important;
+    background: {ACC}cc !important;
+}}
+[data-testid="stSidebarNavToggleButton"] button svg,
+[data-testid="stSidebarCollapseButton"] button svg {{
+    fill: #fff !important;
+    color: #fff !important;
+    width: 16px !important;
+    height: 16px !important;
+}}
+
+/* Quando a sidebar está aberta o botão fica colado na borda direita dela */
+[data-testid="stSidebar"][aria-expanded="true"] [data-testid="stSidebarCollapseButton"] {{
+    left: 100% !important;
+    border-radius: 0 8px 8px 0 !important;
 }}
 </style>
-
-<button id="plug-sidebar-toggle" title="Abrir/fechar menu">&#9776;</button>
-
-<script>
-(function() {{
-  var _sbOpen = null;
-
-  function getSidebar() {{
-    return document.querySelector('[data-testid="stSidebar"]');
-  }}
-
-  function isOpen(sb) {{
-    return sb && sb.getAttribute('aria-expanded') !== 'false';
-  }}
-
-  function updateBtn(sb) {{
-    var btn = document.getElementById('plug-sidebar-toggle');
-    if (!btn) return;
-    var open = isOpen(sb || getSidebar());
-    if (open) {{
-      var w = (sb || getSidebar()).getBoundingClientRect().width || 300;
-      btn.style.left = w + 'px';
-      btn.innerHTML = '&#8249;';
-    }} else {{
-      btn.style.left = '0';
-      btn.innerHTML = '&#9776;';
-    }}
-  }}
-
-  function nativeToggle(sb) {{
-    // Botão de collapse DENTRO da sidebar (para fechar)
-    var closeBtn = sb && (
-      sb.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
-      sb.querySelector('button[aria-label*="sidebar"]') ||
-      sb.querySelector('button[aria-label*="collapse"]') ||
-      sb.querySelector('button[aria-label*="Collapse"]')
-    );
-    if (closeBtn) {{ closeBtn.click(); return true; }}
-
-    // Botão de expand fora da sidebar (para abrir) — Streamlit injeta no header
-    var openBtn =
-      document.querySelector('[data-testid="stSidebarNavToggleButton"] button') ||
-      document.querySelector('[data-testid="collapsedControl"] button') ||
-      document.querySelector('button[aria-label*="Open"]') ||
-      document.querySelector('button[aria-label*="sidebar"]');
-    if (openBtn) {{ openBtn.click(); return true; }}
-
-    return false;
-  }}
-
-  function forceSidebarOpen(sb) {{
-    // Manipula diretamente os estilos que o Streamlit usa para esconder a sidebar
-    sb.setAttribute('aria-expanded', 'true');
-    sb.style.removeProperty('display');
-    sb.style.removeProperty('transform');
-    sb.style.removeProperty('visibility');
-    sb.style.removeProperty('width');
-    // Dispara evento para Streamlit perceber
-    sb.dispatchEvent(new Event('transitionend', {{bubbles: true}}));
-  }}
-
-  function forceSidebarClose(sb) {{
-    sb.setAttribute('aria-expanded', 'false');
-    sb.dispatchEvent(new Event('transitionend', {{bubbles: true}}));
-  }}
-
-  window.plugToggleSidebar = function() {{
-    var sb = getSidebar();
-    if (!sb) return;
-    var open = isOpen(sb);
-    var clicked = nativeToggle(sb);
-    if (!clicked) {{
-      // fallback direto
-      if (open) forceSidebarClose(sb); else forceSidebarOpen(sb);
-    }}
-    setTimeout(function() {{ updateBtn(sb); }}, 250);
-  }};
-
-  document.getElementById('plug-sidebar-toggle').addEventListener('click', window.plugToggleSidebar);
-
-  function init() {{
-    var sb = getSidebar();
-    if (!sb) {{ setTimeout(init, 200); return; }}
-
-    updateBtn(sb);
-
-    // Abre automaticamente se fechada ao carregar
-    if (!isOpen(sb)) {{
-      var clicked = nativeToggle(sb);
-      if (!clicked) forceSidebarOpen(sb);
-      setTimeout(function() {{ updateBtn(sb); }}, 300);
-    }}
-
-    // Observa mudanças de estado
-    new MutationObserver(function() {{ updateBtn(sb); }})
-      .observe(sb, {{ attributes: true, attributeFilter: ['aria-expanded', 'style'] }});
-  }}
-
-  setTimeout(init, 400);
-}})();
-</script>
 """, unsafe_allow_html=True)
 
 # ── Sidebar ──
