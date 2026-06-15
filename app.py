@@ -1821,7 +1821,7 @@ Instruções:
 
                                 for _cor, _qtd in _cores_kit:
                                     _termos = [_cor] if isinstance(_cor, str) else _cor
-                                    # Tenta encontrar a variação real no produto
+                                    # Busca a variação EXATA no catálogo pelo nome
                                     _var_match = None
                                     if _prod_obj:
                                         for _v in _prod_obj.get("variacoes", []):
@@ -1831,22 +1831,24 @@ Instruções:
                                                 _var_match = _vd
                                                 break
 
+                                    _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
                                     _linhas_expandidas.append({
-                                        "✓": True,
-                                        "_cod":        _cod,
-                                        "_nome":       _nome,
-                                        "_kit":        _kit,
-                                        "_conf":       _conf,
-                                        "_var_id":     _var_match.get("id", "") if _var_match else "",
-                                        "_var_cod":    _var_match.get("codigo", "") if _var_match else "",
-                                        "_prod_id":    _prod_obj.get("id", "") if _prod_obj else "",
-                                        "_custo":      float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
-                                        "Aparelho":    _nome,
-                                        "Kit":         _kit.title(),
-                                        "Cor":         _var_match.get("nome", _cor.title()) if _var_match else _cor.title(),
-                                        "Qtd":         _qtd,
-                                        "Cód":         _cod or "⚠ não encontrado",
-                                        "Conf":        _conf,
+                                        "✓":        _encontrado,  # só marca se achou exato
+                                        "_cod":     _cod,
+                                        "_nome":    _nome,
+                                        "_kit":     _kit,
+                                        "_conf":    _conf,
+                                        "_achado":  _encontrado,
+                                        "_var_id":  _var_match.get("id", "") if _var_match else "",
+                                        "_var_cod": _var_match.get("codigo", "") if _var_match else "",
+                                        "_prod_id": _prod_obj.get("id", "") if _prod_obj else "",
+                                        "_custo":   float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
+                                        "Aparelho": _nome,
+                                        "Kit":      _kit.title(),
+                                        # nome EXATO do catálogo — nunca o texto do WhatsApp
+                                        "Variação": _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
+                                        "Qtd":      _qtd,
+                                        "Status":   "✓" if _encontrado else "⚠",
                                     })
 
                             st.session_state["wpp_expandido"] = _linhas_expandidas
@@ -1860,19 +1862,23 @@ Instruções:
 
             st.markdown(f"<div style='font-weight:700;font-size:0.95rem;margin:14px 0 6px'>Pré-pedido gerado — selecione e ajuste</div>", unsafe_allow_html=True)
 
-            _cols_visiveis = ["✓", "Aparelho", "Kit", "Cor", "Qtd", "Cód", "Conf"]
-            _df_edit = _pd.DataFrame(_linhas)[_cols_visiveis + ["_cod","_nome","_kit","_conf","_var_id","_var_cod","_prod_id","_custo"]]
+            _cols_visiveis = ["✓", "Aparelho", "Kit", "Variação", "Qtd", "Status"]
+            _df_edit = _pd.DataFrame(_linhas)[_cols_visiveis + ["_cod","_nome","_kit","_achado","_var_id","_var_cod","_prod_id","_custo"]]
+
+            _n_achados  = int(_pd.DataFrame(_linhas)["_achado"].sum())
+            _n_falhos   = len(_linhas) - _n_achados
+            if _n_falhos:
+                st.warning(f"⚠ {_n_falhos} cor(es) não encontradas no catálogo — aparecem desmarcadas na lista.")
 
             _edited = st.data_editor(
                 _df_edit[_cols_visiveis],
                 column_config={
-                    "✓":       st.column_config.CheckboxColumn("✓", width="small"),
-                    "Aparelho":st.column_config.TextColumn("Aparelho", width="medium", disabled=True),
-                    "Kit":     st.column_config.TextColumn("Kit", width="small", disabled=True),
-                    "Cor":     st.column_config.TextColumn("Cor / Variação", width="medium", disabled=True),
-                    "Qtd":     st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
-                    "Cód":     st.column_config.TextColumn("Cód", width="small", disabled=True),
-                    "Conf":    st.column_config.TextColumn("Conf", width="small", disabled=True),
+                    "✓":        st.column_config.CheckboxColumn("✓", width="small"),
+                    "Aparelho": st.column_config.TextColumn("Aparelho", width="medium", disabled=True),
+                    "Kit":      st.column_config.TextColumn("Kit", width="small", disabled=True),
+                    "Variação": st.column_config.TextColumn("Variação (catálogo)", width="large", disabled=True),
+                    "Qtd":      st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
+                    "Status":   st.column_config.TextColumn("", width="small", disabled=True),
                 },
                 hide_index=True,
                 use_container_width=True,
@@ -1881,7 +1887,7 @@ Instruções:
 
             _n_sel = int(_edited["✓"].sum())
             col_wpp1, col_wpp2 = st.columns([2, 1])
-            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} de {len(_edited)} cor(es) selecionada(s)</div>", unsafe_allow_html=True)
+            col_wpp1.markdown(f"<div style='color:{TXT2};font-size:0.8rem;padding-top:8px'>{_n_sel} selecionado(s) · {_n_falhos} sem match</div>", unsafe_allow_html=True)
             if col_wpp2.button("🗑 Limpar", key="wpp_clear", use_container_width=True):
                 del st.session_state["wpp_expandido"]
                 st.rerun()
@@ -1893,6 +1899,8 @@ Instruções:
                 _adicionados = 0
                 for _i, _erow in _edited[_edited["✓"] == True].iterrows():
                     _meta = _linhas[_i]
+                    if not _meta["_achado"]:
+                        continue  # nunca adiciona sem match exato
                     st.session_state.pedido_itens.append({
                         "fornecedor":    _forn,
                         "produto_id":    _meta["_prod_id"],
@@ -1900,7 +1908,7 @@ Instruções:
                         "cod_interno":   _meta["_cod"],
                         "variacao_id":   _meta["_var_id"],
                         "variacao_cod":  _meta["_var_cod"],
-                        "variacao_nome": _erow["Cor"],
+                        "variacao_nome": _erow["Variação"],   # nome EXATO do catálogo
                         "quantidade":    int(_erow["Qtd"]),
                         "Qtd a Pedir":   int(_erow["Qtd"]),
                         "valor_custo":   str(_meta["_custo"]),
