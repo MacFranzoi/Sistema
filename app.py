@@ -595,23 +595,27 @@ _lojas_nomes = ["Todas"] + [n for _, n in api.LOJAS.items()]
 _lojas_ids   = [None]    + [lid for lid, _ in api.LOJAS.items()]
 _loja_idx    = _lojas_ids.index(loja_id) if loja_id in _lojas_ids else 0
 
+def _on_nav_change():
+    _lbl = st.session_state["nav_pagina"]
+    if _lbl in _todas_labels:
+        st.session_state.pagina = _todas_pids[_todas_labels.index(_lbl)]
+
+def _on_loja_change():
+    _n = st.session_state["nav_loja"]
+    if _n in _lojas_nomes:
+        st.session_state.loja_ativa_id = _lojas_ids[_lojas_nomes.index(_n)]
+
 _c1, _c2, _c3, _c4 = st.columns([4, 2, 1, 1])
 
 with _c1:
-    _nav_sel = st.selectbox("Página", _todas_labels, index=_idx_pg,
-                            key="nav_pagina", label_visibility="collapsed")
-    _nav_pid = _todas_pids[_todas_labels.index(_nav_sel)]
-    if _nav_pid != _pg_ativo:
-        st.session_state.pagina = _nav_pid
-        st.rerun()
+    st.selectbox("Página", _todas_labels, index=_idx_pg,
+                 key="nav_pagina", label_visibility="collapsed",
+                 on_change=_on_nav_change)
 
 with _c2:
-    _loja_sel = st.selectbox("Loja", _lojas_nomes, index=_loja_idx,
-                             key="nav_loja", label_visibility="collapsed")
-    _novo_lid = _lojas_ids[_lojas_nomes.index(_loja_sel)]
-    if _novo_lid != loja_id:
-        st.session_state.loja_ativa_id = _novo_lid
-        st.rerun()
+    st.selectbox("Loja", _lojas_nomes, index=_loja_idx,
+                 key="nav_loja", label_visibility="collapsed",
+                 on_change=_on_loja_change)
 
 with _c3:
     if st.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
