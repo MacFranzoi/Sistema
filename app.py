@@ -2814,42 +2814,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 except Exception:
                     return str(v)
 
-            # CSS para apertar number_input e botões nas linhas do pedido
-            st.markdown(f"""<style>
-            .pedido-row div[data-testid="stNumberInput"] {{
-                min-height:0 !important;
-            }}
-            .pedido-row div[data-testid="stNumberInput"] > div {{
-                min-height:0 !important; height:28px !important;
-            }}
-            .pedido-row div[data-testid="stNumberInput"] input {{
-                height:28px !important; padding:0 4px !important;
-                font-size:0.78rem !important; text-align:center !important;
-                min-height:0 !important;
-            }}
-            .pedido-row div[data-testid="stNumberInput"] button {{
-                height:14px !important; padding:0 !important; min-height:0 !important;
-            }}
-            .pedido-row .stButton > button {{
-                height:28px !important; padding:0 !important; min-height:0 !important;
-                font-size:0.75rem !important; line-height:1 !important;
-            }}
-            .pedido-row [data-testid="column"] {{
-                padding:0 2px !important;
-            }}
-            </style>""", unsafe_allow_html=True)
-
-            # cabeçalho da lista
-            st.markdown(f"""
-            <div style="display:grid;grid-template-columns:1fr 52px 30px 30px;
-                        gap:2px;padding:2px 4px 3px;
-                        font-size:0.62rem;font-weight:700;text-transform:uppercase;
-                        letter-spacing:.6px;color:{TXT2};border-bottom:2px solid {BOR}">
-              <span>Produto · Variação</span><span style="text-align:center">Qtd</span>
-              <span></span><span></span>
-            </div>""", unsafe_allow_html=True)
-
+            # Monta tabela unificada dos itens do pedido
             total_calculado = 0.0
+            _rows_ped = []
             for lista_key, lista in [("pedido_itens", st.session_state.pedido_itens),
                                       ("pedido_avulsos", st.session_state.get("pedido_avulsos", []))]:
                 for idx, it in enumerate(lista):
@@ -2857,43 +2824,61 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                         custo_f = float(str(it.get("valor_custo", "0")).replace(",", "."))
                     except Exception:
                         custo_f = 0.0
-                    qtd_atual = int(it.get("quantidade", 0))
-                    tag = "🆕 " if it.get("_avulso") else ""
-                    var   = it.get("variacao_nome", "") or ""
-                    obs   = it.get("observacao", "") or ""
-                    nome  = it.get("produto_nome", "")
-                    info2 = " · ".join(filter(None, [var, obs]))
-                    texto = f"{tag}{nome}"
-                    if info2:
-                        texto += f"<span style='color:{TXT2}'> · {info2}</span>"
+                    qtd_atual = int(it.get("quantidade", 1))
+                    total_calculado += qtd_atual * custo_f
+                    var  = it.get("variacao_nome", "") or ""
+                    obs  = it.get("observacao", "") or ""
+                    nome = it.get("produto_nome", "")
+                    info = " · ".join(filter(None, [var, obs]))
+                    _rows_ped.append({
+                        "Produto": ("🆕 " if it.get("_avulso") else "") + nome,
+                        "Variação": info,
+                        "Qtd": qtd_atual,
+                        "_lk": lista_key,
+                        "_idx": idx,
+                        "_custo": custo_f,
+                    })
 
-                    st.markdown('<div class="pedido-row">', unsafe_allow_html=True)
-                    _ci, _cq, _ce, _cd = st.columns([5, 1.1, 0.65, 0.65])
-                    _ci.markdown(
-                        f"<div style='font-size:0.75rem;line-height:28px;white-space:nowrap;"
-                        f"overflow:hidden;text-overflow:ellipsis;color:{TXT}'>{texto}</div>",
-                        unsafe_allow_html=True
-                    )
-                    nova_qtd = _cq.number_input(
-                        "q", label_visibility="collapsed",
-                        min_value=0, step=1, value=qtd_atual,
-                        key=f"ped_qtd_{lista_key}_{idx}"
-                    )
-                    lista[idx]["quantidade"] = nova_qtd
-                    total_calculado += nova_qtd * custo_f
-                    if _ce.button("✏️", key=f"edit_{lista_key}_{idx}", use_container_width=True):
-                        st.session_state["_editar_lista"] = lista_key
-                        st.session_state["_editar_idx"]   = idx
-                        st.rerun()
-                    if _cd.button("🗑", key=f"del_{lista_key}_{idx}", use_container_width=True):
-                        lista.pop(idx)
-                        st.session_state[lista_key] = lista
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    st.markdown(
-                        f"<div style='height:1px;background:{BOR};margin:0'></div>",
-                        unsafe_allow_html=True
-                    )
+            if _rows_ped:
+                _df_ped_edit = pd.DataFrame(_rows_ped)
+                _edited = st.data_editor(
+                    _df_ped_edit[["Produto", "Variação", "Qtd"]],
+                    use_container_width=True,
+                    hide_index=True,
+                    num_rows="fixed",
+                    column_config={
+                        "Produto":  st.column_config.TextColumn("Produto", disabled=True),
+                        "Variação": st.column_config.TextColumn("Variação", disabled=True),
+                        "Qtd":      st.column_config.NumberColumn("Qtd", min_value=0, step=1, width="small"),
+                    },
+                    key="ped_table_editor",
+                )
+                # Aplica quantidades editadas de volta
+                for i, row in _edited.iterrows():
+                    lk  = _rows_ped[i]["_lk"]
+                    idx = _rows_ped[i]["_idx"]
+                    nova_qtd = int(row["Qtd"] or 0)
+                    st.session_state[lk][idx]["quantidade"] = nova_qtd
+                    total_calculado += nova_qtd * _rows_ped[i]["_custo"] - _rows_ped[i]["Qtd"] * _rows_ped[i]["_custo"]
+
+                # Botões de editar/excluir por linha
+                st.caption("Selecione um item para editar ou excluir:")
+                _sel_idx = st.selectbox(
+                    "Item", range(len(_rows_ped)),
+                    format_func=lambda i: f"{_rows_ped[i]['Produto']} · {_rows_ped[i]['Variação']}",
+                    label_visibility="collapsed",
+                    key="ped_sel_item"
+                )
+                _ca, _cb = st.columns(2)
+                if _ca.button("✏️ Editar", use_container_width=True, key="ped_btn_edit"):
+                    st.session_state["_editar_lista"] = _rows_ped[_sel_idx]["_lk"]
+                    st.session_state["_editar_idx"]   = _rows_ped[_sel_idx]["_idx"]
+                    st.rerun()
+                if _cb.button("🗑 Excluir", use_container_width=True, key="ped_btn_del"):
+                    lk  = _rows_ped[_sel_idx]["_lk"]
+                    idx = _rows_ped[_sel_idx]["_idx"]
+                    st.session_state[lk].pop(idx)
+                    st.rerun()
             st.divider()
             st.metric("💰 Total estimado",
                       f"R$ {total_calculado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
