@@ -2682,45 +2682,49 @@ Retorne SOMENTE JSON válido, sem markdown:
                     st.session_state["_editar_idx"]
                 )
 
-            # Tabela com botões por linha
-            hdr = st.columns([2, 3, 3, 2, 1, 1, 0.7, 0.7])
-            for txt, col in zip(["Fornecedor","Produto","Variação","Obs.","Qtd","Custo","✏️","🗑️"], hdr):
-                col.markdown(f"**{txt}**")
-
             def _fmt_brl(v):
                 try:
-                    return f"R$ {float(str(v).replace(',', '.')):.2f}".replace(".", ",", 1) if float(str(v).replace(",", ".")) < 1000 else f"R$ {float(str(v).replace(',', '.')):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    f = float(str(v).replace(",", "."))
+                    return f"R$ {f:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 except Exception:
                     return str(v)
 
-            # itera sobre pedido_itens depois pedido_avulsos
             total_calculado = 0.0
             for lista_key, lista in [("pedido_itens", st.session_state.pedido_itens),
                                       ("pedido_avulsos", st.session_state.get("pedido_avulsos", []))]:
                 for idx, it in enumerate(lista):
-                    cols = st.columns([2, 3, 3, 2, 1, 1, 0.7, 0.7])
-                    tag = "🆕 " if it.get("_avulso") else ""
-                    cols[0].write(it.get("fornecedor", "—"))
-                    cols[1].write(tag + it.get("produto_nome", ""))
-                    cols[2].write(it.get("variacao_nome", ""))
-                    cols[3].write(it.get("observacao", ""))
-                    nova_qtd = cols[4].number_input(
-                        label="qtd", label_visibility="collapsed",
-                        min_value=0, step=1, value=int(it.get("quantidade", 0)),
-                        key=f"ped_qtd_{lista_key}_{idx}"
-                    )
-                    lista[idx]["quantidade"] = nova_qtd
                     try:
                         custo_f = float(str(it.get("valor_custo", "0")).replace(",", "."))
                     except Exception:
                         custo_f = 0.0
+                    qtd_atual = int(it.get("quantidade", 0))
+                    tag = "🆕 " if it.get("_avulso") else ""
+                    obs = it.get("observacao", "") or ""
+                    forn = it.get("fornecedor", "") or "—"
+
+                    st.markdown(f"""
+                    <div style="border:1px solid {BOR};border-radius:10px;padding:10px 12px;
+                                margin-bottom:6px;background:{CARD}">
+                      <div style="font-size:0.78rem;color:{TXT2};margin-bottom:2px">{tag}{forn}{(' · <i>' + obs + '</i>') if obs else ''}</div>
+                      <div style="font-weight:600;font-size:0.95rem;color:{TXT};line-height:1.3">{it.get('produto_nome','')}</div>
+                      <div style="font-size:0.83rem;color:{TXT2}">{it.get('variacao_nome','')}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    _ca, _cb, _cc, _cd = st.columns([2, 1, 1, 1])
+                    nova_qtd = _ca.number_input(
+                        "Qtd", label_visibility="collapsed",
+                        min_value=0, step=1, value=qtd_atual,
+                        key=f"ped_qtd_{lista_key}_{idx}"
+                    )
+                    lista[idx]["quantidade"] = nova_qtd
                     total_calculado += nova_qtd * custo_f
-                    cols[5].write(_fmt_brl(it.get("valor_custo", "0")))
-                    if cols[6].button("✏️", key=f"edit_{lista_key}_{idx}"):
+                    _cb.markdown(f"<div style='padding-top:8px;font-size:0.82rem;color:{TXT2}'>{_fmt_brl(it.get('valor_custo','0'))}</div>", unsafe_allow_html=True)
+                    if _cc.button("✏️ Editar", key=f"edit_{lista_key}_{idx}", use_container_width=True):
                         st.session_state["_editar_lista"] = lista_key
                         st.session_state["_editar_idx"]   = idx
                         st.rerun()
-                    if cols[7].button("🗑️", key=f"del_{lista_key}_{idx}"):
+                    if _cd.button("🗑️", key=f"del_{lista_key}_{idx}", use_container_width=True):
                         lista.pop(idx)
                         st.session_state[lista_key] = lista
                         st.rerun()
