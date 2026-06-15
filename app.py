@@ -2025,42 +2025,45 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "couro/leather" → "couro"  (avulso)
   "clear/transparente/cristal/básica/basica/transparente básica" → "transparente"  (avulso)
   "strass/pedras/brilhinho" → "strass"  (avulso)
-  Cor específica isolada (ex: "laranja", "azul marinho", "branca com prata") → kit="avulso cor", use a cor na descrição
   Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
+CORES SÃO SEMPRE "avulso cor" — NUNCA masculino/feminino:
+Palavras de cor (preta, preto, branca, branco, lilás, lilas, verde militar, rosa, vinho, nude,
+dourada, azul, vermelha, transparente preta, etc.) NÃO são kits. São SEMPRE:
+  kit="avulso cor", descricao_avulso=a cor no singular (ex: "pretas"→"preta", "lilás"→"lilás")
+A regra "kit ambíguo → masculino" NUNCA se aplica a cores.
+
 TRANSCRIÇÃO DE VOZ / DITADO — o texto pode ser fala contínua sem pontuação.
-Regras para interpretar:
-1. Modelos podem ter espaço: "a 06" = A06, "a 07" = A07, "iphone 15" = iPhone 15, "edge 30 neo" = Edge 30 Neo.
-2. Um mesmo bloco de texto pode conter MÚLTIPLOS modelos em sequência — quando aparecer um novo modelo, inicie entradas para ele.
-3. Números por extenso indicam quantidade: "uma"=1, "duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10.
-4. Cor que vem após um número → kit="avulso cor", descricao_avulso=essa cor, quantidade_fixa=esse número.
-5. Kit nomeado (brilho, masculino, feminino, carteira, etc.) sem número antes → quantidade_fixa=1.
-6. Kit nomeado seguido de número → quantidade_fixa=esse número.
-7. Cores: preta/preto, branca/branco, lilás/lilas, verde militar, rosa, vinho, nude, dourada, etc. são cores → avulso cor.
-8. Gere UMA entrada por item (modelo+cor ou modelo+kit), cada uma com sua quantidade_fixa.
+1. Modelos podem ter espaço: "a 06"=A06, "a 07"=A07, "iphone 15"=iPhone 15, "edge 30 neo"=Edge 30 Neo.
+2. Um bloco pode conter MÚLTIPLOS modelos em sequência — quando aparecer novo modelo, inicie entradas para ele.
+3. Números por extenso = quantidade: "uma"=1, "duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10.
+4. [número] + [cor] → avulso cor com quantidade_fixa=número. Ex: "duas pretas" → avulso cor "preta", qtd 2.
+5. [número] + [kit] → kit com quantidade_fixa=número. Ex: "duas masculino" → kit masculino, qtd 2.
+6. [kit ou cor] sem número antes → quantidade_fixa=1.
+7. Gere UMA entrada JSON por par (modelo + cor/kit).
 
 Exemplo: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
-→ A06 | avulso cor "preta" | qtd 2
-→ A06 | avulso cor "verde militar" | qtd 1
-→ A06 | avulso cor "lilás" | qtd 2
-→ A07 | brilho | qtd 1
-→ A07 | avulso cor "preta" | qtd 2
-→ A07 | avulso cor "branca" | qtd 1
+→ A06 | kit="avulso cor" descricao_avulso="preta" qtd=2
+→ A06 | kit="avulso cor" descricao_avulso="verde militar" qtd=1
+→ A06 | kit="avulso cor" descricao_avulso="lilás" qtd=2
+→ A07 | kit="brilho" qtd=1
+→ A07 | kit="avulso cor" descricao_avulso="preta" qtd=2
+→ A07 | kit="avulso cor" descricao_avulso="branca" qtd=1
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
 CASOS ESPECIAIS:
 - "não temos nenhuma" / "estoque zerado" / "zeramos" / "acabou" / "sem estoque" na linha → significa pedir TODOS os kits: gere 4 entradas para o modelo: kit="masculino", kit="feminino", kit="brilho", kit="diversos masculino"
-- "preta" / "preta apenas" / "só preta" no final → adicione excluir_cores com todas as cores EXCETO "preto" (ou seja, é um pedido específico da cor preta — use kit="masculino" com excluir_cores=["marrom","azul marinho","cinza chumbo"])
+- "preta apenas" / "só preta" / "somente preta" JUNTO de um kit (ex: "A54 masculino só preta") → use kit="masculino" com excluir_cores=["marrom","azul marinho","cinza chumbo"]. ATENÇÃO: "duas pretas" ou "uma preta" em ditado NÃO é isso — é avulso cor.
 - Linha que fala de AUSÊNCIA mas não pede nada (ex: "Edge 60 estoque zerado") → processe normalmente com os 4 kits
 
 POSTURA — REGRA ABSOLUTA:
 - Se o modelo existir no catálogo com nome parecido, use-o com confianca "baixa".
 - Se o modelo NÃO existir de jeito nenhum no catálogo (nenhum nome próximo), marque cod_interno: null e nao_compreendido: false — o sistema vai criar como item avulso automaticamente.
 - nao_compreendido: true SOMENTE para linhas completamente ilegíveis (emoji puro, linha em branco, texto aleatório sem modelo nem kit).
-- Kit ambíguo → prefira "masculino".
+- Kit ambíguo (texto que pode ser kit mas não é claramente uma cor) → prefira "masculino". Cores NUNCA são kits.
 - Nunca escreva justificativas — apenas processe.
 
 Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
