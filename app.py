@@ -78,296 +78,303 @@ if "tema" not in st.session_state:
     st.session_state.tema = "light"
 _dark = st.session_state.tema == "dark"
 
-# Paleta clean — inspirada no GestaoClick original
-# Light: fundo cinza claro, sidebar branco, acento azul-teal
-# Dark:  navy escuro, sidebar navy médio, mesmo acento
-BG      = "#23293a" if _dark else "#f0f2f5"
-SB      = "#1a1f2e" if _dark else "#ffffff"
-SB2     = "#23293a" if _dark else "#f7f8fa"
-CARD    = "#2a3045" if _dark else "#ffffff"
-BOR     = "#333b55" if _dark else "#e2e5eb"
-TXT     = "#e4e8f0" if _dark else "#1a2032"
-TXT2    = "#7a85a0" if _dark else "#7a8599"
-ACC     = "#2563eb"               # azul profissional
-ACC_LT  = "rgba(37,99,235,0.10)"
-TOPBAR  = "#1a1f2e" if _dark else "#2563eb"  # topbar azul no light, navy no dark
+# ── Design System: moderno, minimalista, inspirado em Linear/Vercel ──
+# Light: fundo off-white quente, sidebar branca, acento violeta-índigo
+# Dark:  grafite profundo, sidebar levemente mais clara, mesmo acento
+BG      = "#18181b" if _dark else "#fafafa"
+SB      = "#111113" if _dark else "#ffffff"
+SB2     = "#1c1c1f" if _dark else "#f4f4f5"
+CARD    = "#1c1c1f" if _dark else "#ffffff"
+BOR     = "#27272a" if _dark else "#e4e4e7"
+TXT     = "#fafafa"  if _dark else "#09090b"
+TXT2    = "#71717a"  if _dark else "#71717a"
+ACC     = "#7c3aed"               # violeta vibrante
+ACC2    = "#a855f7"               # lilás — gradiente / hover
+ACC_LT  = "rgba(124,58,237,0.08)"
+GRN     = "#16a34a"
+GRN_LT  = "rgba(22,163,74,0.10)"
+RED     = "#dc2626"
+RED_LT  = "rgba(220,38,38,0.10)"
+SB_W    = "232px"
+# aliases para não quebrar código que usa YEL/YEL_BG
 YEL     = ACC
 YEL_BG  = ACC_LT
 
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
 
-/* RESET */
-*, *::before, *::after {{ box-sizing: border-box; }}
+/* ── RESET ── */
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; }}
 html, body, [class*="css"] {{
-    font-family: 'Inter', 'Segoe UI', sans-serif !important;
-    font-size: 13px;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-size: 13px; line-height: 1.5;
     background: {BG} !important;
     color: {TXT} !important;
+    -webkit-font-smoothing: antialiased;
 }}
-.main .block-container {{ padding: 0 !important; max-width: 100% !important; }}
+.main .block-container {{ padding: 20px 24px 32px !important; max-width: 100% !important; }}
 
 /* ── TOPBAR ── */
 [data-testid="stHeader"] {{
-    background: {TOPBAR} !important;
-    height: 52px !important;
+    background: {SB} !important;
+    height: 48px !important;
     border-bottom: 1px solid {BOR} !important;
+    backdrop-filter: blur(12px);
 }}
-[data-testid="stHeader"] button {{ color: #fff !important; }}
-[data-testid="stHeader"] svg {{ fill: #fff !important; stroke: #fff !important; }}
+[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
+    color: {TXT2} !important; fill: {TXT2} !important;
+}}
+[data-testid="stHeader"] button:hover {{ color: {TXT} !important; fill: {TXT} !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
 
 /* ── SIDEBAR ── */
 [data-testid="stSidebar"] {{
     background: {SB} !important;
     border-right: 1px solid {BOR} !important;
-    width: 220px !important;
-    min-width: 220px !important;
+    width: {SB_W} !important; min-width: {SB_W} !important;
     padding: 0 !important;
 }}
-[data-testid="stSidebar"] > div:first-child {{ padding: 0 !important; }}
+[data-testid="stSidebar"] > div:first-child {{ padding: 0 !important; overflow: hidden; }}
 
-/* ── Topbar da sidebar: logo ── */
+/* logo strip */
 .sb-logo {{
-    display: flex; align-items: center; gap: 10px;
-    padding: 0 14px;
-    height: 52px;
-    background: {TOPBAR};
+    display: flex; align-items: center; gap: 9px;
+    padding: 0 16px; height: 48px;
     border-bottom: 1px solid {BOR};
     position: sticky; top: 0; z-index: 10;
+    background: {SB};
 }}
 .sb-logo-mark {{
-    background: #fff; color: {ACC};
-    width: 30px; height: 30px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 1rem; letter-spacing: -1px;
-    flex-shrink: 0;
+    width: 26px; height: 26px; border-radius: 6px;
+    background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+    box-shadow: 0 1px 6px {ACC}55;
 }}
-.sb-logo-text {{ font-size: 1rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }}
-
-/* ── empresa selecionada ── */
-.sb-empresa {{
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px;
-    background: {SB2};
-    border-bottom: 1px solid {BOR};
-    cursor: pointer;
-}}
-.sb-empresa-name {{ font-size: 0.78rem; font-weight: 600; }}
-.sb-empresa-cnpj {{ font-size: 0.62rem; color: {TXT2}; margin-top: 1px; }}
-.sb-empresa-arrow {{ color: {TXT2}; font-size: 0.65rem; }}
-
-/* ── nav group label ── */
-.nav-group {{
-    font-size: 0.58rem; font-weight: 700; letter-spacing: 1.8px;
-    text-transform: uppercase; color: {TXT2};
-    padding: 14px 14px 4px;
+.sb-logo-text {{
+    font-size: 0.88rem; font-weight: 700; color: {TXT};
+    letter-spacing: -0.2px;
 }}
 
-/* ── nav item ── */
-[data-testid="stSidebar"] .stButton > button {{
-    width: 100% !important;
-    background: transparent !important;
-    border: none !important;
+/* selectbox loja — "chip" compacto */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] {{
+    margin: 0 !important; padding: 0 !important;
+}}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {{
     border-radius: 0 !important;
-    text-align: left !important;
-    padding: 8px 14px 8px 16px !important;
-    font-size: 0.8rem !important;
+    border: none !important;
+    border-bottom: 1px solid {BOR} !important;
+    background: {SB2} !important;
+    padding: 7px 14px !important;
+    font-size: 0.75rem !important; font-weight: 500 !important;
     color: {TXT} !important;
-    margin: 0 !important;
-    display: flex; align-items: center; gap: 8px;
+}}
+
+/* nav group */
+.nav-group {{
+    font-size: 0.6rem; font-weight: 600; letter-spacing: 1.2px;
+    text-transform: uppercase; color: {TXT2};
+    padding: 16px 16px 4px;
+    user-select: none;
+}}
+
+/* nav buttons */
+[data-testid="stSidebar"] .stButton > button {{
+    width: 100% !important; background: transparent !important;
+    border: none !important; border-radius: 6px !important;
+    text-align: left !important; padding: 6px 10px !important;
+    margin: 1px 8px !important; width: calc(100% - 16px) !important;
+    font-size: 0.8rem !important; font-weight: 400 !important;
+    color: {TXT2} !important;
     transition: background 0.1s, color 0.1s;
-    border-left: 3px solid transparent !important;
 }}
 [data-testid="stSidebar"] .stButton > button:hover {{
-    background: {YEL_BG} !important;
-    color: {YEL} !important;
-    border-left-color: {YEL}88 !important;
+    background: {SB2} !important; color: {TXT} !important;
 }}
-.nav-active [data-testid="stSidebar"] .stButton > button,
-.nav-active .stButton > button {{
-    background: {YEL_BG} !important;
-    color: {YEL} !important;
-    font-weight: 600 !important;
-    border-left: 3px solid {YEL} !important;
+/* estado ativo — injetado via style tag por item */
+[data-testid="stSidebar"] .stButton > button.nav-on {{
+    background: {ACC_LT} !important; color: {ACC} !important; font-weight: 600 !important;
 }}
 
-/* ── user footer ── */
+/* footer usuário */
 .sb-footer {{
-    padding: 10px 14px;
-    border-top: 1px solid {BOR};
-    background: {SB};
-    display: flex; gap: 8px; align-items: center;
+    padding: 10px 14px; border-top: 1px solid {BOR};
+    background: {SB}; display: flex; gap: 9px; align-items: center;
+    position: sticky; bottom: 0;
 }}
 .sb-avatar {{
-    width: 30px; height: 30px; border-radius: 50%;
-    background: {YEL}; color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.8rem; flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.72rem; flex-shrink: 0;
+    box-shadow: 0 1px 4px {ACC}44;
 }}
-.sb-user-name  {{ font-size: 0.76rem; font-weight: 600; line-height: 1.2; }}
-.sb-user-role  {{ font-size: 0.62rem; color: {TXT2}; }}
+.sb-user-name {{ font-size: 0.75rem; font-weight: 600; color: {TXT}; line-height: 1.2; }}
+.sb-user-role {{ font-size: 0.62rem; color: {TXT2}; }}
 
-/* ── PAGE wrapper ── */
-.page-wrap {{
-    padding: 20px 24px;
-    background: {BG};
-    min-height: calc(100vh - 52px);
+/* botões tema/sair no sidebar */
+[data-testid="stSidebar"] .stButton > button[data-testid*="btn_tema"],
+[data-testid="stSidebar"] .stButton > button[data-testid*="btn_sair"] {{
+    font-size: 0.72rem !important; padding: 4px 8px !important;
+    border: 1px solid {BOR} !important; border-radius: 5px !important;
+    margin: 2px 4px !important; width: auto !important;
+    background: {CARD} !important; color: {TXT2} !important;
 }}
 
-/* ── page header ── */
-.page-header {{
-    display: flex; align-items: flex-start; justify-content: space-between;
-    margin-bottom: 20px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid {BOR};
-}}
-.page-title {{ font-size: 1.25rem; font-weight: 700; color: {TXT}; }}
+/* ── PAGE ── */
 .page-breadcrumb {{
     font-size: 0.68rem; color: {TXT2};
-    margin-bottom: 3px;
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 2px;
 }}
-.page-breadcrumb span {{ color: {YEL}; }}
+.page-breadcrumb span {{ color: {ACC}; }}
+.page-title {{
+    font-size: 1.3rem; font-weight: 700; color: {TXT};
+    letter-spacing: -0.4px; line-height: 1.2;
+}}
 
 /* ── CARDS ── */
 .card {{
-    background: {CARD};
-    border: 1px solid {BOR};
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 14px;
+    background: {CARD}; border: 1px solid {BOR};
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 14px;
 }}
 .card-header {{
-    font-size: 0.82rem; font-weight: 600;
-    color: {TXT};
-    margin-bottom: 12px;
-    padding-bottom: 8px;
+    font-size: 0.8rem; font-weight: 600; color: {TXT};
+    margin-bottom: 12px; padding-bottom: 8px;
     border-bottom: 1px solid {BOR};
     display: flex; align-items: center; gap: 6px;
 }}
 
 /* ── STAT CARDS ── */
-.stat-grid {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }}
+.stat-grid {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }}
 .stat-box {{
-    flex: 1; min-width: 120px;
-    background: {CARD};
-    border: 1px solid {BOR};
-    border-radius: 8px;
-    padding: 14px 16px;
-    border-top: 3px solid {YEL};
+    flex: 1; min-width: 130px;
+    background: {CARD}; border: 1px solid {BOR};
+    border-radius: 10px; padding: 16px 18px;
+    position: relative; overflow: hidden;
+    transition: box-shadow 0.15s;
 }}
-.stat-val {{ font-size: 1.5rem; font-weight: 700; color: {YEL}; line-height: 1.1; }}
-.stat-lbl {{ font-size: 0.68rem; color: {TXT2}; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }}
+.stat-box::before {{
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, {ACC} 0%, {ACC2} 100%);
+}}
+.stat-box:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,{"0.3" if _dark else "0.08"}); }}
+.stat-val {{ font-size: 1.6rem; font-weight: 700; color: {TXT}; line-height: 1; letter-spacing: -1px; }}
+.stat-lbl {{ font-size: 0.65rem; color: {TXT2}; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }}
+.stat-icon {{ position: absolute; right: 14px; top: 14px; font-size: 1.1rem; opacity: 0.4; }}
 
-/* ── BADGE ── */
+/* ── BADGES ── */
 .badge {{
     display: inline-flex; align-items: center; gap: 3px;
-    background: {YEL_BG}; color: {YEL};
-    border: 1px solid {YEL}55;
-    border-radius: 4px;
-    font-size: 0.62rem; font-weight: 600;
-    padding: 2px 7px;
+    background: {ACC_LT}; color: {ACC};
+    border: 1px solid {ACC}30; border-radius: 4px;
+    font-size: 0.6rem; font-weight: 600; padding: 2px 6px;
+    letter-spacing: 0.2px;
 }}
-.badge-green {{ background: rgba(76,175,80,0.12); color: #66bb6a; border-color: #66bb6a55; }}
-.badge-red   {{ background: rgba(244,67,54,0.12); color: #ef5350; border-color: #ef535055; }}
+.badge-green {{ background: {GRN_LT}; color: {GRN}; border-color: {GRN}30; }}
+.badge-red   {{ background: {RED_LT}; color: {RED}; border-color: {RED}30; }}
+.badge-gray  {{ background: {SB2}; color: {TXT2}; border-color: {BOR}; }}
 
 /* ── TABELA ── */
-.stDataFrame {{ border-radius: 8px !important; overflow: hidden; }}
-.stDataFrame [data-testid="stDataFrameResizable"] {{ border: 1px solid {BOR} !important; border-radius: 8px !important; }}
-.stDataFrame th {{ background: {SB2} !important; font-size: 0.7rem !important; font-weight: 600 !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.5px; }}
-.stDataFrame td {{ font-size: 0.76rem !important; color: {TXT} !important; }}
+.stDataFrame {{ border-radius: 10px !important; overflow: hidden; }}
+.stDataFrame [data-testid="stDataFrameResizable"] {{ border: 1px solid {BOR} !important; border-radius: 10px !important; }}
+.stDataFrame th {{ background: {SB2} !important; font-size: 0.65rem !important; font-weight: 600 !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.6px; }}
+.stDataFrame td {{ font-size: 0.78rem !important; color: {TXT} !important; }}
 
 /* ── INPUTS ── */
-.stTextInput label, .stSelectbox label, .stNumberInput label, .stTextArea label {{
-    font-size: 0.75rem !important; font-weight: 500 !important; color: {TXT2} !important;
-    text-transform: uppercase; letter-spacing: 0.4px;
+.stTextInput label p, .stSelectbox label p, .stNumberInput label p, .stTextArea label p {{
+    font-size: 0.7rem !important; font-weight: 500 !important; color: {TXT2} !important;
+    letter-spacing: 0.2px;
 }}
 .stTextInput input, .stNumberInput input, .stTextArea textarea {{
     background: {CARD} !important; border: 1px solid {BOR} !important;
-    color: {TXT} !important; border-radius: 6px !important; font-size: 0.82rem !important;
-    padding: 7px 10px !important;
+    color: {TXT} !important; border-radius: 7px !important; font-size: 0.82rem !important;
+    padding: 7px 11px !important; transition: border-color 0.15s, box-shadow 0.15s !important;
 }}
-.stTextInput input:focus, .stNumberInput input:focus {{ border-color: {YEL} !important; box-shadow: 0 0 0 2px {YEL}22 !important; }}
-.stSelectbox > div > div {{ background: {CARD} !important; border-color: {BOR} !important; font-size: 0.82rem !important; border-radius: 6px !important; }}
+.stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
+    border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important; outline: none !important;
+}}
+.stSelectbox > div > div {{
+    background: {CARD} !important; border-color: {BOR} !important;
+    font-size: 0.82rem !important; border-radius: 7px !important; color: {TXT} !important;
+}}
+.stSelectbox > div > div:focus-within {{ border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important; }}
 
 /* ── BUTTONS ── */
 .main .stButton > button, .stFormSubmitButton > button {{
-    font-size: 0.78rem !important; padding: 0.38rem 1rem !important;
-    border-radius: 6px !important; border: 1px solid {BOR} !important;
+    font-size: 0.78rem !important; padding: 0.4rem 1rem !important;
+    border-radius: 7px !important; border: 1px solid {BOR} !important;
     background: {CARD} !important; color: {TXT} !important;
-    font-weight: 500 !important; transition: all 0.15s !important;
+    font-weight: 500 !important; transition: all 0.12s !important;
+    letter-spacing: 0.1px;
+}}
+.main .stButton > button:hover {{
+    background: {SB2} !important; border-color: {TXT2}55 !important; color: {TXT} !important;
 }}
 .main .stButton > button[kind="primary"], .stFormSubmitButton > button {{
-    background: {YEL} !important; color: #fff !important;
-    border-color: {YEL} !important; font-weight: 600 !important;
+    background: {ACC} !important; color: #fff !important;
+    border-color: {ACC} !important; font-weight: 600 !important;
+    box-shadow: 0 1px 4px {ACC}44;
 }}
-.main .stButton > button:hover {{ border-color: {YEL} !important; color: {YEL} !important; }}
-.main .stButton > button[kind="primary"]:hover {{ background: #7b88f4 !important; color: #fff !important; }}
+.main .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button:hover {{
+    background: {ACC2} !important; border-color: {ACC2} !important;
+    box-shadow: 0 2px 8px {ACC}55 !important;
+}}
 
 /* ── EXPANDER ── */
-.stExpander {{ border: 1px solid {BOR} !important; border-radius: 8px !important; background: {CARD} !important; }}
-.stExpander summary {{ font-size: 0.8rem !important; color: {TXT} !important; }}
+.stExpander {{
+    border: 1px solid {BOR} !important; border-radius: 10px !important;
+    background: {CARD} !important; overflow: hidden;
+}}
+.stExpander summary {{ font-size: 0.8rem !important; font-weight: 500 !important; color: {TXT} !important; padding: 10px 14px !important; }}
 
-/* ── TABS internas ── */
-.stTabs [data-baseweb="tab-list"] {{ border-bottom: 1px solid {BOR}; background: transparent; gap: 0; }}
+/* ── TABS ── */
+.stTabs [data-baseweb="tab-list"] {{ border-bottom: 1px solid {BOR}; background: transparent; gap: 0; padding: 0; }}
 .stTabs [data-baseweb="tab"] {{
-    font-size: 0.78rem !important; padding: 8px 16px !important;
+    font-size: 0.78rem !important; padding: 9px 18px !important;
     color: {TXT2} !important; border-radius: 0 !important;
     border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
+    font-weight: 400 !important; transition: color 0.1s !important;
 }}
-.stTabs [aria-selected="true"] {{ color: {YEL} !important; border-bottom-color: {YEL} !important; font-weight: 600 !important; }}
+.stTabs [aria-selected="true"] {{
+    color: {TXT} !important; border-bottom-color: {ACC} !important; font-weight: 600 !important;
+}}
 
-/* ── DIVIDER ── */
-hr {{ border-color: {BOR} !important; margin: 12px 0 !important; }}
+/* ── ALERTS ── */
+.stAlert {{ border-radius: 8px !important; font-size: 0.8rem !important; border: 1px solid {BOR} !important; }}
 
-/* ── LOGIN ── */
-.login-page {{
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 100vh; margin-top: -4rem;
+/* ── METRIC ── */
+[data-testid="stMetric"] {{
+    background: {CARD} !important; border: 1px solid {BOR} !important;
+    border-radius: 10px !important; padding: 12px 16px !important;
 }}
-.login-card {{
-    background: {CARD}; border: 1px solid {BOR};
-    border-top: 3px solid {YEL};
-    border-radius: 10px; padding: 2.2rem 2rem 1.6rem;
-    width: 100%; max-width: 340px;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.4);
-}}
-.login-logo {{ display: flex; align-items: center; gap: 10px; margin-bottom: 1.6rem; }}
-.login-logo-mark {{
-    width: 44px; height: 44px; border-radius: 10px;
-    background: {YEL}; color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 1.3rem;
-}}
-.login-brand {{ font-size: 1.1rem; font-weight: 800; color: {YEL}; }}
-.login-sub   {{ font-size: 0.68rem; color: {TXT2}; }}
-/* Formulário de login: remove gap entre logo e form */
-div[data-testid="stForm"] {{ background: transparent !important; border: none !important; padding: 0 !important; }}
-div[data-testid="stForm"] > div {{ gap: 0.5rem !important; }}
-/* Labels uppercase */
-div[data-testid="stForm"] label p {{ font-size: 0.65rem !important; font-weight: 700 !important; letter-spacing: .08em !important; color: {TXT2} !important; }}
-/* Submit button amarelo */
-div[data-testid="stForm"] button[type="submit"] {{
-    background: {YEL} !important; color: #fff !important;
-    font-weight: 700 !important; border-radius: 6px !important;
-    border: none !important; margin-top: 0.4rem !important;
-}}
+[data-testid="stMetricValue"] {{ font-size: 1.4rem !important; font-weight: 700 !important; color: {TXT} !important; }}
+[data-testid="stMetricLabel"] {{ font-size: 0.68rem !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.5px; }}
 
 /* ── MISC ── */
-.stAlert {{ border-radius: 6px !important; font-size: 0.8rem !important; }}
-[data-testid="stMetric"] {{ background: {CARD}; border: 1px solid {BOR}; border-radius: 8px; padding: 10px 14px !important; }}
-p {{ color: {TXT} !important; font-size: 0.82rem !important; }}
-caption {{ color: {TXT2} !important; font-size: 0.72rem !important; }}
-small {{ color: {TXT2} !important; }}
+hr {{ border: none !important; border-top: 1px solid {BOR} !important; margin: 12px 0 !important; }}
+p {{ color: {TXT} !important; font-size: 0.82rem !important; line-height: 1.6; }}
+caption, small {{ color: {TXT2} !important; font-size: 0.7rem !important; }}
+
+/* scrollbar minimalista */
+::-webkit-scrollbar {{ width: 5px; height: 5px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
+::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {TXT2}; }}
+
+/* ── LOGIN ── */
+[data-testid="stMain"] > div:first-child {{ padding-top: 0 !important; }}
+section[data-testid="stMain"] {{
+    display: flex; align-items: center; justify-content: center; min-height: 100vh;
+    background: {"radial-gradient(ellipse at 60% 40%, #1e1033 0%, #18181b 60%)" if _dark else "radial-gradient(ellipse at 60% 40%, #ede9fe 0%, #fafafa 60%)"} !important;
+}}
 
 /* MOBILE */
 @media (max-width: 640px) {{
-    .page-wrap {{ padding: 12px 14px; }}
-    .page-title {{ font-size: 1rem; }}
-    .stat-val {{ font-size: 1.1rem; }}
-    .stButton > button {{ font-size: 0.72rem !important; }}
+    .main .block-container {{ padding: 12px 14px 24px !important; }}
+    .page-title {{ font-size: 1.05rem; }}
+    .stat-val {{ font-size: 1.2rem; }}
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -385,66 +392,59 @@ if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
 if st.session_state.usuario_logado is None:
-    # CSS extra: centraliza a coluna do meio verticalmente
-    st.markdown("""
-    <style>
-    [data-testid="stMain"] > div:first-child { padding-top: 0 !important; }
-    section[data-testid="stMain"] { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    _, col_login, _ = st.columns([1, 1.1, 1])
+    _, col_login, _ = st.columns([1, 1, 1])
     with col_login:
-        # Logo no topo do card
+        # Card único com logo + form
         st.markdown(f"""
-        <div style="background:{CARD};border:1px solid {BOR};border-top:3px solid {YEL};
-                    border-radius:10px 10px 0 0;padding:1.8rem 1.8rem 1rem;
-                    box-shadow:0 4px 32px rgba(0,0,0,.4)">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:44px;height:44px;border-radius:10px;background:{YEL};
-                        color:#fff;display:flex;align-items:center;justify-content:center;
-                        font-weight:900;font-size:1.4rem">⚡</div>
-            <div>
-              <div style="font-size:1.1rem;font-weight:800;color:{YEL}">PLUG ERP</div>
-              <div style="font-size:0.68rem;color:{TXT2}">Sistema de Gestão</div>
-            </div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Form colado abaixo do logo (sem borda superior)
-        st.markdown(f"""
-        <div style="background:{CARD};border:1px solid {BOR};border-top:none;
-                    border-radius:0 0 10px 10px;padding:0 1.8rem 1.6rem;
-                    box-shadow:0 4px 32px rgba(0,0,0,.4)">
-        </div>
         <style>
-        /* posiciona o form dentro do card visual */
+        /* login card */
         [data-testid="stForm"] {{
-            background:{CARD} !important;
-            border:1px solid {BOR} !important;
-            border-top:none !important;
-            border-radius:0 0 10px 10px !important;
-            padding:0 1.8rem 1.6rem !important;
-            margin-top:-8px !important;
-            box-shadow:0 4px 32px rgba(0,0,0,.4);
-        }}
-        [data-testid="stForm"] button[type="submit"] {{
-            background:{YEL} !important;color:#fff !important;
-            font-weight:700 !important;border:none !important;
-            border-radius:6px !important;margin-top:0.6rem !important;
+            background: {CARD} !important;
+            border: 1px solid {BOR} !important;
+            border-radius: 14px !important;
+            padding: 2rem 2rem 1.6rem !important;
+            box-shadow: 0 8px 40px rgba(0,0,0,{"0.5" if _dark else "0.10"}) !important;
+            margin-top: 0 !important;
         }}
         [data-testid="stForm"] label p {{
-            font-size:0.65rem !important;font-weight:700 !important;
-            letter-spacing:.08em !important;color:{TXT2} !important;
+            font-size: 0.68rem !important; font-weight: 500 !important;
+            color: {TXT2} !important; letter-spacing: 0.1px !important;
         }}
+        [data-testid="stForm"] input {{
+            background: {BG} !important; border: 1px solid {BOR} !important;
+            border-radius: 7px !important; color: {TXT} !important;
+            font-size: 0.85rem !important; padding: 8px 12px !important;
+        }}
+        [data-testid="stForm"] input:focus {{
+            border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important;
+        }}
+        [data-testid="stForm"] button[type="submit"] {{
+            background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%) !important;
+            color: #fff !important; font-weight: 600 !important;
+            border: none !important; border-radius: 8px !important;
+            padding: 0.55rem 1rem !important; margin-top: 0.8rem !important;
+            font-size: 0.85rem !important; letter-spacing: 0.2px !important;
+            box-shadow: 0 2px 12px {ACC}44 !important;
+            transition: opacity 0.15s !important;
+        }}
+        [data-testid="stForm"] button[type="submit"]:hover {{ opacity: 0.88 !important; }}
         </style>
+        <div style="text-align:center;margin-bottom:1.4rem;margin-top:0.5rem">
+          <div style="display:inline-flex;align-items:center;justify-content:center;
+                      width:46px;height:46px;border-radius:12px;
+                      background:linear-gradient(135deg,{ACC} 0%,{ACC2} 100%);
+                      box-shadow:0 4px 16px {ACC}55;margin-bottom:12px">
+            <span style="font-size:1.4rem;line-height:1">⚡</span>
+          </div>
+          <div style="font-size:1.2rem;font-weight:700;color:{TXT};letter-spacing:-0.3px">Plug ERP</div>
+          <div style="font-size:0.72rem;color:{TXT2};margin-top:3px">Bem-vindo de volta</div>
+        </div>
         """, unsafe_allow_html=True)
 
         with st.form("form_login"):
-            usuario_input = st.text_input("USUÁRIO")
-            senha_input   = st.text_input("SENHA", type="password")
-            entrar = st.form_submit_button("Entrar →", use_container_width=True)
+            usuario_input = st.text_input("Usuário")
+            senha_input   = st.text_input("Senha", type="password")
+            entrar = st.form_submit_button("Entrar", use_container_width=True)
 
         if entrar:
             u = usuario_input.strip().lower()
