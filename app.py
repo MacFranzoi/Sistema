@@ -854,7 +854,8 @@ def painel_listas(itens_atuais, tipo, key_suffix=""):
                 st.error("Digite um nome.")
             else:
                 _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
-                                        loja_id=loja_id, loja_nome=loja_sel_nome)
+                                        loja_id=loja_id, loja_nome=loja_sel_nome,
+                                        criado_por=st.session_state.get("usuario_logado", ""))
                 st.session_state[f"lista_arq_{key_suffix}"] = _pos.path.basename(_cam)
                 st.success("✅ Lista salva!")
                 st.rerun()
@@ -3872,6 +3873,25 @@ if _pg == "listas":
                 if st.button(f"Excluir lista", key=f"gl_del_{_arq}", type="primary"):
                     api.excluir_lista(_arq)
                     st.rerun()
+
+    # ── Exportar todas as listas ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📤 Exportar todas as listas")
+    st.caption("Gera um arquivo Excel com aba Resumo (metadados de todas as listas) + uma aba por lista com seus itens.")
+    if _gl_todas:
+        _buf_export = api.exportar_todas_listas_excel()
+        from datetime import datetime as _dt_exp
+        _nome_exp = f"listas_{_dt_exp.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        st.download_button(
+            "📥 Baixar Excel com todas as listas",
+            data=_buf_export,
+            file_name=_nome_exp,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="gl_export_all"
+        )
+    else:
+        st.info("Nenhuma lista para exportar.")
 
     # ── Mesclar ─────────────────────────────────────────────────────────
     st.markdown("---")
