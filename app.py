@@ -123,18 +123,17 @@ a, button {{ transition: all 0.15s ease !important; }}
   to   {{ opacity: 1; transform: translateY(0); }}
 }}
 
-/* ── TOPBAR ── */
-[data-testid="stHeader"] {{
-    background: {SB} !important;
-    height: 48px !important;
-    border-bottom: 1px solid {BOR} !important;
-    backdrop-filter: blur(12px);
+/* ── TOPBAR: esconde header nativo do Streamlit ── */
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+header[data-testid="stHeader"] {{
+    display: none !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }}
-[data-testid="stHeader"] button, [data-testid="stHeader"] svg {{
-    color: {TXT2} !important; fill: {TXT2} !important;
-}}
-[data-testid="stHeader"] button:hover {{ color: {TXT} !important; fill: {TXT} !important; }}
-[data-testid="stToolbar"] {{ display: none !important; }}
 
 /* ── SIDEBAR ── */
 [data-testid="stSidebar"] {{
@@ -407,16 +406,15 @@ caption, small {{ color: {TXT2} !important; font-size: 0.75rem !important; }}
 ::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; transition: background 0.2s; }}
 ::-webkit-scrollbar-thumb:hover {{ background: {TXT2}; }}
 
-/* ── LOGIN ── */
-[data-testid="stMain"] > div:first-child {{ padding-top: 0 !important; }}
-section[data-testid="stMain"] {{
-    display: flex; align-items: center; justify-content: center; min-height: 100vh;
-    background: {"radial-gradient(ellipse at 60% 40%, #1e1033 0%, #18181b 60%)" if _dark else "radial-gradient(ellipse at 60% 40%, #ede9fe 0%, #fafafa 60%)"} !important;
-}}
+/* ── LOGIN (background e centralização aplicados via CSS local no bloco de login) ── */
 
 /* MOBILE */
 @media (max-width: 640px) {{
-    .main .block-container {{ padding: 12px 14px 24px !important; }}
+    .main .block-container {{
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+        padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+    }}
     .page-title {{ font-size: 1.05rem; }}
     .stat-val {{ font-size: 1.2rem; }}
 }}
@@ -450,6 +448,16 @@ if st.session_state.usuario_logado is None:
         # Card único com logo + form
         st.markdown(f"""
         <style>
+        /* fundo e centralização da tela de login */
+        [data-testid="stAppViewContainer"] {{
+            background: {"radial-gradient(ellipse at 60% 40%, #1e1033 0%, #18181b 60%)" if _dark else "radial-gradient(ellipse at 60% 40%, #ede9fe 0%, #fafafa 60%)"} !important;
+        }}
+        section[data-testid="stMain"] {{
+            display: flex !important; align-items: center !important;
+            justify-content: center !important; min-height: 100dvh !important;
+            padding-top: max(12px, env(safe-area-inset-top)) !important;
+            padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+        }}
         /* login card */
         [data-testid="stForm"] {{
             background: {CARD} !important;
@@ -571,17 +579,44 @@ if "pagina" not in st.session_state or st.session_state.pagina not in [m[0] for 
 # ── CSS sidebar scroll + page top alignment ──
 st.markdown(f"""
 <style>
-[data-testid="stHeader"] {{ display: none !important; }}
-[data-testid="stToolbar"] {{ display: none !important; }}
-[data-testid="stSidebar"] {{ display: none !important; }}
-[data-testid="stAppViewContainer"] > section[data-testid="stMain"] {{ padding-top: 0 !important; }}
-.main .block-container {{ padding-top: 0 !important; padding-bottom: 40px !important; max-width: 100% !important; }}
+/* esconde tudo do Streamlit que não é conteúdo */
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stSidebar"],
+header[data-testid="stHeader"] {{
+    display: none !important;
+    height: 0 !important; min-height: 0 !important;
+    visibility: hidden !important; pointer-events: none !important;
+}}
+
+/* remove padding interno do main que o Streamlit injeta pra compensar o header */
+[data-testid="stAppViewContainer"] {{
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}}
+[data-testid="stAppViewContainer"] > section[data-testid="stMain"],
+section[data-testid="stMain"] {{
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}}
+.main .block-container {{
+    padding-top: 0 !important;
+    padding-left: clamp(8px, 3vw, 32px) !important;
+    padding-right: clamp(8px, 3vw, 32px) !important;
+    padding-bottom: max(40px, env(safe-area-inset-bottom)) !important;
+    max-width: 100% !important;
+}}
+
 /* Barra de navegação horizontal */
 .plug-nav {{
     position: sticky; top: 0; z-index: 999;
     background: {SB}; border-bottom: 1px solid {BOR};
     display: flex; align-items: center; gap: 4px;
-    padding: 0 12px; height: 48px; overflow-x: auto;
+    padding: 0 clamp(6px, 2vw, 12px);
+    padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
+    padding-right: max(clamp(6px, 2vw, 12px), env(safe-area-inset-right));
+    height: 48px; overflow-x: auto;
     scrollbar-width: none;
 }}
 .plug-nav::-webkit-scrollbar {{ display: none; }}
