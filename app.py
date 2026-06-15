@@ -1827,8 +1827,10 @@ Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
-QUANDO NÃO ENTENDER: se uma linha for ilegível, modelo inexistente no catálogo ou kit desconhecido,
-retorne com cod_interno: null, kit: null e nao_compreendido: true com motivo em "motivo".
+POSTURA: seja agressivo na interpretação. Tente SEMPRE encontrar o modelo e o kit mais provável.
+Só marque nao_compreendido: true se for absolutamente impossível identificar (linha em branco, spam, emoji isolado).
+Quando o kit for ambíguo, prefira "masculino". Quando o modelo for ambíguo, escolha o mais próximo do catálogo e use confianca "media".
+NUNCA deixe de processar uma linha por falta de certeza — adivinhe com confianca "baixa" se necessário.
 
 Retorne SOMENTE JSON válido, sem markdown:
 [{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","excluir_cores":[],"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]"""
@@ -1841,8 +1843,8 @@ Retorne SOMENTE JSON válido, sem markdown:
                             import anthropic as _ant
                             _client = _ant.Anthropic(api_key=_ant_key)
                             _msg = _client.messages.create(
-                                model="claude-haiku-4-5-20251001",
-                                max_tokens=2048,
+                                model="claude-sonnet-4-6",
+                                max_tokens=4096,
                                 messages=[{"role": "user", "content": _prompt}]
                             )
                             _raw = _msg.content[0].text.strip()
