@@ -511,3 +511,79 @@ def clonar_produto(produto_id, novo_nome, novo_codigo, loja_id=None):
         "variacoes": novas_variacoes
     }
     return _post("produtos", body, loja_id=loja_id)
+
+
+# ──────────────────────────────────────────────
+# Clientes
+# ──────────────────────────────────────────────
+def buscar_clientes(termo="", pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if termo:
+        params["pesquisa"] = termo
+    r = _get("clientes", params=params)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+def buscar_cliente(cliente_id):
+    r = _get(f"clientes/{cliente_id}")
+    return r.get("data", r) if isinstance(r, dict) else {}
+
+# ──────────────────────────────────────────────
+# Fornecedores
+# ──────────────────────────────────────────────
+def buscar_fornecedores(termo="", pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if termo:
+        params["pesquisa"] = termo
+    r = _get("fornecedores", params=params)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+# ──────────────────────────────────────────────
+# Vendas (pedidos de venda)
+# ──────────────────────────────────────────────
+def buscar_vendas(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if data_ini: params["data_inicio"] = data_ini
+    if data_fim:  params["data_fim"]    = data_fim
+    r = _get("pedidosvendas", params=params, loja_id=loja_id)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+def buscar_venda(pedido_id, loja_id=None):
+    r = _get(f"pedidosvendas/{pedido_id}", loja_id=loja_id)
+    return r.get("data", r) if isinstance(r, dict) else {}
+
+# ──────────────────────────────────────────────
+# Orçamentos
+# ──────────────────────────────────────────────
+def buscar_orcamentos(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if data_ini: params["data_inicio"] = data_ini
+    if data_fim:  params["data_fim"]    = data_fim
+    r = _get("orcamentos", params=params, loja_id=loja_id)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+# ──────────────────────────────────────────────
+# Compras (pedidos de compra histórico)
+# ──────────────────────────────────────────────
+def buscar_compras(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if data_ini: params["data_inicio"] = data_ini
+    if data_fim:  params["data_fim"]    = data_fim
+    r = _get("pedidoscompras", params=params, loja_id=loja_id)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+# ──────────────────────────────────────────────
+# Financeiro
+# ──────────────────────────────────────────────
+def buscar_contas_receber(data_ini=None, data_fim=None, pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if data_ini: params["data_inicio"] = data_ini
+    if data_fim:  params["data_fim"]    = data_fim
+    r = _get("contasreceber", params=params)
+    return r.get("data", r) if isinstance(r, dict) else []
+
+def buscar_contas_pagar(data_ini=None, data_fim=None, pagina=1, limite=50):
+    params = {"limite": limite, "pagina": pagina}
+    if data_ini: params["data_inicio"] = data_ini
+    if data_fim:  params["data_fim"]    = data_fim
+    r = _get("contaspagar", params=params)
+    return r.get("data", r) if isinstance(r, dict) else []

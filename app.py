@@ -108,12 +108,23 @@ st.markdown(f"""
 *, *::before, *::after {{ box-sizing: border-box; margin: 0; }}
 html, body, [class*="css"] {{
     font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
-    font-size: 13px; line-height: 1.5;
+    font-size: 14.5px; line-height: 1.55;
     background: {BG} !important;
     color: {TXT} !important;
     -webkit-font-smoothing: antialiased;
 }}
-.main .block-container {{ padding: 20px 24px 32px !important; max-width: 100% !important; }}
+.main .block-container {{ padding: 26px 32px 40px !important; max-width: 100% !important; }}
+
+/* ── TRANSIÇÕES GLOBAIS ── */
+*, *::before, *::after {{ transition: background 0.18s ease, border-color 0.18s ease, color 0.12s ease, box-shadow 0.18s ease; }}
+a, button {{ transition: all 0.15s ease !important; }}
+
+/* ── FADE-IN de página ── */
+.main .block-container > div:first-child {{ animation: fadeSlideIn 0.25s ease both; }}
+@keyframes fadeSlideIn {{
+  from {{ opacity: 0; transform: translateY(6px); }}
+  to   {{ opacity: 1; transform: translateY(0); }}
+}}
 
 /* ── TOPBAR ── */
 [data-testid="stHeader"] {{
@@ -139,25 +150,25 @@ html, body, [class*="css"] {{
 
 /* logo strip */
 .sb-logo {{
-    display: flex; align-items: center; gap: 9px;
-    padding: 0 16px; height: 48px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 18px; height: 52px;
     border-bottom: 1px solid {BOR};
     position: sticky; top: 0; z-index: 10;
     background: {SB};
 }}
 .sb-logo-mark {{
-    width: 26px; height: 26px; border-radius: 6px;
+    width: 30px; height: 30px; border-radius: 7px;
     background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
     color: #fff; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
-    box-shadow: 0 1px 6px {ACC}55;
+    font-weight: 800; font-size: 1rem; flex-shrink: 0;
+    box-shadow: 0 2px 8px {ACC}55;
 }}
 .sb-logo-text {{
-    font-size: 0.88rem; font-weight: 700; color: {TXT};
-    letter-spacing: -0.2px;
+    font-size: 0.95rem; font-weight: 700; color: {TXT};
+    letter-spacing: -0.3px;
 }}
 
-/* selectbox loja — "chip" compacto */
+/* selectbox loja */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] {{
     margin: 0 !important; padding: 0 !important;
 }}
@@ -166,52 +177,49 @@ html, body, [class*="css"] {{
     border: none !important;
     border-bottom: 1px solid {BOR} !important;
     background: {SB2} !important;
-    padding: 7px 14px !important;
-    font-size: 0.75rem !important; font-weight: 500 !important;
+    padding: 8px 16px !important;
+    font-size: 0.82rem !important; font-weight: 500 !important;
     color: {TXT} !important;
 }}
 
 /* nav group */
 .nav-group {{
-    font-size: 0.6rem; font-weight: 600; letter-spacing: 1.2px;
+    font-size: 0.62rem; font-weight: 600; letter-spacing: 1.2px;
     text-transform: uppercase; color: {TXT2};
-    padding: 16px 16px 4px;
+    padding: 18px 18px 5px;
     user-select: none;
 }}
 
 /* nav buttons */
 [data-testid="stSidebar"] .stButton > button {{
     width: 100% !important; background: transparent !important;
-    border: none !important; border-radius: 6px !important;
-    text-align: left !important; padding: 6px 10px !important;
+    border: none !important; border-radius: 7px !important;
+    text-align: left !important; padding: 7px 12px !important;
     margin: 1px 8px !important; width: calc(100% - 16px) !important;
-    font-size: 0.8rem !important; font-weight: 400 !important;
+    font-size: 0.85rem !important; font-weight: 400 !important;
     color: {TXT2} !important;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.15s ease, color 0.12s ease !important;
 }}
 [data-testid="stSidebar"] .stButton > button:hover {{
     background: {SB2} !important; color: {TXT} !important;
-}}
-/* estado ativo — injetado via style tag por item */
-[data-testid="stSidebar"] .stButton > button.nav-on {{
-    background: {ACC_LT} !important; color: {ACC} !important; font-weight: 600 !important;
+    transform: translateX(1px);
 }}
 
 /* footer usuário */
 .sb-footer {{
-    padding: 10px 14px; border-top: 1px solid {BOR};
-    background: {SB}; display: flex; gap: 9px; align-items: center;
+    padding: 12px 16px; border-top: 1px solid {BOR};
+    background: {SB}; display: flex; gap: 10px; align-items: center;
     position: sticky; bottom: 0;
 }}
 .sb-avatar {{
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 32px; height: 32px; border-radius: 50%;
     background: linear-gradient(135deg, {ACC} 0%, {ACC2} 100%);
     color: #fff; display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.72rem; flex-shrink: 0;
-    box-shadow: 0 1px 4px {ACC}44;
+    font-weight: 700; font-size: 0.78rem; flex-shrink: 0;
+    box-shadow: 0 2px 6px {ACC}44;
 }}
-.sb-user-name {{ font-size: 0.75rem; font-weight: 600; color: {TXT}; line-height: 1.2; }}
-.sb-user-role {{ font-size: 0.62rem; color: {TXT2}; }}
+.sb-user-name {{ font-size: 0.82rem; font-weight: 600; color: {TXT}; line-height: 1.2; }}
+.sb-user-role {{ font-size: 0.68rem; color: {TXT2}; }}
 
 /* botões tema/sair no sidebar */
 [data-testid="stSidebar"] .stButton > button[data-testid*="btn_tema"],
@@ -246,30 +254,55 @@ html, body, [class*="css"] {{
     display: flex; align-items: center; gap: 6px;
 }}
 
-/* ── STAT CARDS ── */
-.stat-grid {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }}
-.stat-box {{
-    flex: 1; min-width: 130px;
+/* ── PAGE HEADER ── */
+.page-breadcrumb {{
+    font-size: 0.75rem; color: {TXT2};
+    display: flex; align-items: center; gap: 5px; margin-bottom: 4px;
+}}
+.page-breadcrumb span {{ color: {ACC}; }}
+.page-title {{
+    font-size: 1.5rem; font-weight: 700; color: {TXT};
+    letter-spacing: -0.5px; line-height: 1.2; margin-bottom: 20px;
+}}
+
+/* ── CARDS ── */
+.card {{
     background: {CARD}; border: 1px solid {BOR};
-    border-radius: 10px; padding: 16px 18px;
+    border-radius: 12px; padding: 20px 22px; margin-bottom: 16px;
+    transition: box-shadow 0.2s ease;
+}}
+.card:hover {{ box-shadow: 0 4px 24px rgba(0,0,0,{"0.25" if _dark else "0.07"}); }}
+.card-header {{
+    font-size: 0.88rem; font-weight: 600; color: {TXT};
+    margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid {BOR};
+    display: flex; align-items: center; gap: 7px;
+}}
+
+/* ── STAT CARDS ── */
+.stat-grid {{ display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }}
+.stat-box {{
+    flex: 1; min-width: 140px;
+    background: {CARD}; border: 1px solid {BOR};
+    border-radius: 12px; padding: 18px 20px;
     position: relative; overflow: hidden;
-    transition: box-shadow 0.15s;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
 }}
 .stat-box::before {{
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     background: linear-gradient(90deg, {ACC} 0%, {ACC2} 100%);
 }}
-.stat-box:hover {{ box-shadow: 0 4px 20px rgba(0,0,0,{"0.3" if _dark else "0.08"}); }}
-.stat-val {{ font-size: 1.6rem; font-weight: 700; color: {TXT}; line-height: 1; letter-spacing: -1px; }}
-.stat-lbl {{ font-size: 0.65rem; color: {TXT2}; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }}
-.stat-icon {{ position: absolute; right: 14px; top: 14px; font-size: 1.1rem; opacity: 0.4; }}
+.stat-box:hover {{ box-shadow: 0 6px 28px rgba(0,0,0,{"0.3" if _dark else "0.09"}); transform: translateY(-1px); }}
+.stat-val {{ font-size: 1.85rem; font-weight: 700; color: {TXT}; line-height: 1; letter-spacing: -1.5px; }}
+.stat-lbl {{ font-size: 0.7rem; color: {TXT2}; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; }}
+.stat-icon {{ position: absolute; right: 16px; top: 16px; font-size: 1.3rem; opacity: 0.35; }}
 
 /* ── BADGES ── */
 .badge {{
-    display: inline-flex; align-items: center; gap: 3px;
+    display: inline-flex; align-items: center; gap: 4px;
     background: {ACC_LT}; color: {ACC};
-    border: 1px solid {ACC}30; border-radius: 4px;
-    font-size: 0.6rem; font-weight: 600; padding: 2px 6px;
+    border: 1px solid {ACC}30; border-radius: 5px;
+    font-size: 0.68rem; font-weight: 600; padding: 3px 8px;
     letter-spacing: 0.2px;
 }}
 .badge-green {{ background: {GRN_LT}; color: {GRN}; border-color: {GRN}30; }}
@@ -277,90 +310,94 @@ html, body, [class*="css"] {{
 .badge-gray  {{ background: {SB2}; color: {TXT2}; border-color: {BOR}; }}
 
 /* ── TABELA ── */
-.stDataFrame {{ border-radius: 10px !important; overflow: hidden; }}
-.stDataFrame [data-testid="stDataFrameResizable"] {{ border: 1px solid {BOR} !important; border-radius: 10px !important; }}
-.stDataFrame th {{ background: {SB2} !important; font-size: 0.65rem !important; font-weight: 600 !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.6px; }}
-.stDataFrame td {{ font-size: 0.78rem !important; color: {TXT} !important; }}
+.stDataFrame {{ border-radius: 12px !important; overflow: hidden; }}
+.stDataFrame [data-testid="stDataFrameResizable"] {{ border: 1px solid {BOR} !important; border-radius: 12px !important; }}
+.stDataFrame th {{ background: {SB2} !important; font-size: 0.7rem !important; font-weight: 600 !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.6px; padding: 10px 12px !important; }}
+.stDataFrame td {{ font-size: 0.82rem !important; color: {TXT} !important; padding: 9px 12px !important; }}
 
 /* ── INPUTS ── */
 .stTextInput label p, .stSelectbox label p, .stNumberInput label p, .stTextArea label p {{
-    font-size: 0.7rem !important; font-weight: 500 !important; color: {TXT2} !important;
-    letter-spacing: 0.2px;
+    font-size: 0.78rem !important; font-weight: 500 !important; color: {TXT2} !important;
+    letter-spacing: 0.1px; margin-bottom: 4px !important;
 }}
 .stTextInput input, .stNumberInput input, .stTextArea textarea {{
     background: {CARD} !important; border: 1px solid {BOR} !important;
-    color: {TXT} !important; border-radius: 7px !important; font-size: 0.82rem !important;
-    padding: 7px 11px !important; transition: border-color 0.15s, box-shadow 0.15s !important;
+    color: {TXT} !important; border-radius: 8px !important; font-size: 0.88rem !important;
+    padding: 9px 13px !important; transition: border-color 0.15s, box-shadow 0.15s !important;
 }}
 .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
     border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important; outline: none !important;
 }}
 .stSelectbox > div > div {{
     background: {CARD} !important; border-color: {BOR} !important;
-    font-size: 0.82rem !important; border-radius: 7px !important; color: {TXT} !important;
+    font-size: 0.88rem !important; border-radius: 8px !important; color: {TXT} !important;
+    padding: 1px 4px !important;
 }}
 .stSelectbox > div > div:focus-within {{ border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important; }}
 
 /* ── BUTTONS ── */
 .main .stButton > button, .stFormSubmitButton > button {{
-    font-size: 0.78rem !important; padding: 0.4rem 1rem !important;
-    border-radius: 7px !important; border: 1px solid {BOR} !important;
+    font-size: 0.84rem !important; padding: 0.45rem 1.1rem !important;
+    border-radius: 8px !important; border: 1px solid {BOR} !important;
     background: {CARD} !important; color: {TXT} !important;
-    font-weight: 500 !important; transition: all 0.12s !important;
+    font-weight: 500 !important; transition: all 0.15s ease !important;
     letter-spacing: 0.1px;
 }}
 .main .stButton > button:hover {{
-    background: {SB2} !important; border-color: {TXT2}55 !important; color: {TXT} !important;
+    background: {SB2} !important; border-color: {TXT2}66 !important;
+    transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
 }}
 .main .stButton > button[kind="primary"], .stFormSubmitButton > button {{
     background: {ACC} !important; color: #fff !important;
     border-color: {ACC} !important; font-weight: 600 !important;
-    box-shadow: 0 1px 4px {ACC}44;
+    box-shadow: 0 2px 8px {ACC}44 !important;
 }}
 .main .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button:hover {{
     background: {ACC2} !important; border-color: {ACC2} !important;
-    box-shadow: 0 2px 8px {ACC}55 !important;
+    box-shadow: 0 4px 16px {ACC}55 !important; transform: translateY(-1px);
 }}
 
 /* ── EXPANDER ── */
 .stExpander {{
-    border: 1px solid {BOR} !important; border-radius: 10px !important;
+    border: 1px solid {BOR} !important; border-radius: 12px !important;
     background: {CARD} !important; overflow: hidden;
+    transition: box-shadow 0.2s ease !important;
 }}
-.stExpander summary {{ font-size: 0.8rem !important; font-weight: 500 !important; color: {TXT} !important; padding: 10px 14px !important; }}
+.stExpander:hover {{ box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important; }}
+.stExpander summary {{ font-size: 0.88rem !important; font-weight: 500 !important; color: {TXT} !important; padding: 12px 16px !important; }}
 
 /* ── TABS ── */
 .stTabs [data-baseweb="tab-list"] {{ border-bottom: 1px solid {BOR}; background: transparent; gap: 0; padding: 0; }}
 .stTabs [data-baseweb="tab"] {{
-    font-size: 0.78rem !important; padding: 9px 18px !important;
+    font-size: 0.84rem !important; padding: 10px 20px !important;
     color: {TXT2} !important; border-radius: 0 !important;
     border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
-    font-weight: 400 !important; transition: color 0.1s !important;
+    font-weight: 400 !important; transition: color 0.15s, border-color 0.15s !important;
 }}
 .stTabs [aria-selected="true"] {{
     color: {TXT} !important; border-bottom-color: {ACC} !important; font-weight: 600 !important;
 }}
 
 /* ── ALERTS ── */
-.stAlert {{ border-radius: 8px !important; font-size: 0.8rem !important; border: 1px solid {BOR} !important; }}
+.stAlert {{ border-radius: 10px !important; font-size: 0.84rem !important; border: 1px solid {BOR} !important; }}
 
 /* ── METRIC ── */
 [data-testid="stMetric"] {{
     background: {CARD} !important; border: 1px solid {BOR} !important;
-    border-radius: 10px !important; padding: 12px 16px !important;
+    border-radius: 12px !important; padding: 14px 18px !important;
 }}
-[data-testid="stMetricValue"] {{ font-size: 1.4rem !important; font-weight: 700 !important; color: {TXT} !important; }}
-[data-testid="stMetricLabel"] {{ font-size: 0.68rem !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.5px; }}
+[data-testid="stMetricValue"] {{ font-size: 1.6rem !important; font-weight: 700 !important; color: {TXT} !important; }}
+[data-testid="stMetricLabel"] {{ font-size: 0.72rem !important; color: {TXT2} !important; text-transform: uppercase; letter-spacing: 0.5px; }}
 
 /* ── MISC ── */
-hr {{ border: none !important; border-top: 1px solid {BOR} !important; margin: 12px 0 !important; }}
-p {{ color: {TXT} !important; font-size: 0.82rem !important; line-height: 1.6; }}
-caption, small {{ color: {TXT2} !important; font-size: 0.7rem !important; }}
+hr {{ border: none !important; border-top: 1px solid {BOR} !important; margin: 14px 0 !important; }}
+p {{ color: {TXT} !important; font-size: 0.88rem !important; line-height: 1.6; }}
+caption, small {{ color: {TXT2} !important; font-size: 0.75rem !important; }}
 
-/* scrollbar minimalista */
+/* scrollbar */
 ::-webkit-scrollbar {{ width: 5px; height: 5px; }}
 ::-webkit-scrollbar-track {{ background: transparent; }}
-::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
+::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; transition: background 0.2s; }}
 ::-webkit-scrollbar-thumb:hover {{ background: {TXT2}; }}
 
 /* ── LOGIN ── */
@@ -470,37 +507,37 @@ _setor_lbl   = api.SETORES.get(_setor, {}).get("label", _setor)
 # (id, icon, label, grupo, aba_idx_ou_None, placeholder)
 _MENU_FULL = [
     # GERAL
-    ("dashboard",       "🏠", "Dashboard",           "GERAL",       None,  False),
+    ("dashboard",       "🏠", "Dashboard",           "GERAL",        None,  False),
     # CADASTROS
-    ("clientes",        "👥", "Clientes",             "CADASTROS",   None,  True),
-    ("fornecedores",    "🏭", "Fornecedores",         "CADASTROS",   None,  True),
+    ("clientes",        "👥", "Clientes",             "CADASTROS",    None,  False),
+    ("fornecedores",    "🏭", "Fornecedores",         "CADASTROS",    None,  False),
     # ITENS
-    ("novo_modelo",     "➕", "Novo Produto",         "ITENS",       7,     False),
-    ("clonar_modelo",   "🔁", "Clonar Produto",       "ITENS",       8,     False),
-    ("precos",          "💰", "Tabela de Preços",     "ITENS",       6,     False),
+    ("novo_modelo",     "➕", "Novo Produto",         "ITENS",        7,     False),
+    ("clonar_modelo",   "🔁", "Clonar Produto",       "ITENS",        8,     False),
+    ("precos",          "💰", "Tabela de Preços",     "ITENS",        6,     False),
     # VENDAS
-    ("vendas",          "🧾", "Vendas",               "VENDAS",      None,  True),
-    ("orcamentos",      "📋", "Orçamentos",           "VENDAS",      None,  True),
+    ("vendas",          "🧾", "Vendas",               "VENDAS",       None,  False),
+    ("orcamentos",      "📋", "Orçamentos",           "VENDAS",       None,  False),
     # ESTOQUE
-    ("entrada",         "📥", "Entrada",              "ESTOQUE",     0,     False),
-    ("acerto",          "🔧", "Acerto",               "ESTOQUE",     1,     False),
-    ("estoque_loja",    "🏪", "Por Loja",             "ESTOQUE",     4,     False),
-    ("disponibilidade", "🔘", "Disponibilidade",      "ESTOQUE",     5,     False),
-    ("etiquetas",       "🏷️", "Etiquetas",            "ESTOQUE",     2,     False),
+    ("entrada",         "📥", "Entrada",              "ESTOQUE",      0,     False),
+    ("acerto",          "🔧", "Acerto",               "ESTOQUE",      1,     False),
+    ("estoque_loja",    "🏪", "Por Loja",             "ESTOQUE",      4,     False),
+    ("disponibilidade", "🔘", "Disponibilidade",      "ESTOQUE",      5,     False),
+    ("etiquetas",       "🏷️", "Etiquetas",            "ESTOQUE",      2,     False),
     # COMPRAS
-    ("pedido",          "🛒", "Pedido de Compra",     "COMPRAS",     3,     False),
-    ("compras_hist",    "📦", "Histórico de Compras", "COMPRAS",     None,  True),
+    ("pedido",          "🛒", "Pedido de Compra",     "COMPRAS",      3,     False),
+    ("compras_hist",    "📦", "Histórico de Compras", "COMPRAS",      None,  False),
     # FINANCEIRO
-    ("financeiro",      "💳", "Financeiro",           "FINANCEIRO",  None,  True),
+    ("financeiro",      "💳", "Financeiro",           "FINANCEIRO",   None,  False),
     # RELATÓRIOS
-    ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",  None,  True),
+    ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",   None,  False),
     # CONFIG
-    ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None, False),
-    ("usuarios",        "👤", "Usuários",             "CONFIGURAÇÕES",None, False),
+    ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None,  False),
+    ("usuarios",        "👤", "Usuários",             "CONFIGURAÇÕES",None,  False),
 ]
 
 def _pode_ver(aba_idx, is_placeholder):
-    if is_placeholder: return False   # futuro
+    if is_placeholder: return False
     if aba_idx is None: return True
     return aba_idx in _abas_perm
 
@@ -840,15 +877,421 @@ if _pg == "dashboard":
             del st.session_state["clipboard"]
             st.rerun()
 
-# ── páginas futuras (placeholder) ──
-for _pid in ("clientes", "fornecedores", "vendas", "orcamentos", "compras_hist", "financeiro", "relatorios"):
-    if _pg == _pid:
-        st.markdown(f"""
-        <div class="card" style="text-align:center;padding:3rem 2rem">
-          <div style="font-size:3rem;margin-bottom:1rem">🚧</div>
-          <div style="font-size:1rem;font-weight:600;margin-bottom:6px">Em desenvolvimento</div>
-          <div style="color:{TXT2};font-size:0.82rem">Esta seção será integrada em breve com a API do GestaoClick.</div>
-        </div>""", unsafe_allow_html=True)
+# ─────────────────────────────────────────────────────────────────
+# CLIENTES
+# ─────────────────────────────────────────────────────────────────
+if _pg == "clientes":
+    sc1, sc2 = st.columns([3, 1])
+    termo_cli = sc1.text_input("Buscar cliente", placeholder="Nome, CPF/CNPJ, e-mail…", key="cli_busca", label_visibility="collapsed")
+    if sc2.button("🔍 Buscar", use_container_width=True, key="cli_btn"):
+        st.session_state["cli_dados"] = None
+
+    if "cli_dados" not in st.session_state or st.session_state.cli_dados is None:
+        with st.spinner("Carregando clientes…"):
+            try:
+                st.session_state["cli_dados"] = api.buscar_clientes(termo_cli, limite=100)
+            except Exception as e:
+                st.error(f"Erro ao buscar clientes: {e}")
+                st.session_state["cli_dados"] = []
+
+    clientes = st.session_state.get("cli_dados") or []
+    if not isinstance(clientes, list):
+        clientes = []
+
+    st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin-bottom:12px'>{len(clientes)} cliente(s) encontrado(s)</div>", unsafe_allow_html=True)
+
+    if clientes:
+        import pandas as pd
+        rows = []
+        for c in clientes:
+            rows.append({
+                "Nome": c.get("nome") or c.get("razao_social", ""),
+                "CPF/CNPJ": c.get("cpf_cnpj", ""),
+                "Telefone": c.get("telefone", "") or c.get("celular", ""),
+                "E-mail": c.get("email", ""),
+                "Cidade": c.get("cidade", ""),
+                "UF": c.get("uf", ""),
+            })
+        df_cli = pd.DataFrame(rows)
+        st.dataframe(df_cli, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum cliente encontrado. Use a busca acima.")
+
+# ─────────────────────────────────────────────────────────────────
+# FORNECEDORES
+# ─────────────────────────────────────────────────────────────────
+if _pg == "fornecedores":
+    sf1, sf2 = st.columns([3, 1])
+    termo_forn = sf1.text_input("Buscar fornecedor", placeholder="Nome, CNPJ…", key="forn_busca", label_visibility="collapsed")
+    if sf2.button("🔍 Buscar", use_container_width=True, key="forn_btn"):
+        st.session_state["forn_dados"] = None
+
+    if "forn_dados" not in st.session_state or st.session_state.forn_dados is None:
+        with st.spinner("Carregando fornecedores…"):
+            try:
+                st.session_state["forn_dados"] = api.buscar_fornecedores(termo_forn, limite=100)
+            except Exception as e:
+                st.error(f"Erro: {e}")
+                st.session_state["forn_dados"] = []
+
+    fornecedores = st.session_state.get("forn_dados") or []
+    if not isinstance(fornecedores, list):
+        fornecedores = []
+
+    st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin-bottom:12px'>{len(fornecedores)} fornecedor(es)</div>", unsafe_allow_html=True)
+
+    if fornecedores:
+        import pandas as pd
+        rows = []
+        for f in fornecedores:
+            rows.append({
+                "Nome / Razão Social": f.get("razao_social") or f.get("nome", ""),
+                "CNPJ": f.get("cnpj") or f.get("cpf_cnpj", ""),
+                "Telefone": f.get("telefone", "") or f.get("celular", ""),
+                "E-mail": f.get("email", ""),
+                "Cidade": f.get("cidade", ""),
+                "UF": f.get("uf", ""),
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum fornecedor encontrado.")
+
+# ─────────────────────────────────────────────────────────────────
+# VENDAS
+# ─────────────────────────────────────────────────────────────────
+if _pg == "vendas":
+    import pandas as pd
+    from datetime import date, timedelta
+
+    vf1, vf2, vf3 = st.columns([1, 1, 1])
+    d_ini_v = vf1.date_input("De", value=date.today() - timedelta(days=30), key="v_ini")
+    d_fim_v = vf2.date_input("Até", value=date.today(), key="v_fim")
+    if vf3.button("🔄 Carregar", use_container_width=True, key="v_load"):
+        st.session_state["vendas_dados"] = None
+
+    if "vendas_dados" not in st.session_state or st.session_state.vendas_dados is None:
+        with st.spinner("Buscando vendas…"):
+            try:
+                st.session_state["vendas_dados"] = api.buscar_vendas(
+                    data_ini=str(d_ini_v), data_fim=str(d_fim_v),
+                    loja_id=loja_id, limite=200)
+            except Exception as e:
+                st.error(f"Erro: {e}")
+                st.session_state["vendas_dados"] = []
+
+    vendas = st.session_state.get("vendas_dados") or []
+    if not isinstance(vendas, list): vendas = []
+
+    # KPIs
+    total_v = sum(float(v.get("valor_total") or 0) for v in vendas)
+    cv1, cv2, cv3 = st.columns(3)
+    cv1.markdown(f'<div class="stat-box"><div class="stat-val">{len(vendas)}</div><div class="stat-lbl">Pedidos</div></div>', unsafe_allow_html=True)
+    cv2.markdown(f'<div class="stat-box"><div class="stat-val">R$ {total_v:,.0f}</div><div class="stat-lbl">Total vendido</div></div>', unsafe_allow_html=True)
+    cv3.markdown(f'<div class="stat-box"><div class="stat-val">R$ {(total_v/len(vendas) if vendas else 0):,.0f}</div><div class="stat-lbl">Ticket médio</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    if vendas:
+        STATUS_MAP = {"1":"Aberto","2":"Aprovado","3":"Faturado","4":"Cancelado","5":"Em andamento","6":"Entregue"}
+        rows = []
+        for v in vendas:
+            rows.append({
+                "Nº": v.get("numero", ""),
+                "Data": (v.get("data_emissao") or v.get("data", ""))[:10],
+                "Cliente": v.get("cliente_nome") or v.get("cliente", {}).get("nome", ""),
+                "Valor": f"R$ {float(v.get('valor_total') or 0):,.2f}",
+                "Status": STATUS_MAP.get(str(v.get("status_id", "")), v.get("status", "")),
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma venda encontrada no período.")
+
+# ─────────────────────────────────────────────────────────────────
+# ORÇAMENTOS
+# ─────────────────────────────────────────────────────────────────
+if _pg == "orcamentos":
+    import pandas as pd
+    from datetime import date, timedelta
+
+    of1, of2, of3 = st.columns([1, 1, 1])
+    d_ini_o = of1.date_input("De", value=date.today() - timedelta(days=30), key="o_ini")
+    d_fim_o = of2.date_input("Até", value=date.today(), key="o_fim")
+    if of3.button("🔄 Carregar", use_container_width=True, key="o_load"):
+        st.session_state["orc_dados"] = None
+
+    if "orc_dados" not in st.session_state or st.session_state.orc_dados is None:
+        with st.spinner("Buscando orçamentos…"):
+            try:
+                st.session_state["orc_dados"] = api.buscar_orcamentos(
+                    data_ini=str(d_ini_o), data_fim=str(d_fim_o),
+                    loja_id=loja_id, limite=200)
+            except Exception as e:
+                st.error(f"Erro: {e}")
+                st.session_state["orc_dados"] = []
+
+    orc = st.session_state.get("orc_dados") or []
+    if not isinstance(orc, list): orc = []
+
+    total_o = sum(float(o.get("valor_total") or 0) for o in orc)
+    co1, co2 = st.columns(2)
+    co1.markdown(f'<div class="stat-box"><div class="stat-val">{len(orc)}</div><div class="stat-lbl">Orçamentos</div></div>', unsafe_allow_html=True)
+    co2.markdown(f'<div class="stat-box"><div class="stat-val">R$ {total_o:,.0f}</div><div class="stat-lbl">Valor total</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    if orc:
+        rows = []
+        for o in orc:
+            rows.append({
+                "Nº": o.get("numero", ""),
+                "Data": (o.get("data_emissao") or o.get("data", ""))[:10],
+                "Cliente": o.get("cliente_nome") or o.get("cliente", {}).get("nome", ""),
+                "Valor": f"R$ {float(o.get('valor_total') or 0):,.2f}",
+                "Validade": (o.get("data_validade") or "")[:10],
+                "Status": o.get("status", ""),
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum orçamento encontrado no período.")
+
+# ─────────────────────────────────────────────────────────────────
+# HISTÓRICO DE COMPRAS
+# ─────────────────────────────────────────────────────────────────
+if _pg == "compras_hist":
+    import pandas as pd
+    from datetime import date, timedelta
+
+    hf1, hf2, hf3 = st.columns([1, 1, 1])
+    d_ini_h = hf1.date_input("De", value=date.today() - timedelta(days=60), key="h_ini")
+    d_fim_h = hf2.date_input("Até", value=date.today(), key="h_fim")
+    if hf3.button("🔄 Carregar", use_container_width=True, key="h_load"):
+        st.session_state["comp_dados"] = None
+
+    if "comp_dados" not in st.session_state or st.session_state.comp_dados is None:
+        with st.spinner("Buscando pedidos de compra…"):
+            try:
+                st.session_state["comp_dados"] = api.buscar_compras(
+                    data_ini=str(d_ini_h), data_fim=str(d_fim_h),
+                    loja_id=loja_id, limite=200)
+            except Exception as e:
+                st.error(f"Erro: {e}")
+                st.session_state["comp_dados"] = []
+
+    compras = st.session_state.get("comp_dados") or []
+    if not isinstance(compras, list): compras = []
+
+    total_c = sum(float(c.get("valor_total") or 0) for c in compras)
+    ch1, ch2 = st.columns(2)
+    ch1.markdown(f'<div class="stat-box"><div class="stat-val">{len(compras)}</div><div class="stat-lbl">Pedidos de compra</div></div>', unsafe_allow_html=True)
+    ch2.markdown(f'<div class="stat-box"><div class="stat-val">R$ {total_c:,.0f}</div><div class="stat-lbl">Total em compras</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    if compras:
+        rows = []
+        for c in compras:
+            rows.append({
+                "Nº": c.get("numero", ""),
+                "Data": (c.get("data_emissao") or c.get("data", ""))[:10],
+                "Fornecedor": c.get("fornecedor_nome") or c.get("fornecedor", {}).get("nome", ""),
+                "Valor": f"R$ {float(c.get('valor_total') or 0):,.2f}",
+                "Status": c.get("status", ""),
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum pedido de compra encontrado no período.")
+
+# ─────────────────────────────────────────────────────────────────
+# FINANCEIRO
+# ─────────────────────────────────────────────────────────────────
+if _pg == "financeiro":
+    import pandas as pd
+    from datetime import date, timedelta
+
+    tab_rec, tab_pag = st.tabs(["💰 Contas a Receber", "💸 Contas a Pagar"])
+
+    with tab_rec:
+        fr1, fr2, fr3 = st.columns([1, 1, 1])
+        d_ini_fr = fr1.date_input("De", value=date.today() - timedelta(days=30), key="fr_ini")
+        d_fim_fr = fr2.date_input("Até", value=date.today() + timedelta(days=30), key="fr_fim")
+        if fr3.button("🔄 Carregar", use_container_width=True, key="fr_load"):
+            st.session_state["rec_dados"] = None
+
+        if "rec_dados" not in st.session_state or st.session_state.rec_dados is None:
+            with st.spinner("Carregando contas a receber…"):
+                try:
+                    st.session_state["rec_dados"] = api.buscar_contas_receber(
+                        data_ini=str(d_ini_fr), data_fim=str(d_fim_fr), limite=200)
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+                    st.session_state["rec_dados"] = []
+
+        receber = st.session_state.get("rec_dados") or []
+        if not isinstance(receber, list): receber = []
+
+        total_r = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in receber)
+        total_r_pago = sum(float(r.get("valor_pago") or 0) for r in receber)
+        total_r_ab = total_r - total_r_pago
+
+        crr1, crr2, crr3 = st.columns(3)
+        crr1.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{ACC}">R$ {total_r:,.0f}</div><div class="stat-lbl">Total a receber</div></div>', unsafe_allow_html=True)
+        crr2.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{GRN}">R$ {total_r_pago:,.0f}</div><div class="stat-lbl">Recebido</div></div>', unsafe_allow_html=True)
+        crr3.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{RED}">R$ {total_r_ab:,.0f}</div><div class="stat-lbl">Em aberto</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+        if receber:
+            rows = []
+            for r in receber:
+                rows.append({
+                    "Descrição": r.get("descricao") or r.get("historico", ""),
+                    "Cliente": r.get("cliente_nome") or r.get("cliente", {}).get("nome", ""),
+                    "Vencimento": (r.get("data_vencimento") or "")[:10],
+                    "Valor": f"R$ {float(r.get('valor') or r.get('valor_total') or 0):,.2f}",
+                    "Pago": f"R$ {float(r.get('valor_pago') or 0):,.2f}",
+                    "Situação": "✅ Pago" if str(r.get("situacao_id","")) == "2" or str(r.get("pago","")) == "1" else "⏳ Aberto",
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma conta a receber no período.")
+
+    with tab_pag:
+        fp1, fp2, fp3 = st.columns([1, 1, 1])
+        d_ini_fp = fp1.date_input("De", value=date.today() - timedelta(days=30), key="fp_ini")
+        d_fim_fp = fp2.date_input("Até", value=date.today() + timedelta(days=30), key="fp_fim")
+        if fp3.button("🔄 Carregar", use_container_width=True, key="fp_load"):
+            st.session_state["pag_dados"] = None
+
+        if "pag_dados" not in st.session_state or st.session_state.pag_dados is None:
+            with st.spinner("Carregando contas a pagar…"):
+                try:
+                    st.session_state["pag_dados"] = api.buscar_contas_pagar(
+                        data_ini=str(d_ini_fp), data_fim=str(d_fim_fp), limite=200)
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+                    st.session_state["pag_dados"] = []
+
+        pagar = st.session_state.get("pag_dados") or []
+        if not isinstance(pagar, list): pagar = []
+
+        total_p = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in pagar)
+        total_p_pago = sum(float(p.get("valor_pago") or 0) for p in pagar)
+        total_p_ab = total_p - total_p_pago
+
+        cpp1, cpp2, cpp3 = st.columns(3)
+        cpp1.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{ACC}">R$ {total_p:,.0f}</div><div class="stat-lbl">Total a pagar</div></div>', unsafe_allow_html=True)
+        cpp2.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{GRN}">R$ {total_p_pago:,.0f}</div><div class="stat-lbl">Pago</div></div>', unsafe_allow_html=True)
+        cpp3.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{RED}">R$ {total_p_ab:,.0f}</div><div class="stat-lbl">Em aberto</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+        if pagar:
+            rows = []
+            for p in pagar:
+                rows.append({
+                    "Descrição": p.get("descricao") or p.get("historico", ""),
+                    "Fornecedor": p.get("fornecedor_nome") or p.get("fornecedor", {}).get("nome", ""),
+                    "Vencimento": (p.get("data_vencimento") or "")[:10],
+                    "Valor": f"R$ {float(p.get('valor') or p.get('valor_total') or 0):,.2f}",
+                    "Pago": f"R$ {float(p.get('valor_pago') or 0):,.2f}",
+                    "Situação": "✅ Pago" if str(p.get("situacao_id","")) == "2" or str(p.get("pago","")) == "1" else "⏳ Aberto",
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma conta a pagar no período.")
+
+# ─────────────────────────────────────────────────────────────────
+# RELATÓRIOS
+# ─────────────────────────────────────────────────────────────────
+if _pg == "relatorios":
+    import pandas as pd
+    from datetime import date, timedelta
+
+    st.markdown(f"<p style='color:{TXT2};margin-bottom:18px'>Selecione um relatório abaixo para gerar:</p>", unsafe_allow_html=True)
+
+    tab_rv, tab_rc, tab_re = st.tabs(["📈 Vendas por período", "📦 Estoque atual", "💰 Resultado financeiro"])
+
+    with tab_rv:
+        rv1, rv2, rv3 = st.columns([1, 1, 1])
+        d_ini_rv = rv1.date_input("De", value=date.today() - timedelta(days=30), key="rv_ini")
+        d_fim_rv = rv2.date_input("Até", value=date.today(), key="rv_fim")
+        if rv3.button("📊 Gerar relatório", use_container_width=True, key="rv_btn", type="primary"):
+            with st.spinner("Gerando…"):
+                try:
+                    dados_rv = api.buscar_vendas(data_ini=str(d_ini_rv), data_fim=str(d_fim_rv), loja_id=loja_id, limite=500)
+                    if not isinstance(dados_rv, list): dados_rv = []
+                    if dados_rv:
+                        total_rv = sum(float(v.get("valor_total") or 0) for v in dados_rv)
+                        st.success(f"**{len(dados_rv)} pedidos** · Total: **R$ {total_rv:,.2f}** · Ticket médio: **R$ {total_rv/len(dados_rv):,.2f}**")
+                        rows = []
+                        for v in dados_rv:
+                            rows.append({
+                                "Data": (v.get("data_emissao") or "")[:10],
+                                "Nº Pedido": v.get("numero",""),
+                                "Cliente": v.get("cliente_nome",""),
+                                "Valor (R$)": float(v.get("valor_total") or 0),
+                                "Status": v.get("status",""),
+                            })
+                        df_rv = pd.DataFrame(rows)
+                        st.dataframe(df_rv, use_container_width=True, hide_index=True)
+                        st.bar_chart(df_rv.groupby("Data")["Valor (R$)"].sum())
+                    else:
+                        st.info("Nenhuma venda no período.")
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+
+    with tab_rc:
+        rc1, rc2 = st.columns([2, 1])
+        loja_rel = rc1.selectbox("Loja", ["Todas"] + list(api.LOJAS.values()), key="rc_loja")
+        if rc2.button("📊 Gerar", use_container_width=True, key="rc_btn", type="primary"):
+            loja_id_rel = None
+            if loja_rel != "Todas":
+                loja_id_rel = next((lid for lid, ln in api.LOJAS.items() if ln == loja_rel), None)
+            c_rel = api.carregar_cache(loja_id_rel)
+            if c_rel:
+                prods = c_rel.get("produtos", [])
+                rows = []
+                for p in prods:
+                    for v in p.get("variacoes", []):
+                        vd = v.get("variacao", v)
+                        rows.append({
+                            "Produto": p.get("nome",""),
+                            "Variação": vd.get("nome",""),
+                            "Cód.": vd.get("codigo",""),
+                            "Estoque": int(vd.get("estoque", 0) or 0),
+                        })
+                if rows:
+                    df_rc = pd.DataFrame(rows)
+                    total_itens = df_rc["Estoque"].sum()
+                    st.success(f"**{len(df_rc)} variações** · **{total_itens} unidades** em estoque")
+                    df_rc = df_rc.sort_values("Estoque", ascending=True)
+                    st.dataframe(df_rc, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Cache vazio. Sincronize primeiro.")
+            else:
+                st.info("Cache não encontrado. Sincronize a loja primeiro.")
+
+    with tab_re:
+        rfi1, rfi2, rfi3 = st.columns([1, 1, 1])
+        d_ini_rf = rfi1.date_input("De", value=date.today() - timedelta(days=30), key="rf_ini")
+        d_fim_rf = rfi2.date_input("Até", value=date.today(), key="rf_fim")
+        if rfi3.button("📊 Gerar", use_container_width=True, key="rf_btn", type="primary"):
+            with st.spinner("Calculando…"):
+                try:
+                    _rec = api.buscar_contas_receber(data_ini=str(d_ini_rf), data_fim=str(d_fim_rf), limite=500)
+                    _pag = api.buscar_contas_pagar(data_ini=str(d_ini_rf), data_fim=str(d_fim_rf), limite=500)
+                    if not isinstance(_rec, list): _rec = []
+                    if not isinstance(_pag, list): _pag = []
+                    tot_rec = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in _rec)
+                    tot_pag = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in _pag)
+                    resultado = tot_rec - tot_pag
+                    cor_res = GRN if resultado >= 0 else RED
+                    rfr1, rfr2, rfr3 = st.columns(3)
+                    rfr1.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{GRN}">R$ {tot_rec:,.0f}</div><div class="stat-lbl">Total a receber</div></div>', unsafe_allow_html=True)
+                    rfr2.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{RED}">R$ {tot_pag:,.0f}</div><div class="stat-lbl">Total a pagar</div></div>', unsafe_allow_html=True)
+                    rfr3.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{cor_res}">R$ {resultado:,.0f}</div><div class="stat-lbl">Resultado</div></div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Erro: {e}")
 
 # ══════════════════════════════════════════════
 # SINCRONIZAÇÃO
