@@ -1733,7 +1733,7 @@ if _pg == "pedido":
 
     # ── Importação via WhatsApp + IA ──────────────────────────────
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Cole abaixo o texto copiado do WhatsApp com os modelos e tipos de capa. A IA vai gerar um pré-pedido para revisão.</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp com os modelos e tipos pedidos. A IA interpreta e busca as variações reais no catálogo.</p>", unsafe_allow_html=True)
         wpp_texto = st.text_area(
             "Texto do WhatsApp",
             placeholder="Poco x3 - masculino e brilho\nX6- brilho\nNote13pro4g- feminino e masculino",
@@ -1748,117 +1748,166 @@ if _pg == "pedido":
                 st.warning("Sincronize os produtos primeiro.")
             else:
                 with st.spinner("Analisando com IA…"):
-                    # Monta catálogo resumido para contexto
-                    prods = cache.get("produtos", [])
-                    linhas_cat = []
-                    for p in prods[:300]:  # limita contexto
-                        cod = p.get("codigo_interno", "")
-                        nome = p.get("nome", "")
-                        variacoes = [v.get("variacao", v).get("nome", "") for v in p.get("variacoes", [])]
-                        linhas_cat.append(f"{cod} | {nome} | vars: {', '.join(variacoes[:6])}")
-                    catalogo_txt = "\n".join(linhas_cat)
+                    import json as _json, re as _re, os as _os
+
+                    _prods_all = cache.get("produtos", [])
+
+                    # Extrai todos os tipos únicos de variação (parte após "/")
+                    _tipos_set = set()
+                    for _p in _prods_all:
+                        for _v in _p.get("variacoes", []):
+                            _vn = _v.get("variacao", {}).get("nome", "")
+                            if "/" in _vn:
+                                _tipos_set.add(_vn.split("/")[-1].strip())
+                            elif _vn:
+                                _tipos_set.add(_vn.strip())
+                    _tipos_lista = sorted(_tipos_set)
+
+                    # Catálogo só com nome do produto e código (sem variações — evita contexto longo)
+                    _cat_linhas = []
+                    for _p in _prods_all:
+                        _cod = _p.get("codigo_interno", "")
+                        _nm  = _p.get("nome", "")
+                        if _cod and _nm:
+                            _cat_linhas.append(f"{_cod} | {_nm}")
+                    _catalogo_txt = "\n".join(_cat_linhas[:500])
+
+                    _prompt = f"""Você é assistente de compras de uma loja de capas para celular.
+
+O cliente enviou este pedido no WhatsApp:
+{wpp_texto}
+
+Catálogo de produtos disponíveis (cod_interno | nome do aparelho):
+{_catalogo_txt}
+
+Tipos de variação existentes no sistema:
+{", ".join(_tipos_lista)}
+
+Sua tarefa:
+1. Para cada linha do pedido, identifique o modelo do aparelho e os tipos de capa/produto pedidos.
+2. Encontre o cod_interno do produto no catálogo (ignore erros de digitação, abreviações, espaços).
+3. Mapeie os termos coloquiais do cliente (ex: "feminino", "brilho", "masculino") para os tipos reais da lista acima.
+   - "feminino" ou "fem" → tipo que remete a cores/estilo feminino (ex: Aveludada)
+   - "masculino" ou "masc" → tipo mais neutro/masculino (ex: Silicone, Space 2, Couro)
+   - "brilho" ou "glitter" → tipo com brilho/dourado (ex: Space 2, Vidro)
+   - Se não houver correspondência clara, retorne o termo original
+4. Retorne SOMENTE um array JSON válido, sem markdown, sem texto fora do JSON:
+
+[
+  {{
+    "modelo_digitado": "texto exato da linha",
+    "cod_interno": "código do catálogo ou null",
+    "nome_produto": "nome oficial do produto ou null",
+    "tipos_pedidos": ["Tipo1", "Tipo2"],
+    "confianca": "alta|media|baixa"
+  }}
+]"""
 
                     try:
-                        import os as _os
                         _ant_key = _os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
                         if not _ant_key:
                             st.error("Configure a variável ANTHROPIC_API_KEY nos secrets do Streamlit.")
                         else:
                             import anthropic as _ant
                             _client = _ant.Anthropic(api_key=_ant_key)
-                            _prompt = f"""Você é assistente de compras de loja de capinhas/acessórios.
-
-Texto colado do WhatsApp (modelo - tipos):
-{wpp_texto}
-
-Catálogo disponível (cod_interno | nome | variações):
-{catalogo_txt}
-
-Retorne SOMENTE um array JSON:
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","variacoes":["masculino","brilho"],"confianca":"alta|media|baixa"}}]
-
-Regras:
-- Encontre o produto mais parecido pelo nome do aparelho (ignore erros de digitação)
-- variacoes = lista dos tipos pedidos na linha
-- cod_interno = o código exato do catálogo se encontrado, senão null
-- Retorne apenas JSON puro sem markdown"""
                             _msg = _client.messages.create(
                                 model="claude-haiku-4-5-20251001",
                                 max_tokens=2048,
                                 messages=[{"role": "user", "content": _prompt}]
                             )
-                            import json as _json, re as _re
                             _raw = _msg.content[0].text.strip()
                             _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
                             _parsed = _json.loads(_m.group() if _m else _raw)
                             st.session_state["wpp_resultado"] = _parsed
+                            st.session_state["wpp_qtd_usada"] = int(qtd_padrao)
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
 
-        # Exibe e permite revisar o pré-pedido gerado
+        # ── Exibe pré-pedido para revisão ──────────────────────────
         if "wpp_resultado" in st.session_state and st.session_state.wpp_resultado:
-            resultado = st.session_state.wpp_resultado
-            st.markdown(f"<div style='font-weight:600;margin:10px 0 6px'>Pré-pedido gerado — revise antes de adicionar</div>", unsafe_allow_html=True)
+            _resultado   = st.session_state.wpp_resultado
+            _qtd_usada   = st.session_state.get("wpp_qtd_usada", 1)
+            _prods_map   = {p.get("codigo_interno"): p for p in cache.get("produtos", []) if cache}
+            _itens_gerados = []
 
-            prods_map = {p.get("codigo_interno"): p for p in (cache.get("produtos", []) if cache else [])}
-            itens_gerados = []
-            for item in resultado:
-                cod = item.get("cod_interno")
-                nome = item.get("nome_produto") or item.get("modelo_digitado", "")
-                variacoes = item.get("variacoes", [])
-                conf = item.get("confianca", "baixa")
-                badge_cor = GRN if conf == "alta" else (ACC if conf == "media" else RED)
-                badge = f'<span style="background:{badge_cor}22;color:{badge_cor};border:1px solid {badge_cor}44;border-radius:4px;font-size:0.65rem;font-weight:600;padding:1px 6px">{conf}</span>'
+            st.markdown(f"<div style='font-weight:700;font-size:0.95rem;margin:14px 0 8px'>Pré-pedido gerado — revise e confirme</div>", unsafe_allow_html=True)
 
+            for _item in _resultado:
+                _cod   = _item.get("cod_interno")
+                _nome  = _item.get("nome_produto") or _item.get("modelo_digitado", "")
+                _tipos = _item.get("tipos_pedidos", [])
+                _conf  = _item.get("confianca", "baixa")
+                _badge_cor = GRN if _conf == "alta" else (ACC if _conf == "media" else RED)
+
+                # Busca variações reais do produto filtrando pelo tipo
+                _vars_encontradas = []
+                if _cod and _cod in _prods_map:
+                    _prod_obj = _prods_map[_cod]
+                    for _tipo in _tipos:
+                        _tipo_lower = _tipo.lower()
+                        for _v in _prod_obj.get("variacoes", []):
+                            _vd   = _v.get("variacao", {})
+                            _vnom = _vd.get("nome", "")
+                            # parte do tipo é o sufixo após "/"
+                            _sufixo = _vnom.split("/")[-1].strip().lower() if "/" in _vnom else _vnom.lower()
+                            if _tipo_lower in _sufixo or _sufixo in _tipo_lower:
+                                _vars_encontradas.append({
+                                    "tipo_pedido":   _tipo,
+                                    "variacao_nome": _vnom,
+                                    "variacao_id":   _vd.get("id", ""),
+                                    "variacao_cod":  _vd.get("codigo", ""),
+                                    "produto_id":    _prod_obj.get("id", ""),
+                                    "custo":         float(_prod_obj.get("valor_custo") or 0),
+                                })
+
+                # Card do item
+                _tags_tipo = "".join(
+                    f'<span style="background:{SB2};color:{TXT};border:1px solid {BOR};border-radius:4px;font-size:0.72rem;padding:1px 7px;margin-right:4px">{t}</span>'
+                    for t in _tipos
+                )
+                _n_vars = len(_vars_encontradas)
+                _vars_info = f'<span style="color:{GRN};font-size:0.75rem">✓ {_n_vars} variação(ões) encontrada(s)</span>' if _n_vars else f'<span style="color:{RED};font-size:0.75rem">⚠ nenhuma variação encontrada</span>'
                 st.markdown(f"""
-                <div style="background:{CARD};border:1px solid {BOR};border-radius:8px;padding:10px 14px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:600;font-size:0.88rem">{nome}</div>
-                    <div style="color:{TXT2};font-size:0.75rem">digitado: <i>{item.get('modelo_digitado','')}</i> · cód: {cod or '—'}</div>
-                    <div style="margin-top:4px">{"".join(f'<span style="background:{SB2};color:{TXT};border:1px solid {BOR};border-radius:4px;font-size:0.72rem;padding:1px 7px;margin-right:4px">{v}</span>' for v in variacoes)}</div>
+                <div style="background:{CARD};border:1px solid {BOR};border-radius:8px;padding:10px 14px;margin:4px 0">
+                  <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:0">
+                      <div style="font-weight:600;font-size:0.88rem">{_nome}</div>
+                      <div style="color:{TXT2};font-size:0.74rem;margin:2px 0">digitado: <i>{_item.get('modelo_digitado','')}</i> · cód: <b>{_cod or '—'}</b></div>
+                      <div style="margin-top:5px">{_tags_tipo}</div>
+                      <div style="margin-top:4px">{_vars_info}</div>
+                    </div>
+                    <span style="background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}44;border-radius:4px;font-size:0.65rem;font-weight:600;padding:2px 8px;white-space:nowrap">{_conf}</span>
                   </div>
-                  <div>{badge}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # prepara para adicionar ao pedido
-                if cod and cod in prods_map:
-                    prod_obj = prods_map[cod]
-                    for var_tipo in variacoes:
-                        for v in prod_obj.get("variacoes", []):
-                            vd = v.get("variacao", v)
-                            vnome = vd.get("nome", "").lower()
-                            if var_tipo.lower() in vnome or any(p in vnome for p in var_tipo.lower().split()):
-                                itens_gerados.append({
-                                    "produto_id":  prod_obj.get("id", ""),
-                                    "produto_nome": prod_obj.get("nome", nome),
-                                    "variacao_id":  vd.get("id", ""),
-                                    "variacao_nome":vd.get("nome", var_tipo),
-                                    "cod_interno":  cod,
-                                    "variacao_cod": vd.get("codigo", ""),
-                                    "Qtd a Pedir":  int(qtd_padrao),
-                                    "fornecedor":   "",
-                                    "custo":        float(prod_obj.get("valor_custo") or 0),
-                                })
-                else:
-                    # produto não encontrado — adiciona como avulso
-                    for var_tipo in variacoes:
-                        itens_gerados.append({
-                            "produto_id": "", "produto_nome": nome,
-                            "variacao_id": "", "variacao_nome": var_tipo,
-                            "cod_interno": cod or "", "variacao_cod": "",
-                            "Qtd a Pedir": int(qtd_padrao), "fornecedor": "", "custo": 0.0,
-                        })
+                # Adiciona à lista de itens gerados
+                for _vf in _vars_encontradas:
+                    _itens_gerados.append({
+                        "produto_id":    _vf["produto_id"],
+                        "produto_nome":  _nome,
+                        "variacao_id":   _vf["variacao_id"],
+                        "variacao_nome": _vf["variacao_nome"],
+                        "cod_interno":   _cod or "",
+                        "variacao_cod":  _vf["variacao_cod"],
+                        "Qtd a Pedir":   _qtd_usada,
+                        "fornecedor":    "",
+                        "custo":         _vf["custo"],
+                    })
 
-            if itens_gerados:
-                st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin:6px 0'>{len(itens_gerados)} variação(ões) identificada(s)</div>", unsafe_allow_html=True)
+            if _itens_gerados:
+                st.markdown(f"<div style='color:{TXT2};font-size:0.8rem;margin:8px 0 4px'><b>{len(_itens_gerados)}</b> variação(ões) prontas para adicionar ao pedido</div>", unsafe_allow_html=True)
                 if st.button("➕ Adicionar ao pedido", type="primary", key="wpp_add", use_container_width=True):
                     if "pedido_itens" not in st.session_state:
                         st.session_state.pedido_itens = []
-                    st.session_state.pedido_itens.extend(itens_gerados)
+                    st.session_state.pedido_itens.extend(_itens_gerados)
                     del st.session_state["wpp_resultado"]
-                    st.session_state["wpp_input"] = ""
-                    st.success(f"✅ {len(itens_gerados)} itens adicionados ao pedido!")
+                    st.success(f"✅ {len(_itens_gerados)} itens adicionados ao pedido!")
+                    st.rerun()
+            else:
+                st.warning("Nenhuma variação encontrada no catálogo. Verifique se os produtos estão sincronizados e se os tipos pedidos existem.")
+                if st.button("🗑 Limpar resultado", key="wpp_clear"):
+                    del st.session_state["wpp_resultado"]
                     st.rerun()
 
     st.divider()
