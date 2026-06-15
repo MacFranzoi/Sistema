@@ -73,19 +73,18 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 
 st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
-# ── Tema ──
+# ── Tema fixo claro (ignora preferência do sistema) ──
 if "tema" not in st.session_state:
     st.session_state.tema = "light"
-_dark = st.session_state.tema == "dark"
+_dark = False  # sempre claro
 
-# Light: branco limpo / Dark: grafite com letras bem legíveis
-BG    = "#18181b"   if _dark else "#f5f5f7"
-SB    = "#111113"   if _dark else "#ffffff"
-SB2   = "#1e1e22"   if _dark else "#f0f0f3"
-CARD  = "#1e1e22"   if _dark else "#ffffff"
-BOR   = "#2e2e34"   if _dark else "#e2e2e7"
-TXT   = "#f2f2f5"   if _dark else "#111113"   # letras bem claras no dark
-TXT2  = "#a0a0b0"   if _dark else "#6b6b80"   # muted mais legível no dark
+BG   = "#f5f5f7"
+SB   = "#ffffff"
+SB2  = "#f0f0f3"
+CARD = "#ffffff"
+BOR  = "#e2e2e7"
+TXT  = "#111113"
+TXT2 = "#6b6b80"
 ACC   = "#7c3aed"
 ACC2  = "#a855f7"
 ACC_LT= "rgba(124,58,237,0.12)"
@@ -112,16 +111,10 @@ html, body, [class*="css"] {{
 }}
 .main .block-container {{ padding: 26px 32px 40px !important; max-width: 100% !important; }}
 
-/* ── TRANSIÇÕES GLOBAIS ── */
-*, *::before, *::after {{ transition: background 0.18s ease, border-color 0.18s ease, color 0.12s ease, box-shadow 0.18s ease; }}
-a, button {{ transition: all 0.15s ease !important; }}
-
-/* ── FADE-IN de página ── */
-.main .block-container > div:first-child {{ animation: fadeSlideIn 0.25s ease both; }}
-@keyframes fadeSlideIn {{
-  from {{ opacity: 0; transform: translateY(6px); }}
-  to   {{ opacity: 1; transform: translateY(0); }}
-}}
+/* ── SEM TRANSIÇÕES / SEM ANIMAÇÕES ── */
+*, *::before, *::after {{ animation: none !important; }}
+/* força esquema de cores claro independente do sistema */
+:root {{ color-scheme: light only; }}
 
 /* ── TOPBAR: esconde header nativo do Streamlit ── */
 [data-testid="stHeader"],
@@ -202,8 +195,7 @@ header[data-testid="stHeader"] {{
     padding: 7px 12px !important; margin: 1px 6px !important;
     font-size: 0.84rem !important; font-weight: 600 !important;
     color: {TXT2} !important;
-    transition: background 0.12s, color 0.12s !important;
-}}
+    }}
 [data-testid="stSidebar"] .stButton > button:hover {{
     background: {SB2} !important; color: {TXT} !important;
 }}
@@ -275,8 +267,7 @@ header[data-testid="stHeader"] {{
 .card {{
     background: {CARD}; border: 1px solid {BOR};
     border-radius: 12px; padding: 20px 22px; margin-bottom: 16px;
-    transition: box-shadow 0.2s ease;
-}}
+    }}
 .card:hover {{ box-shadow: 0 4px 24px rgba(0,0,0,{"0.25" if _dark else "0.07"}); }}
 .card-header {{
     font-size: 0.88rem; font-weight: 600; color: {TXT};
@@ -292,8 +283,7 @@ header[data-testid="stHeader"] {{
     background: {CARD}; border: 1px solid {BOR};
     border-radius: 12px; padding: 18px 20px;
     position: relative; overflow: hidden;
-    transition: box-shadow 0.2s ease, transform 0.2s ease;
-}}
+    }}
 .stat-box::before {{
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     background: linear-gradient(90deg, {ACC} 0%, {ACC2} 100%);
@@ -329,8 +319,7 @@ header[data-testid="stHeader"] {{
 .stTextInput input, .stNumberInput input, .stTextArea textarea {{
     background: {CARD} !important; border: 1px solid {BOR} !important;
     color: {TXT} !important; border-radius: 8px !important; font-size: 0.88rem !important;
-    padding: 9px 13px !important; transition: border-color 0.15s, box-shadow 0.15s !important;
-}}
+    padding: 9px 13px !important; }}
 .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {{
     border-color: {ACC} !important; box-shadow: 0 0 0 3px {ACC}18 !important; outline: none !important;
 }}
@@ -346,8 +335,7 @@ header[data-testid="stHeader"] {{
     font-size: 0.84rem !important; padding: 0.45rem 1.1rem !important;
     border-radius: 8px !important; border: 1px solid {BOR} !important;
     background: {CARD} !important; color: {TXT} !important;
-    font-weight: 500 !important; transition: all 0.15s ease !important;
-    letter-spacing: 0.1px;
+    font-weight: 500 !important; letter-spacing: 0.1px;
 }}
 .main .stButton > button:hover {{
     background: {SB2} !important; border-color: {TXT2}66 !important;
@@ -367,8 +355,7 @@ header[data-testid="stHeader"] {{
 .stExpander {{
     border: 1px solid {BOR} !important; border-radius: 12px !important;
     background: {CARD} !important; overflow: hidden;
-    transition: box-shadow 0.2s ease !important;
-}}
+    }}
 .stExpander:hover {{ box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important; }}
 .stExpander summary {{ font-size: 0.88rem !important; font-weight: 500 !important; color: {TXT} !important; padding: 12px 16px !important; }}
 
@@ -378,8 +365,7 @@ header[data-testid="stHeader"] {{
     font-size: 0.84rem !important; padding: 10px 20px !important;
     color: {TXT2} !important; border-radius: 0 !important;
     border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
-    font-weight: 400 !important; transition: color 0.15s, border-color 0.15s !important;
-}}
+    font-weight: 400 !important; }}
 .stTabs [aria-selected="true"] {{
     color: {TXT} !important; border-bottom-color: {ACC} !important; font-weight: 600 !important;
 }}
@@ -403,7 +389,7 @@ caption, small {{ color: {TXT2} !important; font-size: 0.75rem !important; }}
 /* scrollbar */
 ::-webkit-scrollbar {{ width: 5px; height: 5px; }}
 ::-webkit-scrollbar-track {{ background: transparent; }}
-::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; transition: background 0.2s; }}
+::-webkit-scrollbar-thumb {{ background: {BOR}; border-radius: 99px; }}
 ::-webkit-scrollbar-thumb:hover {{ background: {TXT2}; }}
 
 /* ── LOGIN (background e centralização aplicados via CSS local no bloco de login) ── */
@@ -486,8 +472,7 @@ if st.session_state.usuario_logado is None:
             padding: 0.55rem 1rem !important; margin-top: 0.8rem !important;
             font-size: 0.85rem !important; letter-spacing: 0.2px !important;
             box-shadow: 0 2px 12px {ACC}44 !important;
-            transition: opacity 0.15s !important;
-        }}
+            }}
         [data-testid="stForm"] button[type="submit"]:hover {{ opacity: 0.88 !important; }}
         </style>
         <div style="text-align:center;margin-bottom:1.4rem;margin-top:0.5rem">
@@ -672,6 +657,27 @@ with _c4:
         st.session_state.usuario_logado = None
         st.query_params.clear()
         st.rerun()
+
+# ── Scroll restore: salva posição e restaura após rerun ──
+st.markdown("""<script>
+(function(){
+  const KEY = 'plugerp_scroll_' + (window.location.pathname || '');
+  // restaura posição salva
+  const saved = sessionStorage.getItem(KEY);
+  if (saved) {
+    window.scrollTo(0, parseInt(saved));
+    sessionStorage.removeItem(KEY);
+  }
+  // salva posição antes de qualquer navegação/rerun
+  window.addEventListener('beforeunload', function() {
+    sessionStorage.setItem(KEY, window.scrollY);
+  });
+  // Streamlit faz rerun sem beforeunload — salva também no visibilitychange
+  document.addEventListener('visibilitychange', function() {
+    sessionStorage.setItem(KEY, window.scrollY);
+  });
+})();
+</script>""", unsafe_allow_html=True)
 
 # ── Carrega cache e clip ──
 cache = api.carregar_cache(loja_id)
