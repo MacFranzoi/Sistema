@@ -609,6 +609,15 @@ st.markdown(f"""
 [data-testid="stSidebar"] .stButton > button:hover {{
     background: {SB2} !important; color: {TXT} !important;
 }}
+/* botões que são headers de grupo (começam com ▾ ou ▸) */
+[data-testid="stSidebar"] .stButton > button[data-testid^="grp_"],
+[data-testid="stSidebar"] button[key^="grp_"] {{
+    font-size: 0.62rem !important; font-weight: 700 !important;
+    letter-spacing: 1.2px !important; text-transform: uppercase !important;
+    color: {TXT2} !important; padding: 14px 18px 4px !important;
+    margin: 0 !important; border-radius: 0 !important;
+    background: transparent !important;
+}}
 
 /* ── PÁGINA: alinha ao topo sem espaço em branco ── */
 /* Streamlit injeta padding-top = altura do header no stMain */
@@ -666,19 +675,58 @@ with st.sidebar:
     loja_sel_nome = st.selectbox("loja", list(loja_opcoes.keys()), key="loja_ativa", label_visibility="collapsed")
     loja_id = loja_opcoes[loja_sel_nome]
 
-    # Menu agrupado
-    _grp = None
+    # Menu agrupado com submenus colapsáveis
     _pg_ativo = st.session_state.pagina
-    for pid, icon, label, grupo, aba_idx, _ in _MENU_VISIVEL:
-        if grupo != _grp:
-            st.markdown(f'<div class="nav-group">{grupo}</div>', unsafe_allow_html=True)
-            _grp = grupo
-        if st.button(f"{icon}  {label}", key=f"nav_{pid}", use_container_width=True):
-            st.session_state.pagina = pid
+
+    # grupos na ordem em que aparecem
+    _grupos_ordem = []
+    for _, _, _, grupo, _, _ in _MENU_VISIVEL:
+        if grupo not in _grupos_ordem:
+            _grupos_ordem.append(grupo)
+
+    # qual grupo contém a página ativa
+    _grp_ativo = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _grupos_ordem[0])
+
+    # estado de abertura: por padrão abre o grupo da página ativa
+    if "sb_grupos_abertos" not in st.session_state:
+        st.session_state.sb_grupos_abertos = {_grp_ativo}
+    # garante que o grupo da página ativa sempre está aberto
+    st.session_state.sb_grupos_abertos.add(_grp_ativo)
+
+    for grupo in _grupos_ordem:
+        aberto = grupo in st.session_state.sb_grupos_abertos
+        seta = "▾" if aberto else "▸"
+        # botão do grupo (toggle)
+        st.markdown(f"""
+        <style>
+        button[data-testid="baseButton-secondary"][kind="secondary"][key="grp_{grupo}"] {{
+            background: transparent !important; border: none !important;
+            text-align: left !important; width: 100% !important;
+            font-size: 0.62rem !important; font-weight: 700 !important;
+            letter-spacing: 1.2px !important; text-transform: uppercase !important;
+            color: {TXT2} !important; padding: 14px 18px 4px !important;
+            margin: 0 !important; border-radius: 0 !important;
+            cursor: pointer !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+        if st.button(f"{seta}  {grupo}", key=f"grp_{grupo}", use_container_width=True):
+            abertos = st.session_state.sb_grupos_abertos
+            if grupo in abertos:
+                abertos.discard(grupo)
+            else:
+                abertos.add(grupo)
             st.rerun()
 
-    # JS: colore o botão ativo por texto exato + garante sidebar expandida
-    _pg_label = next((f"{m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
+        if aberto:
+            itens_grupo = [m for m in _MENU_VISIVEL if m[3] == grupo]
+            for pid, icon, label, _, aba_idx, _ in itens_grupo:
+                if st.button(f"  {icon}  {label}", key=f"nav_{pid}", use_container_width=True):
+                    st.session_state.pagina = pid
+                    st.rerun()
+
+    # JS: colore o botão ativo + estiliza headers de grupo
+    _pg_label = next((f"  {m[1]}  {m[2]}" for m in _MENU_VISIVEL if m[0] == _pg_ativo), "")
     st.markdown(f"""
     <script>
     (function() {{
