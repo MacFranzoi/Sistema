@@ -2002,10 +2002,10 @@ FORMATO TRANSCRIÇÃO DE VOZ — quando o texto parece ditado (sem pontuação, 
 - Cores isoladas (preta, lilas, verde militar, rose, azul, vinho etc.) → kit="avulso cor" com a cor na descrição
 - Kits nomeados (brilho, masculino, feminino, etc.) → kit normal com quantidade_fixa
 - Ex: "a06 quantidade uma preta duas verde militar brilho 2 lilas" →
-    {modelo:A06, kit:"avulso cor", descricao:"preta", qtd:1}
-    {modelo:A06, kit:"avulso cor", descricao:"verde militar", qtd:2}
-    {modelo:A06, kit:"brilho", qtd:2}  ← "brilho 2" = brilho com qtd 2
-    {modelo:A06, kit:"avulso cor", descricao:"lilas", qtd:1}  ← sem número antes = 1
+    {{modelo:A06, kit:"avulso cor", descricao:"preta", qtd:1}}
+    {{modelo:A06, kit:"avulso cor", descricao:"verde militar", qtd:2}}
+    {{modelo:A06, kit:"brilho", qtd:2}}  ← "brilho 2" = brilho com qtd 2
+    {{modelo:A06, kit:"avulso cor", descricao:"lilas", qtd:1}}  ← sem número antes = 1
 - Se não há número antes de um item na sequência, assuma quantidade_fixa=1
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
