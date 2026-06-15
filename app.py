@@ -78,18 +78,19 @@ if "tema" not in st.session_state:
     st.session_state.tema = "light"
 _dark = st.session_state.tema == "dark"
 
-# Paleta clean — azul-acinzentado suave como acento
-BG      = "#1e2130" if _dark else "#f5f6fa"
-SB      = "#161824" if _dark else "#ffffff"
-SB2     = "#1e2130" if _dark else "#f5f6fa"
-CARD    = "#252840" if _dark else "#ffffff"
-BOR     = "#2e3250" if _dark else "#e8eaf0"
-TXT     = "#e8eaf0" if _dark else "#1e2130"
-TXT2    = "#7c83a0" if _dark else "#8a90aa"
-ACC     = "#5b6af0"          # índigo suave — acento principal
-ACC_LT  = "rgba(91,106,240,0.10)"
-TOPBAR  = "#161824" if _dark else "#ffffff"
-# mantém YEL como alias do acento pra não quebrar referências no CSS
+# Paleta clean — inspirada no GestaoClick original
+# Light: fundo cinza claro, sidebar branco, acento azul-teal
+# Dark:  navy escuro, sidebar navy médio, mesmo acento
+BG      = "#23293a" if _dark else "#f0f2f5"
+SB      = "#1a1f2e" if _dark else "#ffffff"
+SB2     = "#23293a" if _dark else "#f7f8fa"
+CARD    = "#2a3045" if _dark else "#ffffff"
+BOR     = "#333b55" if _dark else "#e2e5eb"
+TXT     = "#e4e8f0" if _dark else "#1a2032"
+TXT2    = "#7a85a0" if _dark else "#7a8599"
+ACC     = "#2563eb"               # azul profissional
+ACC_LT  = "rgba(37,99,235,0.10)"
+TOPBAR  = "#1a1f2e" if _dark else "#2563eb"  # topbar azul no light, navy no dark
 YEL     = ACC
 YEL_BG  = ACC_LT
 
@@ -107,13 +108,14 @@ html, body, [class*="css"] {{
 }}
 .main .block-container {{ padding: 0 !important; max-width: 100% !important; }}
 
-/* ── TOPBAR preta ── */
+/* ── TOPBAR ── */
 [data-testid="stHeader"] {{
     background: {TOPBAR} !important;
     height: 52px !important;
-    border-bottom: 1px solid #222 !important;
+    border-bottom: 1px solid {BOR} !important;
 }}
 [data-testid="stHeader"] button {{ color: #fff !important; }}
+[data-testid="stHeader"] svg {{ fill: #fff !important; stroke: #fff !important; }}
 [data-testid="stToolbar"] {{ display: none !important; }}
 
 /* ── SIDEBAR ── */
@@ -131,18 +133,18 @@ html, body, [class*="css"] {{
     display: flex; align-items: center; gap: 10px;
     padding: 0 14px;
     height: 52px;
-    background: #000;
-    border-bottom: 1px solid #222;
+    background: {TOPBAR};
+    border-bottom: 1px solid {BOR};
     position: sticky; top: 0; z-index: 10;
 }}
 .sb-logo-mark {{
-    background: {YEL}; color: #fff;
+    background: #fff; color: {ACC};
     width: 30px; height: 30px; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
     font-weight: 900; font-size: 1rem; letter-spacing: -1px;
     flex-shrink: 0;
 }}
-.sb-logo-text {{ font-size: 1rem; font-weight: 700; color: {YEL}; letter-spacing: 0.3px; }}
+.sb-logo-text {{ font-size: 1rem; font-weight: 700; color: #fff; letter-spacing: 0.3px; }}
 
 /* ── empresa selecionada ── */
 .sb-empresa {{
