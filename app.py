@@ -2814,85 +2814,94 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 except Exception:
                     return str(v)
 
-            st.markdown(f"""<style>
-            /* linhas do pedido: zera gap e padding das colunas */
-            .ped-linha [data-testid="stHorizontalBlock"] {{
-                gap: 3px !important; align-items: center !important;
-                flex-wrap: nowrap !important;
-            }}
-            .ped-linha [data-testid="stColumn"] {{ padding: 0 !important; }}
-            /* input de qty compacto */
-            .ped-linha [data-testid="stTextInput"] > div {{
-                height: 34px !important; min-height: 0 !important;
-            }}
-            .ped-linha [data-testid="stTextInput"] input {{
-                height: 34px !important; padding: 0 6px !important;
-                font-size: 0.85rem !important; text-align: center !important;
-                border-radius: 6px !important;
-            }}
-            /* botões pequenos e quadrados */
-            .ped-linha .stButton > button {{
-                height: 34px !important; min-height: 0 !important;
-                padding: 0 !important; border-radius: 6px !important;
-                font-size: 1rem !important; line-height: 1 !important;
-            }}
-            </style>""", unsafe_allow_html=True)
+            # Monta lista flat de todos os itens para indexação única
+            _ped_flat = []
+            for _lk, _lst in [("pedido_itens", st.session_state.pedido_itens),
+                               ("pedido_avulsos", st.session_state.get("pedido_avulsos", []))]:
+                for _i, _it in enumerate(_lst):
+                    _ped_flat.append({"lk": _lk, "idx": _i, "it": _it})
 
-            # cabeçalho
-            st.markdown(f"""<div style="display:grid;grid-template-columns:1fr 44px 36px 36px;
-                gap:3px;padding:3px 0 4px;font-size:0.62rem;font-weight:700;
-                text-transform:uppercase;letter-spacing:.5px;color:{TXT2};
-                border-bottom:2px solid {BOR}">
-              <span>Produto · Variação</span><span style="text-align:center">Qtd</span>
-              <span></span><span></span>
-            </div>""", unsafe_allow_html=True)
+            total_calculado = sum(
+                int(r["it"].get("quantidade", 1)) *
+                float(str(r["it"].get("valor_custo", "0")).replace(",", "."))
+                for r in _ped_flat
+            )
 
-            total_calculado = 0.0
-            for lista_key, lista in [("pedido_itens", st.session_state.pedido_itens),
-                                      ("pedido_avulsos", st.session_state.get("pedido_avulsos", []))]:
-                for idx, it in enumerate(lista):
-                    try:
-                        custo_f = float(str(it.get("valor_custo", "0")).replace(",", "."))
-                    except Exception:
-                        custo_f = 0.0
-                    qtd_atual = int(it.get("quantidade", 1))
-                    var  = it.get("variacao_nome", "") or ""
-                    obs  = it.get("observacao", "") or ""
-                    nome = it.get("produto_nome", "")
-                    tag  = "🆕 " if it.get("_avulso") else ""
-                    info = " · ".join(filter(None, [var, obs]))
-                    linha_txt = f"{tag}{nome}" + (f" · {info}" if info else "")
+            # Tabela HTML pura — compacta em qualquer dispositivo
+            _rows_html = ""
+            for _n, _r in enumerate(_ped_flat):
+                _it   = _r["it"]
+                _qtd  = int(_it.get("quantidade", 1))
+                _nome = _it.get("produto_nome", "")
+                _var  = _it.get("variacao_nome", "") or ""
+                _obs  = _it.get("observacao", "") or ""
+                _tag  = "🆕 " if _it.get("_avulso") else ""
+                _info = " · ".join(filter(None, [_var, _obs]))
+                _bg   = CARD if _n % 2 == 0 else BG
+                _rows_html += f"""
+                <tr style="background:{_bg}">
+                  <td style="padding:5px 6px;font-size:0.73rem;color:{TXT};
+                             max-width:0;overflow:hidden;text-overflow:ellipsis;
+                             white-space:nowrap">
+                    {_tag}{_nome}
+                    {"<br><span style='font-size:0.65rem;color:" + TXT2 + "'>" + _info + "</span>" if _info else ""}
+                  </td>
+                  <td style="padding:5px 6px;text-align:center;font-size:0.8rem;
+                             font-weight:700;color:{TXT};white-space:nowrap;width:36px">
+                    {_qtd}
+                  </td>
+                </tr>"""
 
-                    st.markdown('<div class="ped-linha">', unsafe_allow_html=True)
-                    _ci, _cq, _ce, _cd = st.columns([5, 1, 0.7, 0.7])
+            st.markdown(f"""
+            <table style="width:100%;border-collapse:collapse;
+                          border:1px solid {BOR};border-radius:8px;overflow:hidden">
+              <thead>
+                <tr style="background:{SB}">
+                  <th style="padding:5px 6px;text-align:left;font-size:0.62rem;
+                             font-weight:700;text-transform:uppercase;
+                             letter-spacing:.5px;color:{TXT2}">#&nbsp; Produto · Variação</th>
+                  <th style="padding:5px 6px;text-align:center;font-size:0.62rem;
+                             font-weight:700;text-transform:uppercase;
+                             letter-spacing:.5px;color:{TXT2};width:36px">Qtd</th>
+                </tr>
+              </thead>
+              <tbody>{_rows_html}</tbody>
+            </table>
+            """, unsafe_allow_html=True)
 
-                    _ci.markdown(
-                        f"<div style='font-size:0.74rem;line-height:34px;overflow:hidden;"
-                        f"white-space:nowrap;text-overflow:ellipsis;color:{TXT}'>{linha_txt}</div>",
-                        unsafe_allow_html=True,
-                    )
-                    qtd_str = _cq.text_input("q", value=str(qtd_atual),
-                                             label_visibility="collapsed",
-                                             key=f"ped_qtd_{lista_key}_{idx}")
-                    try:
-                        nova_qtd = max(0, int(qtd_str))
-                    except Exception:
-                        nova_qtd = qtd_atual
-                    lista[idx]["quantidade"] = nova_qtd
-                    total_calculado += nova_qtd * custo_f
-
-                    if _ce.button("✏️", key=f"edit_{lista_key}_{idx}", use_container_width=True):
-                        st.session_state["_editar_lista"] = lista_key
-                        st.session_state["_editar_idx"]   = idx
-                        st.rerun()
-                    if _cd.button("🗑", key=f"del_{lista_key}_{idx}", use_container_width=True):
-                        lista.pop(idx)
-                        st.session_state[lista_key] = lista
-                        st.rerun()
-
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    st.markdown(f"<div style='height:1px;background:{BOR};margin:1px 0'></div>",
-                                unsafe_allow_html=True)
+            # Controles: seleciona linha → edita qtd / edita item / exclui
+            if _ped_flat:
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _fmt_item = lambda n: (
+                    f"{n+1}. {_ped_flat[n]['it'].get('produto_nome','')} "
+                    f"· {_ped_flat[n]['it'].get('variacao_nome','') or _ped_flat[n]['it'].get('observacao','')}"
+                )
+                _sel = st.selectbox("Item", range(len(_ped_flat)),
+                                    format_func=_fmt_item,
+                                    label_visibility="collapsed",
+                                    key="ped_sel")
+                _it_sel = _ped_flat[_sel]["it"]
+                _ca, _cb, _cc = st.columns([2, 1, 1])
+                _nova_qtd = _ca.number_input(
+                    "Qtd", min_value=0, step=1,
+                    value=int(_it_sel.get("quantidade", 1)),
+                    key=f"ped_qtd_ctrl_{_sel}",
+                    label_visibility="collapsed",
+                )
+                if _nova_qtd != int(_it_sel.get("quantidade", 1)):
+                    lk  = _ped_flat[_sel]["lk"]
+                    idx = _ped_flat[_sel]["idx"]
+                    st.session_state[lk][idx]["quantidade"] = _nova_qtd
+                    st.rerun()
+                if _cb.button("✏️ Editar", use_container_width=True, key="ped_edit_btn"):
+                    st.session_state["_editar_lista"] = _ped_flat[_sel]["lk"]
+                    st.session_state["_editar_idx"]   = _ped_flat[_sel]["idx"]
+                    st.rerun()
+                if _cc.button("🗑 Excluir", use_container_width=True, key="ped_del_btn"):
+                    lk  = _ped_flat[_sel]["lk"]
+                    idx = _ped_flat[_sel]["idx"]
+                    st.session_state[lk].pop(idx)
+                    st.rerun()
             st.divider()
             st.metric("💰 Total estimado",
                       f"R$ {total_calculado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
