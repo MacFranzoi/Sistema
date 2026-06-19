@@ -107,11 +107,19 @@ window.addEventListener("message", (e) => {
   }
 });
 
-tapScreen.addEventListener("click", () => {
+// Auto-inicia se já foi iniciado antes nesta sessão (persiste entre reruns do Streamlit)
+if (sessionStorage.getItem("sc_started") === "1") {
   tapScreen.style.display = "none";
   camScreen.style.display = "block";
   startQuagga();
-});
+} else {
+  tapScreen.addEventListener("click", () => {
+    sessionStorage.setItem("sc_started", "1");
+    tapScreen.style.display = "none";
+    camScreen.style.display = "block";
+    startQuagga();
+  }, { once: true });
+}
 
 function startQuagga() {
   Quagga.init({

@@ -1769,64 +1769,70 @@ if _pg == "entrada":
             "quantidade":    qtd,
         })
 
-    # ── 1. Scanner ao vivo ────────────────────────────────────────────────
-    with st.expander("📷 Scanner ao vivo", expanded=False):
-        st.markdown(
-            f"<p style='color:{TXT2}'>Toque para iniciar a câmera. O scanner preenche o código automaticamente — confirme para adicionar.</p>",
-            unsafe_allow_html=True,
-        )
+    # ── Scanner ao vivo (sempre visível, igual caixa de mercado) ─────────
+    import streamlit.components.v1 as _stc
+    import os as _os_ent
+    _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
+    _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
 
-        import streamlit.components.v1 as _stc
-        import os as _os_ent
-        _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
-        _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
-        # Passa nome do produto de volta para o componente exibir
-        _ent_product_arg  = st.session_state.pop("ent_bc_product_arg", "")
-        _ent_notfound_arg = st.session_state.pop("ent_bc_notfound_arg", "")
-        _scanned = _barcode_scanner_comp(
-            product_name=_ent_product_arg,
-            not_found=_ent_notfound_arg,
-            key="ent_live_bc",
-        )
+    _ent_product_arg  = st.session_state.pop("ent_bc_product_arg", "")
+    _ent_notfound_arg = st.session_state.pop("ent_bc_notfound_arg", "")
+    _scanned = _barcode_scanner_comp(
+        product_name=_ent_product_arg,
+        not_found=_ent_notfound_arg,
+        key="ent_live_bc",
+    )
 
-        # Auto-adicionar quando o scanner lê um código novo (ts evita reprocessar no rerun)
-        if _scanned and isinstance(_scanned, dict) and "code" in _scanned:
-            _bc_ts  = _scanned.get("ts", 0)
-            _bc_str = str(_scanned["code"]).strip()
-            if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0) and _bc_str:
-                st.session_state["ent_bc_last_ts"] = _bc_ts
-                _match = _bc_map.get(_bc_str)
-                if _match:
-                    _prod_m, _var_m = _match
-                    if _var_m:
-                        _bc_add_item(_prod_m, _var_m)
-                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                        st.session_state["ent_bc_product_arg"] = _label
-                        st.rerun()
-                    elif len(_prod_m.get("variacoes", [])) == 1:
-                        _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                        _bc_add_item(_prod_m, _var_m)
-                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                        st.session_state["ent_bc_product_arg"] = _label
-                        st.rerun()
-                    else:
-                        st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
-                        st.rerun()
-                else:
-                    st.session_state["ent_bc_notfound_arg"] = _bc_str
-                    _bc_idx = st.session_state.get("ent_bc_idx", 0)
-                    st.session_state[f"ent_bc_input_{_bc_idx}"] = _bc_str
+    # Auto-adicionar quando scanner lê código novo (ts evita reprocessar no rerun)
+    if _scanned and isinstance(_scanned, dict) and "code" in _scanned:
+        _bc_ts  = _scanned.get("ts", 0)
+        _bc_str = str(_scanned["code"]).strip()
+        if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0) and _bc_str:
+            st.session_state["ent_bc_last_ts"] = _bc_ts
+            _match = _bc_map.get(_bc_str)
+            if _match:
+                _prod_m, _var_m = _match
+                if _var_m:
+                    _bc_add_item(_prod_m, _var_m)
+                    _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                    st.session_state["ent_bc_product_arg"] = _label
                     st.rerun()
+                elif len(_prod_m.get("variacoes", [])) == 1:
+                    _var_m = _prod_m["variacoes"][0].get("variacao", {})
+                    _bc_add_item(_prod_m, _var_m)
+                    _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                    st.session_state["ent_bc_product_arg"] = _label
+                    st.rerun()
+                else:
+                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                    st.rerun()
+            else:
+                st.session_state["ent_bc_notfound_arg"] = _bc_str
+                _bc_idx = st.session_state.get("ent_bc_idx", 0)
+                st.session_state[f"ent_bc_input_{_bc_idx}"] = _bc_str
+                st.rerun()
 
-        # Campo manual — fallback quando scanner não lê ou produto não está no catálogo
-        _bc_idx  = st.session_state.get("ent_bc_idx", 0)
-        _bc_wkey = f"ent_bc_input_{_bc_idx}"
-        _bc_codigo = st.text_input(
-            "Código manual",
-            key=_bc_wkey,
-            placeholder="Digite se a câmera não conseguir ler...",
-        )
-        if st.button("➕ Adicionar código manual", key="ent_bc_add_btn",
+    # Seleção rápida de variação (produto com múltiplas variações)
+    if "ent_bc_pending" in st.session_state:
+        _prod_p, _bc_p = st.session_state["ent_bc_pending"]
+        st.info(f"**{_prod_p.get('nome','')}** — qual variação?")
+        _var_list = [v.get("variacao", {}) for v in _prod_p.get("variacoes", [])]
+        _cols_v = st.columns(min(len(_var_list), 3))
+        for _vi, _vv in enumerate(_var_list):
+            if _cols_v[_vi % 3].button(_vv.get("nome", "?"), key=f"ent_var_{_vi}", use_container_width=True):
+                _bc_add_item(_prod_p, _vv)
+                _label = f"{_prod_p.get('nome','')} / {_vv.get('nome','')}"
+                st.session_state["ent_bc_product_arg"] = _label
+                del st.session_state["ent_bc_pending"]
+                st.rerun()
+
+    # Campo manual + código digitado (fallback)
+    _bc_idx  = st.session_state.get("ent_bc_idx", 0)
+    _bc_wkey = f"ent_bc_input_{_bc_idx}"
+    with st.expander("⌨️ Adicionar por código manualmente", expanded=False):
+        _bc_codigo = st.text_input("Código de barras", key=_bc_wkey,
+                                   placeholder="Digite o código da etiqueta...")
+        if st.button("➕ Adicionar", key="ent_bc_add_btn", type="primary",
                      use_container_width=True, disabled=not _bc_codigo.strip()):
             _bc_str = _bc_codigo.strip()
             _match  = _bc_map.get(_bc_str)
@@ -1834,13 +1840,11 @@ if _pg == "entrada":
                 _prod_m, _var_m = _match
                 if _var_m:
                     _bc_add_item(_prod_m, _var_m)
-                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
                     st.session_state["ent_bc_idx"] = _bc_idx + 1
                     st.rerun()
                 elif len(_prod_m.get("variacoes", [])) == 1:
                     _var_m = _prod_m["variacoes"][0].get("variacao", {})
                     _bc_add_item(_prod_m, _var_m)
-                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
                     st.session_state["ent_bc_idx"] = _bc_idx + 1
                     st.rerun()
                 else:
@@ -1848,23 +1852,6 @@ if _pg == "entrada":
                     st.rerun()
             else:
                 st.warning(f"Código `{_bc_str}` não encontrado.")
-
-        if "ent_bc_pending" in st.session_state:
-            _prod_p, _bc_p = st.session_state["ent_bc_pending"]
-            st.info(f"**{_prod_p.get('nome','')}** — selecione a variação:")
-            _var_opts = {v.get("variacao",{}).get("nome","?"): v.get("variacao",{})
-                         for v in _prod_p.get("variacoes",[])}
-            _var_sel_name = st.selectbox("Variação", list(_var_opts.keys()), key="ent_bc_var_sel")
-            _cv1, _cv2 = st.columns(2)
-            if _cv1.button("✓ Adicionar", key="ent_bc_var_add", type="primary", use_container_width=True):
-                _bc_add_item(_prod_p, _var_opts[_var_sel_name])
-                del st.session_state["ent_bc_pending"]
-                st.session_state["ent_bc_idx"] = st.session_state.get("ent_bc_idx", 0) + 1
-                st.success("✅ Adicionado!")
-                st.rerun()
-            if _cv2.button("✗ Cancelar", key="ent_bc_var_cancel", use_container_width=True):
-                del st.session_state["ent_bc_pending"]
-                st.rerun()
 
     # ── 2. Foto com código de barras (Claude Opus 4.8 Vision) ───────────
     with st.expander("📷 Foto de etiqueta — Claude Vision", expanded=False):
