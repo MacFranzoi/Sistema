@@ -472,6 +472,104 @@ def _dashboard(cache, loja_id, loja_nome, nome, is_adm):
 
 
 # ══════════════════════════════════════════════════════════════════
+# PEDIDOS — helpers
+# ══════════════════════════════════════════════════════════════════
+
+_CORES_MASC     = [("preto", 2), ("marrom", 1), ("azul marinho", 1), ("cinza chumbo", 1)]
+_CORES_FEM      = [("lilás", 1), ("marsala", 1), ("marrom", 1)]
+_CORES_MASC_PAC = [("preto", 3), ("azul marinho", 2), ("verde militar", 1), ("marrom", 1), ("cinza chumbo", 2)]
+_CORES_FEM_PAC  = [("lilás", 2), ("pink", 1), ("rosa", 1), ("marsala", 2),
+                   ("vinho", 1), ("roxo", 1), ("marrom", 1), ("nude", 1)]
+
+
+def _kit_terms(lista, extra):
+    return [([cor, extra], qty) for cor, qty in lista]
+
+
+def _tipo_variacao(nome_var):
+    v = (nome_var or "").lower()
+    if "very rio" in v or ("silicone" in v and "magsafe" not in v and "119" not in v):
+        return "Very Rio / Silicone"
+    if "aveludada" in v: return "Aveludada"
+    if "magsafe" in v or "119" in v: return "MagSafe"
+    if "brilho" in v or ("diversos" in v and "59" in v): return "Brilho / Diversos"
+    if "diversos" in v: return "Diversos"
+    if "carteira" in v: return "Carteira"
+    if "transparente" in v: return "Transparente"
+    if "película" in v or "pelicula" in v or "vidro" in v: return "Película / Vidro"
+    if "strass" in v: return "Strass"
+    if "couro" in v: return "Couro"
+    if "clear" in v: return "Clear"
+    if "space" in v: return "Space"
+    if not nome_var or not nome_var.strip(): return "Avulso / Sem tipo"
+    return "Outros"
+
+
+def _gerar_pdf(itens, fornecedor="—", data="", simplificado=False):
+    from fpdf import FPDF
+    import os
+    FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
+    USE_UNICODE = os.path.exists(FONT_PATH)
+
+    def _s(v):
+        text = str(v or "").replace("—", "-").replace("–", "-")
+        if not USE_UNICODE:
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+        return text
+
+    pdf = FPDF()
+    if USE_UNICODE:
+        pdf.add_font("Arial", "", FONT_PATH)
+        pdf.add_font("Arial", "B", FONT_PATH)
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    FN = "Arial" if USE_UNICODE else "Helvetica"
+    pdf.set_font(FN, "B", 14)
+    pdf.cell(0, 8, "PEDIDO SIMPLIFICADO" if simplificado else "PEDIDO DE COMPRA", ln=True, align="C")
+    pdf.set_font(FN, "", 10)
+    pdf.cell(0, 6, f"Fornecedor: {_s(fornecedor)}    Data: {data}", ln=True, align="C")
+    pdf.ln(4)
+    if simplificado:
+        cols   = ["produto_nome", "variacao_nome", "observacao", "quantidade"]
+        heads  = ["Produto", "Variacao", "Obs.", "Qtd"]
+        widths = [70, 55, 35, 20]
+    else:
+        cols   = ["fornecedor", "produto_nome", "variacao_nome", "observacao", "quantidade", "valor_custo", "total"]
+        heads  = ["Fornecedor", "Produto", "Variacao", "Obs.", "Qtd", "Custo", "Total"]
+        widths = [28, 48, 38, 28, 12, 18, 18]
+    pdf.set_font(FN, "B", 9)
+    pdf.set_fill_color(220, 220, 220)
+    for h, w in zip(heads, widths): pdf.cell(w, 7, h, border=1, fill=True)
+    pdf.ln()
+    pdf.set_font(FN, "", 8)
+    fill = False
+    pdf.set_fill_color(245, 245, 245)
+    total_geral = 0.0
+    for it in itens:
+        try: custo_f = float(str(it.get("valor_custo", "0") or "0").replace(",", "."))
+        except: custo_f = 0.0
+        qty = _safe_int(it.get("quantidade", 0))
+        total_geral += custo_f * qty
+        row_data = {
+            "produto_nome": it.get("produto_nome", ""), "variacao_nome": it.get("variacao_nome", ""),
+            "observacao": it.get("observacao", ""), "fornecedor": it.get("fornecedor", ""),
+            "quantidade": str(qty),
+            "valor_custo": f"{custo_f:,.2f}".replace(",","X").replace(".",",").replace("X",".") if custo_f else "",
+            "total": f"{custo_f*qty:,.2f}".replace(",","X").replace(".",",").replace("X","."),
+        }
+        for col, w in zip(cols, widths):
+            pdf.cell(w, 6, _s(str(row_data.get(col, "")))[:35], border=1, fill=fill)
+        pdf.ln()
+        fill = not fill
+    if not simplificado:
+        pdf.set_font(FN, "B", 9)
+        pdf.cell(0, 7,
+            f"TOTAL ESTIMADO: R${total_geral:,.2f}".replace(",","X").replace(".",",").replace("X","."),
+            ln=True, align="R")
+    return bytes(pdf.output())
+
+
+# ══════════════════════════════════════════════════════════════════
 # PEDIDOS
 # ══════════════════════════════════════════════════════════════════
 
@@ -482,7 +580,7 @@ def _pedidos(cache, loja_id):
         st.session_state.beta_ped = []
     itens = st.session_state.beta_ped
 
-    # Lista aberta
+    # Lista aberta — banner
     _arq = st.session_state.get("beta_ped_arq")
     if _arq:
         try:
@@ -492,7 +590,7 @@ def _pedidos(cache, loja_id):
             _ln = _d.get("nome", _arq)
         except Exception:
             _ln = _arq
-        b1, b2, b3 = st.columns([5,1,1])
+        b1, b2, b3 = st.columns([5, 1, 1])
         b1.info(f"📂 Lista aberta: **{_ln}**")
         if b2.button("💾 Salvar", key="ped_sv", use_container_width=True):
             try:
@@ -501,17 +599,17 @@ def _pedidos(cache, loja_id):
                 with open(cam, encoding="utf-8") as f: _d = json.load(f)
                 _d["itens"] = itens; _d["atualizado_em"] = datetime.now().isoformat()
                 _s = json.dumps(_d, ensure_ascii=False, indent=2)
-                with open(cam,"w",encoding="utf-8") as f: f.write(_s)
+                with open(cam, "w", encoding="utf-8") as f: f.write(_s)
                 api._gh_push_arquivo(f"listas/{_arq}", _s, f"Salva: {_ln}")
                 st.success("✅ Lista salva!")
             except Exception as ex: st.error(f"Erro: {ex}")
         if b3.button("✕", key="ped_fechar", use_container_width=True):
             st.session_state.pop("beta_ped_arq", None); st.rerun()
 
-    tab_wpp, tab_cat, tab_avl, tab_lst = st.tabs(
-        ["📱 WhatsApp / IA", "🔍 Catálogo", "✏️ Avulso", "📂 Listas"])
+    tab_wpp, tab_cat, tab_avl, tab_lst, tab_imp = st.tabs(
+        ["📱 WhatsApp / IA", "🔍 Catálogo", "✏️ Avulso", "📂 Listas", "📥 Importar Excel"])
 
-    # ── WhatsApp ──
+    # ── WhatsApp ──────────────────────────────────────────────────
     with tab_wpp:
         txt = st.text_area("Texto do pedido", height=130, key="wpp_txt",
             placeholder="Ex:\niPhone 15 - masculino 2, feminino 3\nSamsung A55 - brilho 5",
@@ -523,10 +621,10 @@ def _pedidos(cache, loja_id):
                 with st.spinner("Processando…"):
                     try:
                         cat = "\n".join(f"{p.get('codigo_interno','')} | {p.get('nome','')}"
-                                        for p in cache.get("produtos",[])[:400])
+                                        for p in cache.get("produtos", [])[:400])
                         res = api.parse_pedido_whatsapp(txt, cat)
                         st.session_state["wpp_res"] = res
-                        for i,r in enumerate(res):
+                        for i, r in enumerate(res):
                             st.session_state[f"wpp_chk_{i}"] = bool(r.get("nome_produto"))
                         st.rerun()
                     except Exception as ex: st.error(f"Erro: {ex}")
@@ -535,10 +633,10 @@ def _pedidos(cache, loja_id):
         if res:
             _sec(f"Resultado — {len(res)} item(ns)")
             for i, r in enumerate(res):
-                conf = r.get("confianca","baixa")
-                cor  = "grn" if conf=="alta" else ("yel" if conf=="media" else "red")
-                c1, c2 = st.columns([5,1])
-                np_ = r.get("nome_produto") or r.get("modelo_digitado","—")
+                conf = r.get("confianca", "baixa")
+                cor  = "grn" if conf == "alta" else ("yel" if conf == "media" else "red")
+                c1, c2 = st.columns([5, 1])
+                np_ = r.get("nome_produto") or r.get("modelo_digitado", "—")
                 lbl = f"{np_} · {', '.join(str(v) for v in r.get('variacoes',[]))} · {r.get('quantidade',1)} un"
                 st.session_state[f"wpp_chk_{i}"] = c1.checkbox(
                     lbl, value=st.session_state.get(f"wpp_chk_{i}", bool(r.get("nome_produto"))),
@@ -554,37 +652,37 @@ def _pedidos(cache, loja_id):
                     if not np_ or not cache:
                         st.session_state.beta_ped.append({
                             "produto_nome": r.get("modelo_digitado", np_ or "—"),
-                            "variacao_nome": ", ".join(str(v) for v in r.get("variacoes",[])),
-                            "quantidade": int(r.get("quantidade",1)),
-                            "fornecedor":"","valor_custo":"","_avulso":True})
+                            "variacao_nome": ", ".join(str(v) for v in r.get("variacoes", [])),
+                            "quantidade": int(r.get("quantidade", 1)),
+                            "fornecedor": "", "valor_custo": "", "_avulso": True})
                         added += 1; continue
                     prods_m = api.buscar_produtos(r.get("cod_interno") or np_, cache)
                     if prods_m:
                         p = prods_m[0]
                         for vr in (r.get("variacoes") or [""]):
-                            vd_m = next((v.get("variacao",v) for v in p.get("variacoes",[])
-                                         if str(vr).lower() in v.get("variacao",v).get("nome","").lower()), None)
-                            entry = {"produto_id":p["id"],"produto_nome":p["nome"],
-                                     "cod_interno":p.get("codigo_interno",""),
-                                     "quantidade":int(r.get("quantidade",1)),
-                                     "fornecedor":"","valor_custo":""}
+                            vd_m = next((v.get("variacao", v) for v in p.get("variacoes", [])
+                                         if str(vr).lower() in v.get("variacao", v).get("nome", "").lower()), None)
+                            entry = {"produto_id": p["id"], "produto_nome": p["nome"],
+                                     "cod_interno": p.get("codigo_interno", ""),
+                                     "quantidade": int(r.get("quantidade", 1)),
+                                     "fornecedor": "", "valor_custo": ""}
                             if vd_m:
-                                entry.update({"variacao_id":vd_m["id"],"variacao_nome":vd_m.get("nome",""),
-                                              "variacao_cod":vd_m.get("codigo","")})
+                                entry.update({"variacao_id": vd_m["id"], "variacao_nome": vd_m.get("nome", ""),
+                                              "variacao_cod": vd_m.get("codigo", "")})
                             else:
                                 entry["variacao_nome"] = str(vr)
                             st.session_state.beta_ped.append(entry); added += 1
                     else:
                         st.session_state.beta_ped.append({
-                            "produto_nome":np_,"variacao_nome":", ".join(str(v) for v in r.get("variacoes",[])),
-                            "quantidade":int(r.get("quantidade",1)),"fornecedor":"","valor_custo":"","_avulso":True})
+                            "produto_nome": np_, "variacao_nome": ", ".join(str(v) for v in r.get("variacoes", [])),
+                            "quantidade": int(r.get("quantidade", 1)), "fornecedor": "", "valor_custo": "", "_avulso": True})
                         added += 1
                 if added:
-                    st.session_state.pop("wpp_res",None); st.success(f"✅ {added} item(ns) adicionado(s)!"); st.rerun()
+                    st.session_state.pop("wpp_res", None); st.success(f"✅ {added} item(ns) adicionado(s)!"); st.rerun()
             if cb.button("✕ Descartar", use_container_width=True, key="wpp_clr"):
-                st.session_state.pop("wpp_res",None); st.rerun()
+                st.session_state.pop("wpp_res", None); st.rerun()
 
-    # ── Catálogo ──
+    # ── Catálogo ──────────────────────────────────────────────────
     with tab_cat:
         if not cache:
             st.warning("Sincronize os produtos primeiro.")
@@ -596,143 +694,422 @@ def _pedidos(cache, loja_id):
                 nomes = [f"{p.get('codigo_interno','')} — {p['nome']}" for p in prods]
                 sel   = st.selectbox("Produto", nomes, key="cat_sel", label_visibility="collapsed")
                 prod  = prods[nomes.index(sel)]
-                vars_ = [v.get("variacao",v) for v in prod.get("variacoes",[])]
+                vars_ = [v.get("variacao", v) for v in prod.get("variacoes", [])]
+
                 if vars_:
                     _qtds = {}
                     for vd in vars_:
-                        vc1,vc2,vc3 = st.columns([3,1,1])
+                        vc1, vc2, vc3 = st.columns([3, 1, 1])
                         vc1.caption(f"**{vd.get('nome','')}** · `{vd.get('codigo','')}`")
-                        ev = _safe_int(vd.get("estoque",0))
-                        vc2.caption(f"{'🔴' if ev<=3 else '🟡' if ev<=10 else '🟢'} {ev} un")
-                        _qtds[vd["id"]] = vc3.number_input("q",min_value=0,value=0,step=1,
-                            key=f"cat_q_{vd['id']}",label_visibility="collapsed")
-                    cf1,cf2 = st.columns(2)
+                        ev = _safe_int(vd.get("estoque", 0))
+                        vc2.caption(f"{'🔴' if ev <= 3 else '🟡' if ev <= 10 else '🟢'} {ev} un")
+                        _qtds[vd["id"]] = vc3.number_input("q", min_value=0, value=0, step=1,
+                            key=f"cat_q_{vd['id']}", label_visibility="collapsed")
+
+                    cf1, cf2 = st.columns(2)
                     forn  = cf1.text_input("Fornecedor", key="cat_forn")
                     custo = cf2.text_input("Custo unit. (R$)", key="cat_custo")
-                    if st.button("➕ Adicionar", type="primary", use_container_width=True, key="cat_add"):
-                        added_c = sum(1 for vd in vars_ if int(_qtds.get(vd["id"],0))>0 and
-                            st.session_state.beta_ped.append({
-                                "produto_id":prod["id"],"produto_nome":prod["nome"],
-                                "cod_interno":prod.get("codigo_interno",""),
-                                "variacao_id":vd["id"],"variacao_nome":vd.get("nome",""),
-                                "variacao_cod":vd.get("codigo",""),
-                                "quantidade":int(_qtds[vd["id"]]),"fornecedor":forn,"valor_custo":custo}) is None)
-                        if added_c: st.success(f"✅ {added_c} variação(ões) adicionada(s)!"); st.rerun()
-                        else: st.warning("Preencha a quantidade em pelo menos uma variação.")
-            elif termo: st.info("Nenhum produto encontrado.")
+                    obs   = st.text_input("Observação (opcional)", key="cat_obs",
+                                          placeholder="ex: Very Rio, MagSafe Silicone…")
 
-    # ── Avulso ──
+                    if st.button("➕ Adicionar ao pedido", type="primary", use_container_width=True, key="cat_add"):
+                        added_c = 0
+                        for vd in vars_:
+                            qty = int(_qtds.get(vd["id"], 0))
+                            if qty > 0:
+                                st.session_state.beta_ped.append({
+                                    "produto_id": prod["id"], "produto_nome": prod["nome"],
+                                    "cod_interno": prod.get("codigo_interno", ""),
+                                    "variacao_id": vd["id"], "variacao_nome": vd.get("nome", ""),
+                                    "variacao_cod": vd.get("codigo", ""),
+                                    "quantidade": qty, "fornecedor": forn, "valor_custo": custo,
+                                    "observacao": obs,
+                                })
+                                added_c += 1
+                        if added_c:
+                            st.success(f"✅ {added_c} variação(ões) adicionada(s)!"); st.rerun()
+                        else:
+                            st.warning("Preencha a quantidade em pelo menos uma variação.")
+
+                    # ── Kits rápidos ──────────────────────────────────────
+                    _is_iphone = "iphone" in (prod.get("nome", "") + prod.get("nome_grupo", "")).lower()
+
+                    def _kit_beta(cores_qtds, label, obs_k=""):
+                        adicionados, nao_enc = [], []
+                        for termos, qty in cores_qtds:
+                            if isinstance(termos, str): termos = [termos]
+                            match = next((vd for vd in vars_
+                                          if all(t.lower() in (vd.get("nome", "") or "").lower()
+                                                 for t in termos)), None)
+                            if match:
+                                st.session_state.beta_ped.append({
+                                    "produto_id": prod["id"], "produto_nome": prod["nome"],
+                                    "cod_interno": prod.get("codigo_interno", ""),
+                                    "variacao_id": match["id"], "variacao_nome": match.get("nome", ""),
+                                    "variacao_cod": match.get("codigo", ""),
+                                    "quantidade": qty, "fornecedor": forn, "valor_custo": custo,
+                                    "observacao": obs_k,
+                                })
+                                adicionados.append(f"{match.get('nome','')} ×{qty}")
+                            else:
+                                nao_enc.append("+".join(termos))
+                        if adicionados: st.success(f"Kit {label}: " + ", ".join(adicionados))
+                        if nao_enc: st.warning(f"Cores não encontradas: {', '.join(nao_enc)}")
+
+                    with st.expander("🎁 Kits rápidos"):
+                        st.caption("**Aveludada**")
+                        k1, k2 = st.columns(2)
+                        with k1:
+                            if st.button("👔 Masculino", use_container_width=True, key="kit_av_masc"):
+                                _kit_beta(_CORES_MASC, "Masculino"); st.rerun()
+                        with k2:
+                            if st.button("👗 Feminino", use_container_width=True, key="kit_av_fem"):
+                                _kit_beta(_CORES_FEM, "Feminino"); st.rerun()
+                        k3, k4 = st.columns(2)
+                        with k3:
+                            if st.button("📦 Pacote Masc.", use_container_width=True, key="kit_av_masc_pac"):
+                                _kit_beta(_CORES_MASC_PAC, "Pacote Masculino"); st.rerun()
+                        with k4:
+                            if st.button("📦 Pacote Fem.", use_container_width=True, key="kit_av_fem_pac"):
+                                _kit_beta(_CORES_FEM_PAC, "Pacote Feminino"); st.rerun()
+
+                        if _is_iphone:
+                            st.caption("**Silicone Líquido**")
+                            sl1, sl2 = st.columns(2)
+                            with sl1:
+                                if st.button("💧 SL Masculino", use_container_width=True, key="kit_sl_masc"):
+                                    _kit_beta(_kit_terms(_CORES_MASC, "silicone"), "SL Masculino"); st.rerun()
+                            with sl2:
+                                if st.button("💧 SL Feminino", use_container_width=True, key="kit_sl_fem"):
+                                    _kit_beta(_kit_terms(_CORES_FEM, "silicone"), "SL Feminino"); st.rerun()
+                            sl3, sl4 = st.columns(2)
+                            with sl3:
+                                if st.button("📦 SL Pacote Masc.", use_container_width=True, key="kit_sl_masc_pac"):
+                                    _kit_beta(_kit_terms(_CORES_MASC_PAC, "silicone"), "SL Pacote Masculino"); st.rerun()
+                            with sl4:
+                                if st.button("📦 SL Pacote Fem.", use_container_width=True, key="kit_sl_fem_pac"):
+                                    _kit_beta(_kit_terms(_CORES_FEM_PAC, "silicone"), "SL Pacote Feminino"); st.rerun()
+
+                            st.caption("**Very Rio**")
+                            vr1, vr2 = st.columns(2)
+                            with vr1:
+                                if st.button("🌊 VR Masculino", use_container_width=True, key="kit_vr_masc"):
+                                    _kit_beta(_kit_terms(_CORES_MASC, "silicone"), "VR Masculino", obs_k="Very Rio"); st.rerun()
+                            with vr2:
+                                if st.button("🌊 VR Feminino", use_container_width=True, key="kit_vr_fem"):
+                                    _kit_beta(_kit_terms(_CORES_FEM, "silicone"), "VR Feminino", obs_k="Very Rio"); st.rerun()
+                            vr3, vr4 = st.columns(2)
+                            with vr3:
+                                if st.button("📦 VR Pacote Masc.", use_container_width=True, key="kit_vr_masc_pac"):
+                                    _kit_beta(_kit_terms(_CORES_MASC_PAC, "silicone"), "VR Pacote Masculino", obs_k="Very Rio"); st.rerun()
+                            with vr4:
+                                if st.button("📦 VR Pacote Fem.", use_container_width=True, key="kit_vr_fem_pac"):
+                                    _kit_beta(_kit_terms(_CORES_FEM_PAC, "silicone"), "VR Pacote Feminino", obs_k="Very Rio"); st.rerun()
+
+                            st.caption("**MagSafe**")
+                            ms_obs = st.text_input("Tipo MagSafe", key="kit_ms_tipo",
+                                                    placeholder="Silicone, Couro, Clear…")
+                            if st.button("🔮 MagSafe ×3", use_container_width=True, key="kit_magsafe"):
+                                obs_ms = f"MagSafe {ms_obs}".strip() if ms_obs else "MagSafe"
+                                _kit_beta([(["119,99", "magsafe"], 3)], "MagSafe", obs_k=obs_ms); st.rerun()
+
+                        st.caption("**Diversos**")
+                        dv1, dv2 = st.columns(2)
+                        with dv1:
+                            if st.button("✨ Brilho ×3", use_container_width=True, key="kit_div_brilho"):
+                                _kit_beta([(["59,99", "diversos"], 3)], "Diversos Brilho",
+                                           obs_k="Diversos Brilho"); st.rerun()
+                        with dv2:
+                            if st.button("💪 Masc. ×3", use_container_width=True, key="kit_div_masc"):
+                                _kit_beta([(["39,99", "diversos"], 3)], "Diversos Masculino",
+                                           obs_k="Diversos Masculino"); st.rerun()
+
+            elif termo:
+                st.info("Nenhum produto encontrado.")
+
+    # ── Avulso ────────────────────────────────────────────────────
     with tab_avl:
-        a1,a2 = st.columns([3,1])
-        desc  = a1.text_input("Descrição", key="avl_desc", placeholder="Ex: Película Samsung A55")
-        qtd_a = a2.number_input("Qtd", min_value=1, value=1, key="avl_qtd")
-        b1,b2 = st.columns(2)
+        a1, a2 = st.columns([3, 1])
+        desc   = a1.text_input("Descrição", key="avl_desc", placeholder="Ex: Película Samsung A55")
+        qtd_a  = a2.number_input("Qtd", min_value=1, value=1, key="avl_qtd")
+        b1, b2 = st.columns(2)
         fa = b1.text_input("Fornecedor", key="avl_forn")
         ca = b2.text_input("Custo unit. (R$)", key="avl_custo")
+        obs_a  = st.text_input("Observação (opcional)", key="avl_obs")
         if st.button("➕ Adicionar avulso", type="primary", use_container_width=True, key="avl_add"):
             if desc.strip():
-                st.session_state.beta_ped.append({"produto_nome":desc.strip(),"variacao_nome":"",
-                    "quantidade":int(qtd_a),"fornecedor":fa,"valor_custo":ca,"_avulso":True})
+                st.session_state.beta_ped.append({
+                    "produto_nome": desc.strip(), "variacao_nome": "",
+                    "quantidade": int(qtd_a), "fornecedor": fa, "valor_custo": ca,
+                    "observacao": obs_a, "_avulso": True})
                 st.success("✅ Adicionado!"); st.rerun()
-            else: st.warning("Digite uma descrição.")
+            else:
+                st.warning("Digite uma descrição.")
 
-    # ── Listas ──
+    # ── Listas ────────────────────────────────────────────────────
     with tab_lst:
         listas = api.listar_listas_salvas("pedido")
         if listas:
             for lst in listas[:15]:
-                lc1,lc2 = st.columns([5,1])
-                lnm = lst.get("nome","—"); lqt = len(lst.get("itens",[])); ldt = (lst.get("criado_em","") or "")[:10]
+                lc1, lc2 = st.columns([5, 1])
+                lnm = lst.get("nome", "—"); lqt = len(lst.get("itens", [])); ldt = (lst.get("criado_em", "") or "")[:10]
                 lc1.markdown(f'<div class="li"><div class="li-name">{lnm}</div>'
                              f'<div class="li-sub">{lqt} itens · {ldt}</div></div>', unsafe_allow_html=True)
                 if lc2.button("Abrir", key=f"lst_op_{lst['_arquivo']}", use_container_width=True):
-                    st.session_state.beta_ped = list(lst.get("itens",[])); st.session_state["beta_ped_arq"] = lst["_arquivo"]; st.rerun()
-        else: _empty_state("📂","Nenhuma lista de pedido salva","Salve um pedido abaixo")
+                    st.session_state.beta_ped = list(lst.get("itens", []))
+                    st.session_state["beta_ped_arq"] = lst["_arquivo"]; st.rerun()
+        else:
+            _empty_state("📂", "Nenhuma lista de pedido salva", "Salve um pedido abaixo")
         st.divider()
         nn = st.text_input("Nome para salvar", key="ped_novo_nome", placeholder="Ex: Pedido 15/06")
         if st.button("💾 Salvar pedido como lista", use_container_width=True, key="ped_salvar"):
             if not itens: st.warning("Pedido vazio.")
             elif not nn.strip(): st.warning("Digite um nome.")
-            else: api.salvar_lista(nn.strip(),"pedido",itens); st.success(f"✅ Salvo!"); st.rerun()
+            else:
+                api.salvar_lista(nn.strip(), "pedido", itens); st.success(f"✅ Salvo!"); st.rerun()
 
-    # Pedido atual
+    # ── Importar Excel ────────────────────────────────────────────
+    with tab_imp:
+        st.markdown("#### Importar itens de uma planilha Excel")
+        if not cache:
+            st.warning("Sincronize os produtos primeiro.")
+        else:
+            ic1, ic2 = st.columns(2)
+            tipo_imp = ic1.selectbox("Tipo de capa", ["Aveludada", "Silicone", "MagSafe", "Outros"], key="imp_tipo")
+            with ic2:
+                try:
+                    tpl = api.gerar_template_excel(tipo_imp)
+                    st.download_button("📥 Baixar template", data=tpl,
+                        file_name=f"template_{tipo_imp.lower()}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True, key="imp_tpl_dl")
+                except Exception as ex:
+                    st.error(f"Erro ao gerar template: {ex}")
+
+            up = st.file_uploader("Enviar planilha preenchida", type=["xlsx"], key="imp_up")
+            if up:
+                try:
+                    resultado = api.importar_excel_itens(up.read(), tipo_imp, cache)
+                    st.success(f"✅ {len(resultado)} item(ns) encontrado(s) na planilha.")
+                    if resultado:
+                        st.dataframe(pd.DataFrame([{
+                            "Produto": r.get("produto_nome", ""), "Variação": r.get("variacao_nome", ""),
+                            "Qtd": r.get("quantidade", 0), "Custo": r.get("valor_custo", ""),
+                        } for r in resultado]), use_container_width=True, hide_index=True)
+                        if st.button("➕ Adicionar ao pedido", type="primary",
+                                     use_container_width=True, key="imp_add"):
+                            for r in resultado:
+                                st.session_state.beta_ped.append(r)
+                            st.success(f"✅ {len(resultado)} itens adicionados!"); st.rerun()
+                except Exception as ex:
+                    st.error(f"Erro ao importar: {ex}")
+
+    # ── Pedido atual ──────────────────────────────────────────────
     if itens:
         st.divider()
-        tq = sum(_safe_int(it.get("quantidade",0)) for it in itens)
-        try: tv = sum(float(str(it.get("valor_custo","0") or "0").replace(",","."))*_safe_int(it.get("quantidade",1)) for it in itens)
+        tq = sum(_safe_int(it.get("quantidade", 0)) for it in itens)
+        try:
+            tv = sum(float(str(it.get("valor_custo", "0") or "0").replace(",", "."))
+                     * _safe_int(it.get("quantidade", 1)) for it in itens)
         except: tv = 0
-        m1,m2,m3 = st.columns(3)
-        m1.metric("Itens",len(itens)); m2.metric("Unidades",tq)
-        if tv>0: m3.metric("Custo estimado",f"R$ {tv:,.2f}")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Itens", len(itens)); m2.metric("Unidades", tq)
+        if tv > 0: m3.metric("Custo estimado", f"R$ {tv:,.2f}")
+
         _sec("Itens do pedido")
+        edit_idx = st.session_state.get("_ped_edit_idx", -1)
         for i, it in enumerate(list(itens)):
-            nome_v = it.get("variacao_nome","")
-            linha  = it.get("produto_nome","") + (f" / {nome_v}" if nome_v else "")
-            pc1,pc2,pc3 = st.columns([5,1,1])
-            forn_txt = f" · {it['fornecedor']}" if it.get("fornecedor") else ""
-            avulso_txt = " " + _chip("avulso","gray") if it.get("_avulso") else ""
+            nome_v = it.get("variacao_nome", "")
+            linha  = it.get("produto_nome", "") + (f" / {nome_v}" if nome_v else "")
+            pc1, pc2, pc3, pc4 = st.columns([5, 1, 1, 1])
+            custo_txt  = f" · R${it['valor_custo']}" if it.get("valor_custo") else ""
+            forn_txt   = f" · {it['fornecedor']}" if it.get("fornecedor") else ""
+            obs_txt    = f" · {it['observacao']}" if it.get("observacao") else ""
+            avulso_txt = " " + _chip("avulso", "gray") if it.get("_avulso") else ""
             pc1.markdown(f'<div class="li"><div class="li-name">{linha[:52]}{avulso_txt}</div>'
-                         f'<div class="li-sub">{it.get("valor_custo","")}{forn_txt}</div></div>',
+                         f'<div class="li-sub">{custo_txt}{forn_txt}{obs_txt}</div></div>',
                          unsafe_allow_html=True)
-            nq = pc2.number_input("q",min_value=1,value=max(1,_safe_int(it.get("quantidade",1))),
-                                   step=1,label_visibility="collapsed",key=f"ped_q_{i}")
-            if nq != it.get("quantidade"): st.session_state.beta_ped[i]["quantidade"] = nq
-            if pc3.button("🗑",key=f"ped_del_{i}",use_container_width=True):
-                st.session_state.beta_ped.pop(i); st.rerun()
+            nq = pc2.number_input("q", min_value=1, value=max(1, _safe_int(it.get("quantidade", 1))),
+                                   step=1, label_visibility="collapsed", key=f"ped_q_{i}")
+            if nq != it.get("quantidade"):
+                st.session_state.beta_ped[i]["quantidade"] = nq
+            if pc3.button("✏️", key=f"ped_edit_{i}", use_container_width=True, help="Editar"):
+                st.session_state["_ped_edit_idx"] = i if edit_idx != i else -1
+                st.rerun()
+            if pc4.button("🗑", key=f"ped_del_{i}", use_container_width=True):
+                st.session_state.beta_ped.pop(i)
+                st.session_state.pop("_ped_edit_idx", None); st.rerun()
 
-        st.divider(); _sec("Exportar")
-        ea,eb,ec = st.columns(3)
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as wr:
-            pd.DataFrame([{"Produto":it.get("produto_nome",""),"Variação":it.get("variacao_nome",""),
-                "Qtd":it.get("quantidade",0),"Fornecedor":it.get("fornecedor",""),
-                "Custo":it.get("valor_custo","")} for it in itens]).to_excel(wr, index=False)
-        buf.seek(0)
-        ea.download_button("📄 Excel", buf, f"pedido_{date.today()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-        if eb.button("📋 Copiar texto", use_container_width=True, key="ped_txt"):
-            linhas = [f"PEDIDO — {date.today()}","="*42]
-            for it in itens:
-                v = f" / {it['variacao_nome']}" if it.get("variacao_nome") else ""
-                linhas.append(f"{it.get('produto_nome','')}{v} — {it.get('quantidade',0)} un")
-            _copiar_html("\n".join(linhas))
-        if ec.button("🗑️ Limpar", use_container_width=True, key="ped_lmp"):
-            st.session_state.beta_ped = []; st.session_state.pop("beta_ped_arq",None); st.rerun()
+            if edit_idx == i:
+                e1, e2, e3 = st.columns(3)
+                new_forn  = e1.text_input("Fornecedor", value=it.get("fornecedor", ""), key=f"ped_ef_{i}")
+                new_custo = e2.text_input("Custo unit.", value=it.get("valor_custo", ""), key=f"ped_ec_{i}")
+                new_obs   = e3.text_input("Observação", value=it.get("observacao", ""), key=f"ped_eo_{i}")
+                if st.button("💾 Salvar alterações", key=f"ped_esave_{i}", use_container_width=True):
+                    st.session_state.beta_ped[i].update({
+                        "fornecedor": new_forn, "valor_custo": new_custo, "observacao": new_obs})
+                    st.session_state.pop("_ped_edit_idx", None); st.rerun()
 
+        # ── Exportar ──────────────────────────────────────────────
+        st.divider()
+        _sec("Exportar pedido")
+        forn_global = next((it.get("fornecedor", "") for it in itens if it.get("fornecedor")), "") or "—"
+        hoje = str(date.today())
+
+        # Exportar filtrado por tipo de variação
+        with st.expander("🔽 Exportar por tipo de variação", expanded=False):
+            def _parse_custo(v):
+                try: return float(str(v or "0").replace(",", "."))
+                except: return 0.0
+
+            _df_tipos = pd.DataFrame([{
+                "produto_nome": it.get("produto_nome", ""), "variacao_nome": it.get("variacao_nome", ""),
+                "observacao": it.get("observacao", ""), "fornecedor": it.get("fornecedor", ""),
+                "cod_interno": it.get("cod_interno", ""),
+                "quantidade": _safe_int(it.get("quantidade", 0)),
+                "valor_custo": it.get("valor_custo", ""),
+                "estoque_atual": 0,
+                "_tipo": _tipo_variacao(it.get("variacao_nome", "")),
+            } for it in itens])
+            _tipos_pres = sorted(_df_tipos["_tipo"].unique().tolist())
+            _sel_tipos  = st.multiselect("Tipos para exportar:", _tipos_pres, default=_tipos_pres, key="filt_tipos")
+            _df_filt    = _df_tipos[_df_tipos["_tipo"].isin(_sel_tipos)].drop(columns=["_tipo"]).copy()
+            _df_filt["total"] = _df_filt.apply(lambda r: _parse_custo(r["valor_custo"]) * r["quantidade"], axis=1)
+            st.caption(f"{len(_df_filt)} de {len(itens)} itens selecionados")
+
+            fx1, fx2, fx3, fx4, fx5 = st.columns(5)
+            with fx1:
+                _buf_fc = io.BytesIO()
+                _df_exp_fc = _df_filt[["fornecedor", "cod_interno", "produto_nome", "variacao_nome",
+                                        "observacao", "estoque_atual", "quantidade", "valor_custo", "total"]].copy()
+                _df_exp_fc.columns = ["Fornecedor", "Cód.", "Produto", "Variação",
+                                       "Obs.", "Estoque", "Pedir", "Custo Unit.", "Total Est."]
+                with pd.ExcelWriter(_buf_fc, engine="openpyxl") as wr: _df_exp_fc.to_excel(wr, index=False)
+                _buf_fc.seek(0)
+                st.download_button("📥 Excel completo", data=_buf_fc,
+                    file_name=f"pedido_filtrado_{hoje}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="dl_filt_xc")
+            with fx2:
+                _buf_fs = io.BytesIO()
+                _df_exp_fs = _df_filt[["produto_nome", "variacao_nome", "observacao", "quantidade"]].copy()
+                _df_exp_fs.columns = ["Produto", "Variação", "Obs.", "Qtd"]
+                with pd.ExcelWriter(_buf_fs, engine="openpyxl") as wr: _df_exp_fs.to_excel(wr, index=False)
+                _buf_fs.seek(0)
+                st.download_button("📄 Excel simples", data=_buf_fs,
+                    file_name=f"pedido_simples_filtrado_{hoje}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="dl_filt_xs")
+            with fx3:
+                try:
+                    _pdf_fs = _gerar_pdf(_df_filt.to_dict("records"), forn_global, hoje, simplificado=True)
+                    st.download_button("📑 PDF simples", data=_pdf_fs,
+                        file_name=f"pedido_simples_filtrado_{hoje}.pdf",
+                        mime="application/pdf", use_container_width=True, key="dl_filt_ps")
+                except Exception as ex: st.error(f"PDF: {ex}")
+            with fx4:
+                try:
+                    _pdf_fc = _gerar_pdf(_df_filt.to_dict("records"), forn_global, hoje, simplificado=False)
+                    st.download_button("📑 PDF completo", data=_pdf_fc,
+                        file_name=f"pedido_completo_filtrado_{hoje}.pdf",
+                        mime="application/pdf", use_container_width=True, key="dl_filt_pc")
+                except Exception as ex: st.error(f"PDF: {ex}")
+            with fx5:
+                if st.button("📋 Texto", use_container_width=True, key="dl_filt_txt"):
+                    linhas = [f"PEDIDO — {forn_global} — {hoje}", "=" * 50]
+                    for _, r in _df_filt.iterrows():
+                        obs = str(r.get("observacao", "")).strip()
+                        linhas.append(
+                            f"{r['produto_nome']} | {r.get('variacao_nome','')}"
+                            f"{(' | '+obs) if obs else ''} | {int(r['quantidade'])} un")
+                    _copiar_html("\n".join(linhas))
+
+        # Exportações padrão
+        ex1, ex2, ex3, ex4, ex5 = st.columns(5)
+        with ex1:
+            _buf_xs = io.BytesIO()
+            _df_xs = pd.DataFrame([{"Produto": it.get("produto_nome",""), "Variação": it.get("variacao_nome",""),
+                "Obs.": it.get("observacao",""), "Qtd": it.get("quantidade",0)} for it in itens])
+            with pd.ExcelWriter(_buf_xs, engine="openpyxl") as wr: _df_xs.to_excel(wr, index=False)
+            _buf_xs.seek(0)
+            st.download_button("📄 Excel simples", data=_buf_xs,
+                file_name=f"pedido_simples_{hoje}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key="dl_std_xs")
+        with ex2:
+            _buf_xc = io.BytesIO()
+            _df_xc = pd.DataFrame([{"Fornecedor": it.get("fornecedor",""), "Cód.": it.get("cod_interno",""),
+                "Produto": it.get("produto_nome",""), "Variação": it.get("variacao_nome",""),
+                "Obs.": it.get("observacao",""), "Qtd": it.get("quantidade",0),
+                "Custo Unit.": it.get("valor_custo","")} for it in itens])
+            with pd.ExcelWriter(_buf_xc, engine="openpyxl") as wr: _df_xc.to_excel(wr, index=False)
+            _buf_xc.seek(0)
+            st.download_button("📥 Excel completo", data=_buf_xc,
+                file_name=f"pedido_{hoje}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key="dl_std_xc")
+        with ex3:
+            if st.button("📋 Copiar texto", use_container_width=True, key="ped_txt"):
+                linhas = [f"PEDIDO — {forn_global} — {hoje}", "=" * 42]
+                for it in itens:
+                    v   = f" / {it['variacao_nome']}" if it.get("variacao_nome") else ""
+                    obs = it.get("observacao", "").strip()
+                    linhas.append(f"{it.get('produto_nome','')}{v}{(' | '+obs) if obs else ''} — {it.get('quantidade',0)} un")
+                _copiar_html("\n".join(linhas))
+        with ex4:
+            try:
+                _pdf_s = _gerar_pdf(itens, forn_global, hoje, simplificado=True)
+                st.download_button("📑 PDF simples", data=_pdf_s,
+                    file_name=f"pedido_simples_{hoje}.pdf",
+                    mime="application/pdf", use_container_width=True, key="dl_std_ps")
+            except Exception as ex: st.error(f"PDF: {ex}")
+        with ex5:
+            try:
+                _pdf_c = _gerar_pdf(itens, forn_global, hoje, simplificado=False)
+                st.download_button("📑 PDF completo", data=_pdf_c,
+                    file_name=f"pedido_{hoje}.pdf",
+                    mime="application/pdf", use_container_width=True, key="dl_std_pc")
+            except Exception as ex: st.error(f"PDF: {ex}")
+
+        st.divider()
+        if st.button("🗑️ Limpar pedido", use_container_width=True, key="ped_lmp"):
+            st.session_state.beta_ped = []; st.session_state.pop("beta_ped_arq", None); st.rerun()
+
+        # ── Registrar Compra no GestãoClick ──────────────────────
         with st.expander("📤 Registrar Compra no GestãoClick"):
             itens_cad = [it for it in itens if it.get("produto_id") and it.get("variacao_id")]
             st.info(f"**{len(itens_cad)}** cadastrado(s) · **{len(itens)-len(itens_cad)}** avulso(s) ignorado(s).")
-            rg1,rg2 = st.columns(2)
-            forn_gc = rg1.text_input("Buscar fornecedor",key="gc_forn")
-            data_gc = rg2.date_input("Data",value=date.today(),key="gc_data")
-            obs_gc  = st.text_input("Observações",key="gc_obs")
-            if st.button("🔍 Buscar fornecedor",use_container_width=True,key="gc_buscar"):
+            rg1, rg2 = st.columns(2)
+            forn_gc = rg1.text_input("Buscar fornecedor", key="gc_forn")
+            data_gc = rg2.date_input("Data", value=date.today(), key="gc_data")
+            obs_gc  = st.text_input("Observações", key="gc_obs")
+            if st.button("🔍 Buscar fornecedor", use_container_width=True, key="gc_buscar"):
                 with st.spinner("Buscando…"):
                     try: st.session_state["gc_forns"] = api.buscar_fornecedores(forn_gc, limite=20)
                     except Exception as ex: st.error(f"Erro: {ex}")
-            forns = st.session_state.get("gc_forns",[])
+            forns = st.session_state.get("gc_forns", [])
             if forns:
-                opts = {f"{f.get('razao_social') or f.get('nome','—')} ({f.get('cnpj','')})":f["id"] for f in forns}
-                fsel = st.selectbox("Fornecedor",list(opts.keys()),key="gc_fsel")
+                opts = {f"{f.get('razao_social') or f.get('nome','—')} ({f.get('cnpj','')})": f["id"] for f in forns}
+                fsel = st.selectbox("Fornecedor", list(opts.keys()), key="gc_fsel")
                 fid  = opts[fsel]
                 if "gc_sits" not in st.session_state:
                     try:
                         sits = api.buscar_situacoes_compras()
-                        st.session_state["gc_sits"] = {s.get("nome","—"):s.get("id","1") for s in sits
-                            if isinstance(s,dict) and s.get("nome")} or {"Aguardando recebimento":"1"}
-                    except: st.session_state["gc_sits"] = {"Aguardando recebimento":"1"}
-                sit_sel = st.selectbox("Situação",list(st.session_state["gc_sits"].keys()),key="gc_sit")
+                        st.session_state["gc_sits"] = {s.get("nome","—"): s.get("id","1") for s in sits
+                            if isinstance(s, dict) and s.get("nome")} or {"Aguardando recebimento": "1"}
+                    except: st.session_state["gc_sits"] = {"Aguardando recebimento": "1"}
+                sit_sel = st.selectbox("Situação", list(st.session_state["gc_sits"].keys()), key="gc_sit")
                 sit_id  = st.session_state["gc_sits"][sit_sel]
-                if st.button("✅ Confirmar e registrar",type="primary",use_container_width=True,key="gc_ok"):
+                if st.button("✅ Confirmar e registrar", type="primary", use_container_width=True, key="gc_ok"):
                     if not itens_cad: st.error("Nenhum item cadastrado.")
                     else:
                         with st.spinner("Enviando…"):
                             try:
-                                api.registrar_compra_gestaoclick(itens_cad,fid,data_gc,sit_id,obs_gc,loja_id)
-                                st.success("✅ Compra registrada!"); st.session_state.pop("gc_forns",None)
+                                api.registrar_compra_gestaoclick(itens_cad, fid, data_gc, sit_id, obs_gc, loja_id)
+                                st.success("✅ Compra registrada!"); st.session_state.pop("gc_forns", None)
                             except Exception as ex: st.error(f"Erro: {ex}")
     else:
-        _empty_state("🛒","Pedido vazio","Use as abas acima para adicionar produtos")
+        _empty_state("🛒", "Pedido vazio", "Use as abas acima para adicionar produtos")
 
 
 # ══════════════════════════════════════════════════════════════════
