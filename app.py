@@ -1819,6 +1819,10 @@ if _pg == "entrada":
                     else:
                         st.session_state["ent_bc_notfound_arg"] = _bc_str
                         st.rerun()
+                else:
+                    # Nenhum barcode no frame — avisa o componente
+                    st.session_state["ent_bc_notfound_arg"] = "frame"
+                    st.rerun()
 
         if "ent_bc_pending" in st.session_state:
             _prod_p, _bc_p = st.session_state["ent_bc_pending"]

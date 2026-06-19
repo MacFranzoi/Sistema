@@ -106,8 +106,10 @@ window.addEventListener("message", (e) => {
     setTimeout(resetStatus, 2500);
   } else if (args.not_found) {
     status.className   = "notfound";
-    status.textContent = "⚠️ Não encontrado: " + args.not_found;
-    setTimeout(resetStatus, 2000);
+    status.textContent = args.not_found === "frame"
+      ? "⚠️ Não detectado — ajuste e tente novamente"
+      : "⚠️ Código não cadastrado: " + args.not_found;
+    setTimeout(resetStatus, 2200);
   }
   busy = false;
 });
@@ -138,16 +140,29 @@ function startCamera() {
 function capture() {
   if (busy || video.readyState < 2 || video.paused) return;
   busy = true;
-  canvas.width  = Math.min(video.videoWidth, 960);
-  canvas.height = Math.round(canvas.width * video.videoHeight / (video.videoWidth || 1));
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const frame = canvas.toDataURL("image/jpeg", 0.82);
+
+  const vw = video.videoWidth  || 640;
+  const vh = video.videoHeight || 480;
+
+  // Captura a faixa central (onde fica o crosshair) — melhora detecção
+  const margin = 0.12;  // 12% das bordas
+  const sx = Math.floor(vw * margin);
+  const sy = Math.floor(vh * 0.25);
+  const sw = Math.floor(vw * (1 - margin * 2));
+  const sh = Math.floor(vh * 0.50);
+
+  canvas.width  = sw;
+  canvas.height = sh;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  const frame = canvas.toDataURL("image/jpeg", 0.92);
   status.className   = "sending";
   status.textContent = "🔍 Lendo código...";
   ST.send({ frame, ts: Date.now() });
 }
 
 // Persiste estado entre reruns do Streamlit via sessionStorage
+// Também limpa quando o usuário saiu e voltou (iframe destruído e recriado)
 if (sessionStorage.getItem("sc_started") === "1") {
   tapScreen.style.display = "none";
   camScreen.style.display = "block";
@@ -160,6 +175,11 @@ if (sessionStorage.getItem("sc_started") === "1") {
     startCamera();
   }, { once: true });
 }
+
+// Limpa sessionStorage quando o iframe é fechado (troca de modo)
+window.addEventListener("unload", () => {
+  sessionStorage.removeItem("sc_started");
+});
 </script>
 </body>
 </html>

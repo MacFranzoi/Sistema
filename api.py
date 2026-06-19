@@ -1383,14 +1383,39 @@ def ler_codigo_barras_foto(img_bytes: bytes, media_type: str = "image/jpeg") -> 
 
 
 def decodificar_barcodes_foto(img_bytes: bytes) -> list[str]:
-    """Decodifica códigos de barras de uma imagem. Retorna lista de strings."""
+    """Decodifica códigos de barras tentando várias estratégias de pré-processamento."""
     try:
         import zxingcpp as _zx
-        from PIL import Image as _PILImage
+        from PIL import Image as _PILImage, ImageEnhance as _IE, ImageFilter as _IF
         import io as _io
-        img = _PILImage.open(_io.BytesIO(img_bytes)).convert("RGB")
-        results = _zx.read_barcodes(img)
-        return [r.text for r in results if r.text]
+
+        def _try(img):
+            r = _zx.read_barcodes(img)
+            return [x.text for x in r if x.text]
+
+        base = _PILImage.open(_io.BytesIO(img_bytes)).convert("RGB")
+
+        # 1. Original
+        found = _try(base)
+        if found: return found
+
+        # 2. Escala de cinza com contraste aumentado
+        gray = base.convert("L")
+        hi   = _IE.Contrast(gray).enhance(2.5).convert("RGB")
+        found = _try(hi)
+        if found: return found
+
+        # 3. Nitidez + contraste
+        sharp = _IE.Contrast(gray).enhance(2.0).filter(_IF.SHARPEN).convert("RGB")
+        found = _try(sharp)
+        if found: return found
+
+        # 4. Upscale 2× (ajuda barcodes pequenos)
+        big = base.resize((base.width * 2, base.height * 2), _PILImage.LANCZOS)
+        found = _try(big)
+        if found: return found
+
+        return []
     except Exception:
         return []
 
