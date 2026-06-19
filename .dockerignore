@@ -1,0 +1,9 @@
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.streamlit/secrets.toml
+fotos_entrada/
+sessoes.json
+*.egg-info/

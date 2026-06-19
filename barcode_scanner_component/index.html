@@ -95,6 +95,12 @@ const ctx       = canvas.getContext("2d");
 const status    = document.getElementById("status");
 
 let busy = false;
+let _busyTimer = null;
+function setBusy(v) {
+  busy = v;
+  clearTimeout(_busyTimer);
+  if (v) _busyTimer = setTimeout(() => { busy = false; }, 8000);
+}
 
 function playBeep(ok) {
   try {
@@ -141,7 +147,7 @@ window.addEventListener("message", (e) => {
       : "⚠️ Código não cadastrado: " + args.not_found;
     setTimeout(resetStatus, 2200);
   }
-  busy = false;
+  setBusy(false);
 });
 
 function resetStatus() {
@@ -150,7 +156,7 @@ function resetStatus() {
 }
 
 document.getElementById("btn-capture").addEventListener("click", () => {
-  busy = false;   // força captura mesmo que ainda esteja no cooldown
+  setBusy(false);   // força captura mesmo que ainda esteja no cooldown
   capture();
 });
 
@@ -169,7 +175,7 @@ function startCamera() {
 
 function capture() {
   if (busy || video.readyState < 2 || video.paused) return;
-  busy = true;
+  setBusy(true);
 
   const vw = video.videoWidth  || 640;
   const vh = video.videoHeight || 480;
