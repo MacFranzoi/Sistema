@@ -139,6 +139,7 @@ window.addEventListener("message", (e) => {
     status.className   = "found";
     status.textContent = "✅ " + args.product_name;
     setTimeout(resetStatus, 2500);
+    setTimeout(() => setBusy(false), 1500);  // pausa antes da próxima leitura
   } else if (args.not_found) {
     if (args.not_found !== "frame") playBeep(false);
     status.className   = "notfound";
@@ -146,8 +147,10 @@ window.addEventListener("message", (e) => {
       ? "⚠️ Não detectado — ajuste e tente novamente"
       : "⚠️ Código não cadastrado: " + args.not_found;
     setTimeout(resetStatus, 2200);
+    setBusy(false);
+  } else {
+    setBusy(false);
   }
-  setBusy(false);
 });
 
 function resetStatus() {
