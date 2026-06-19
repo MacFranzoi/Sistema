@@ -1966,8 +1966,14 @@ if _pg == "entrada":
         if _foto_src:
             _foto_src.seek(0)
             _img_bytes2 = _foto_src.read()
-            _codes2 = api.decodificar_barcodes_foto(_img_bytes2)
+            try:
+                _codes2 = api.decodificar_barcodes_foto(_img_bytes2)
+            except Exception as _foto_err:
+                _codes2 = []
+                st.error(f"Erro ao decodificar imagem: {_foto_err}")
             if _codes2:
+                _added2 = 0
+                _nao_cat2 = []
                 for _bc2 in _codes2:
                     _m2 = _bc_map.get(_bc2.strip())
                     if _m2:
@@ -1976,12 +1982,21 @@ if _pg == "entrada":
                             _var2 = _prod2["variacoes"][0].get("variacao", {})
                         if _var2:
                             _bc_add_item(_prod2, _var2)
-                            st.success(f"✅ {_prod2.get('nome','')} / {_var2.get('nome','')} adicionado!")
+                            _added2 += 1
                         else:
                             st.session_state["ent_bc_pending"] = (_prod2, _bc2.strip())
-                st.rerun()
+                    else:
+                        _nao_cat2.append(_bc2.strip())
+                if _added2 > 0:
+                    st.success(f"✅ {_added2} item(ns) adicionado(s)!")
+                    st.rerun()
+                elif "ent_bc_pending" in st.session_state:
+                    st.rerun()
+                else:
+                    for _nf2 in _nao_cat2:
+                        st.warning(f"⚠️ Código lido: `{_nf2}` — não encontrado no catálogo. Tente o modo manual.")
             else:
-                st.warning("Nenhum barcode encontrado — tente com melhor iluminação.")
+                st.warning("Nenhum barcode detectado — tente com melhor iluminação ou use ⌨️ Código manual.")
 
     # ── Código manual ─────────────────────────────────────────────────────
     else:
