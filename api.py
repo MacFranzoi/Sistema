@@ -1227,7 +1227,7 @@ def parse_pedido_whatsapp(texto: str, catalogo_resumo: str) -> list[dict]:
     lista de dicts: [{modelo, variacao, quantidade, observacao}]
     """
     import anthropic as _ant
-    client = _ant.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    client = _ant.Anthropic(api_key=_get_anthropic_key())
 
     prompt = f"""Você é um assistente de compras de uma loja de capinhas e acessórios para celular.
 
@@ -1358,7 +1358,7 @@ def ler_codigo_barras_foto(img_bytes: bytes, media_type: str = "image/jpeg") -> 
     client = _ant.Anthropic(api_key=key)
     img_b64 = _b64.b64encode(img_bytes).decode()
     msg = client.messages.create(
-        model="claude-opus-4-8",
+        model="claude-haiku-4-5-20251001",
         max_tokens=64,
         messages=[{
             "role": "user",
