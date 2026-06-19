@@ -1259,6 +1259,62 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
 
 
 # ──────────────────────────────────────────────
+# Leitura de etiquetas por foto (Claude Vision)
+# ──────────────────────────────────────────────
+def ler_etiquetas_foto(img_bytes: bytes, catalogo_resumo: str,
+                       media_type: str = "image/jpeg") -> list[dict]:
+    """
+    Envia foto de capas ao Claude Vision e retorna as etiquetas lidas.
+    Retorna lista de dicts:
+      [{cod_interno, variacao_nome, variacao_cod, codigo_barras, quantidade, confianca}]
+    """
+    import anthropic as _ant, base64 as _b64, json, re
+    _key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not _key:
+        try:
+            import streamlit as _st
+            _key = _st.secrets.get("ANTHROPIC_API_KEY", "")
+        except Exception:
+            pass
+    client = _ant.Anthropic(api_key=_key)
+
+    prompt = f"""Você é assistente de uma loja de capinhas para celular no Brasil.
+Nesta foto há uma ou mais capas de celular com etiquetas coladas.
+
+Catálogo disponível (cod_interno | nome do produto):
+{catalogo_resumo}
+
+Para CADA etiqueta visível na foto extraia:
+- cod_interno: código do produto (ex: G54, A54, EDGE70FUSION, iPhone16). Busque o mais próximo no catálogo.
+- variacao_nome: a variação/cor escrita na etiqueta (ex: "Preto / Aveludada", "Roxo / Aveludada", "Preto / Space 2")
+- variacao_cod: código alfanumérico da variação se houver (campo separado do produto)
+- codigo_barras: o número do código de barras se legível na etiqueta
+- quantidade: 1 por padrão, a menos que a etiqueta indique outra quantidade
+- confianca: "alta" se leu claramente, "media" se aproximou, "baixa" se incerto
+
+Retorne SOMENTE um JSON válido, sem markdown, sem explicações:
+[{{"cod_interno":"...","variacao_nome":"...","variacao_cod":null,"codigo_barras":null,"quantidade":1,"confianca":"alta"}}]"""
+
+    img_b64 = _b64.b64encode(img_bytes).decode()
+    msg = client.messages.create(
+        model="claude-opus-4-8",
+        max_tokens=2048,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
+                {"type": "text", "text": prompt},
+            ]
+        }]
+    )
+    raw = msg.content[0].text.strip()
+    m = re.search(r'\[.*\]', raw, re.DOTALL)
+    if m:
+        return json.loads(m.group())
+    return json.loads(raw)
+
+
+# ──────────────────────────────────────────────
 # Transcrição de áudio via OpenAI Whisper
 # ──────────────────────────────────────────────
 def _get_openai_key() -> str:

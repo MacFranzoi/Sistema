@@ -1742,6 +1742,113 @@ if _pg == "entrada":
         st.session_state.itens_entrada = itens_carregados
         st.rerun()
 
+    # ── Leitura de etiquetas por foto ──────────────────────────────────
+    with st.expander("📷 Ler etiquetas por foto (IA)", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Fotografe as capas com etiquetas coladas. A IA lê os códigos e adiciona à lista automaticamente.</p>", unsafe_allow_html=True)
+
+        _tab_cam, _tab_upl = st.tabs(["📷 Câmera", "🖼️ Carregar foto"])
+        with _tab_cam:
+            _foto_camera = st.camera_input("Fotografar etiquetas", key="ent_camera", label_visibility="collapsed")
+        with _tab_upl:
+            _foto_upload = st.file_uploader("Carregar foto", type=["jpg","jpeg","png","webp"],
+                                            key="ent_foto_upload", label_visibility="collapsed")
+
+        _foto_src = _foto_camera or _foto_upload
+
+        if _foto_src:
+            if st.button("🔍 Analisar etiquetas", key="ent_analisar_foto", type="primary", use_container_width=True):
+                with st.spinner("Lendo etiquetas com IA…"):
+                    try:
+                        import os as _os_cam
+                        _ant_key_cam = _os_cam.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
+                        if not _ant_key_cam:
+                            st.error("Configure ANTHROPIC_API_KEY nos secrets.")
+                        else:
+                            _foto_src.seek(0)
+                            _img_bytes_cam = _foto_src.read()
+                            _mtype = "image/png" if getattr(_foto_src, "name", "").lower().endswith(".png") else "image/jpeg"
+                            _cat_cam = "\n".join(
+                                f"{p.get('codigo_interno','')} | {p.get('nome','')}"
+                                for p in cache.get("produtos", []) if p.get("codigo_interno") and p.get("nome")
+                            )[:12000]
+                            _etiq_res = api.ler_etiquetas_foto(_img_bytes_cam, _cat_cam, _mtype)
+                            st.session_state["ent_foto_resultado"] = _etiq_res
+                    except Exception as _e_cam:
+                        st.error(f"Erro ao analisar foto: {_e_cam}")
+
+        if "ent_foto_resultado" in st.session_state and st.session_state["ent_foto_resultado"]:
+            _prods_all_cam = cache.get("produtos", [])
+            _prods_ci_cam  = {p.get("codigo_interno","").lower(): p for p in _prods_all_cam}
+
+            _rows_cam, _meta_cam = [], []
+            for _ei in st.session_state["ent_foto_resultado"]:
+                _cod_ei   = (_ei.get("cod_interno") or "").strip()
+                _var_nome = (_ei.get("variacao_nome") or "").strip()
+                _var_cod  = (_ei.get("variacao_cod") or "").strip()
+                _qtd_ei   = int(_ei.get("quantidade") or 1)
+
+                _prod_ei = _prods_ci_cam.get(_cod_ei.lower())
+                if not _prod_ei:
+                    _cod_low = _cod_ei.lower()
+                    for _p in _prods_all_cam:
+                        if _cod_low and _cod_low in _p.get("nome","").lower():
+                            _prod_ei = _p; break
+
+                _var_ei = None
+                if _prod_ei:
+                    for _v in _prod_ei.get("variacoes", []):
+                        _vd = _v.get("variacao", {})
+                        if _var_cod and _vd.get("codigo","").lower() == _var_cod.lower():
+                            _var_ei = _vd; break
+                        if not _var_ei and _var_nome and _var_nome.lower() in _vd.get("nome","").lower():
+                            _var_ei = _vd
+
+                _achado = _prod_ei is not None and _var_ei is not None
+                _rows_cam.append({
+                    "✓": _achado,
+                    "Produto":  _prod_ei.get("nome", _cod_ei) if _prod_ei else (_cod_ei or "?"),
+                    "Variação": _var_ei.get("nome", _var_nome) if _var_ei else (_var_nome or "?"),
+                    "Qtd":      _qtd_ei,
+                    "Status":   "✓" if _achado else "⚠",
+                })
+                _meta_cam.append({"_prod": _prod_ei, "_var": _var_ei, "_achado": _achado})
+
+            _df_cam = pd.DataFrame(_rows_cam)
+            _edited_cam = st.data_editor(
+                _df_cam,
+                column_config={
+                    "✓":       st.column_config.CheckboxColumn("✓", width="small"),
+                    "Produto": st.column_config.TextColumn("Produto", disabled=True, width="medium"),
+                    "Variação":st.column_config.TextColumn("Variação", disabled=True, width="large"),
+                    "Qtd":     st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
+                    "Status":  st.column_config.TextColumn("", width="small", disabled=True),
+                },
+                hide_index=True, use_container_width=True, key="ent_foto_editor",
+            )
+
+            _n_cam = int(_edited_cam["✓"].sum()) if not _edited_cam.empty else 0
+            _cc1, _cc2 = st.columns(2)
+            if _cc1.button("🗑 Limpar", key="ent_foto_clear", use_container_width=True):
+                del st.session_state["ent_foto_resultado"]
+                st.rerun()
+            if _cc2.button(f"➕ Adicionar {_n_cam} à lista", key="ent_foto_add", type="primary",
+                           use_container_width=True, disabled=_n_cam == 0):
+                for _i, _frow in _edited_cam[_edited_cam["✓"] == True].iterrows():
+                    _m = _meta_cam[_i]
+                    if _m["_prod"] and _m["_var"]:
+                        st.session_state.itens_entrada.append({
+                            "produto_id":    _m["_prod"].get("id",""),
+                            "produto_nome":  _m["_prod"].get("nome",""),
+                            "cod_interno":   _m["_prod"].get("codigo_interno",""),
+                            "variacao_id":   _m["_var"].get("id",""),
+                            "variacao_cod":  _m["_var"].get("codigo",""),
+                            "variacao_nome": _frow["Variação"],
+                            "quantidade":    int(_frow["Qtd"]),
+                        })
+                del st.session_state["ent_foto_resultado"]
+                st.success(f"✅ {_n_cam} item(ns) adicionado(s) à lista!")
+                st.rerun()
+
     # Busca e adição
     produto_sel, edited = busca_produto_ui("ent", cache, col_qtd="Qtd Entrada")
 
