@@ -2144,9 +2144,10 @@ if _pg == "entrada":
                 _fc1, _fc2 = st.columns([9, 1])
                 _fc1.markdown(
                     f'<div style="background:#0e1829;padding:4px 10px;border-radius:5px;margin:2px 0;'
-                    f'border-left:3px solid #2a7a4a;font-size:0.9rem">'
-                    f'<b>{_fx["produto_nome"]}</b> / {_fx["variacao_nome"]} &nbsp;·&nbsp; '
-                    f'<span style="color:#7ef7a0">x{_fx["quantidade"]}</span></div>',
+                    f'border-left:3px solid #2a7a4a;font-size:0.9rem;color:#ffffff">'
+                    f'<b>{_fx["produto_nome"]}</b>'
+                    f'<span style="color:#c8e8ff"> / {_fx["variacao_nome"]}</span>'
+                    f' &nbsp;·&nbsp; <span style="color:#7ef7a0">x{_fx["quantidade"]}</span></div>',
                     unsafe_allow_html=True,
                 )
                 if _fc2.button("🗑️", key=f"del_fila_{_fi}"):
@@ -3747,6 +3748,126 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
             data_pedido = st.date_input("📅 Data", value=date.today(), key="data_pedido")
         with col_f3:
             obs_pedido = st.text_input("📝 Observações", placeholder="ex: entrega até sexta", key="obs_pedido")
+
+        # ── Bipar códigos de barras ──────────────────────────────────────
+        with st.expander("📡 Bipar códigos de barras para o pedido", expanded=False):
+            st.caption("Bipe os códigos um por um. Eles ficam na fila abaixo. Quando terminar, clique em **Adicionar ao pedido**.")
+
+            # Monta mapa código → (produto, variação)
+            _bc_map_ped: dict = {}
+            if cache:
+                for _pp in cache.get("produtos", []):
+                    for _vobj in _pp.get("variacoes", []):
+                        _vv = _vobj.get("variacao", {})
+                        for _fld in ["ean", "codigo", "referencia"]:
+                            _cd = (_vv.get(_fld) or "").strip()
+                            if _cd:
+                                _bc_map_ped[_cd] = (_pp, _vv)
+                        _ci = (_pp.get("codigo_interno") or "").strip()
+                        if _ci:
+                            _bc_map_ped[_ci] = (_pp, None)
+
+            with st.form("ped_bc_form", clear_on_submit=True):
+                _ped_bc_cod = st.text_input("Código", placeholder="Bipe aqui...",
+                                            label_visibility="collapsed", key="ped_bc_input")
+                _ped_bc_ok = st.form_submit_button("Bipar", use_container_width=True)
+
+            import streamlit.components.v1 as _stc_pb
+            _stc_pb.html("""<script>
+            setTimeout(function(){
+              var inp = window.parent.document.querySelector('[data-testid="stTextInput"] input');
+              if(inp) inp.focus();
+            }, 150);
+            </script>""", height=0)
+
+            if "ped_bc_fila" not in st.session_state:
+                st.session_state.ped_bc_fila = []
+
+            if _ped_bc_ok and _ped_bc_cod.strip():
+                _pbc = _ped_bc_cod.strip()
+                _pm = _bc_map_ped.get(_pbc)
+                if _pm:
+                    _pp2, _vv2 = _pm
+                    if not _vv2 and len(_pp2.get("variacoes", [])) == 1:
+                        _vv2 = _pp2["variacoes"][0].get("variacao", {})
+                    if _vv2:
+                        _pvid = str(_vv2.get("id", ""))
+                        _found_pb = False
+                        for _fx2 in st.session_state.ped_bc_fila:
+                            if _fx2.get("variacao_id") == _pvid:
+                                _fx2["quantidade"] += 1
+                                _found_pb = True
+                                break
+                        if not _found_pb:
+                            st.session_state.ped_bc_fila.append({
+                                "variacao_id": _pvid,
+                                "produto_nome": _pp2.get("nome", ""),
+                                "variacao_nome": _vv2.get("nome", ""),
+                                "quantidade": 1,
+                                "_prod": _pp2, "_var": _vv2,
+                            })
+                    else:
+                        st.session_state["ped_bc_nao_enc"] = _pbc
+                else:
+                    st.session_state["ped_bc_nao_enc"] = _pbc
+                st.rerun()
+
+            _nenc = st.session_state.pop("ped_bc_nao_enc", None)
+            if _nenc:
+                st.warning(f"⚠️ Código `{_nenc}` não encontrado no catálogo.")
+
+            _ped_fila2 = st.session_state.ped_bc_fila
+            if _ped_fila2:
+                _total_unid = sum(f["quantidade"] for f in _ped_fila2)
+                st.markdown(f"**🗂️ {len(_ped_fila2)} item(s) — {_total_unid} unidade(s):**")
+                for _pfi, _pfx in enumerate(_ped_fila2):
+                    _pfc1, _pfc2 = st.columns([9, 1])
+                    _pfc1.markdown(
+                        f'<div style="background:#1a3560;padding:5px 10px;border-radius:5px;'
+                        f'margin:2px 0;border-left:3px solid #4a8aff;color:#ffffff">'
+                        f'<b>{_pfx["produto_nome"]}</b>'
+                        f'<span style="color:#c8d8f0"> / {_pfx["variacao_nome"]}</span>'
+                        f' &nbsp;·&nbsp; <span style="color:#7ef7a0;font-weight:bold">x{_pfx["quantidade"]}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if _pfc2.button("🗑️", key=f"del_pbfila_{_pfi}"):
+                        st.session_state.ped_bc_fila.pop(_pfi)
+                        st.rerun()
+
+                _pa1, _pa2 = st.columns(2)
+                if _pa1.button("➕ Adicionar ao pedido", type="primary", use_container_width=True, key="ped_bc_add_all"):
+                    _pedido_snapshot()
+                    _forn_pb = st.session_state.get("fornecedor_global", "") or "—"
+                    for _pfx in st.session_state.ped_bc_fila:
+                        _pvid2 = _pfx["variacao_id"]
+                        _existing = next((it for it in st.session_state.pedido_itens if it.get("variacao_id") == _pvid2), None)
+                        if _existing:
+                            _existing["quantidade"] = _existing.get("quantidade", 1) + _pfx["quantidade"]
+                        else:
+                            _pp3, _vv3 = _pfx["_prod"], _pfx["_var"]
+                            st.session_state.pedido_itens.append({
+                                "fornecedor":    _forn_pb,
+                                "produto_id":    _pp3.get("id", ""),
+                                "produto_nome":  _pp3.get("nome", ""),
+                                "cod_interno":   _pp3.get("codigo_interno", ""),
+                                "variacao_id":   _pvid2,
+                                "variacao_cod":  _vv3.get("codigo", "") if _vv3 else "",
+                                "variacao_nome": _vv3.get("nome", "") if _vv3 else "",
+                                "estoque_atual": 0,
+                                "quantidade":    _pfx["quantidade"],
+                                "valor_custo":   "0.00",
+                                "observacao":    "",
+                            })
+                    _n_add_pb = len(st.session_state.ped_bc_fila)
+                    st.session_state.ped_bc_fila = []
+                    st.success(f"✅ {_n_add_pb} item(s) adicionado(s) ao pedido!")
+                    st.rerun()
+                if _pa2.button("🗑️ Limpar fila", use_container_width=True, key="ped_bc_clear"):
+                    st.session_state.ped_bc_fila = []
+                    st.rerun()
+            else:
+                st.caption("Nenhum código na fila ainda.")
 
         # ── Custos por tipo ──
 
