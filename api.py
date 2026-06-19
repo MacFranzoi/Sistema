@@ -2055,6 +2055,110 @@ def _normalizar_login(nome: str) -> str:
     nome_norm = _ud.normalize("NFD", nome).encode("ascii", "ignore").decode()
     return nome_norm.strip().lower().split()[0] if nome_norm.strip() else "usuario"
 
+# ──────────────────────────────────────────────
+# Rascunho de Pedido (persiste entre sessões)
+# ──────────────────────────────────────────────
+
+def _rascunho_ped_path(user: str) -> str:
+    return os.path.join(DIR, f"pedido_rascunho_{user}.json")
+
+def salvar_rascunho_pedido(user: str, dados: dict):
+    import threading
+    path = _rascunho_ped_path(user)
+    payload = {"user": user, "salvo_em": datetime.now().isoformat(), **dados}
+    conteudo = json.dumps(payload, ensure_ascii=False, default=str)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    def _push():
+        _gh_push_arquivo(f"pedido_rascunho_{user}.json", conteudo, f"Rascunho pedido {user}")
+    threading.Thread(target=_push, daemon=True).start()
+
+def carregar_rascunho_pedido(user: str) -> dict | None:
+    path = _rascunho_ped_path(user)
+    if not os.path.exists(path):
+        _gh_baixar_arquivo(f"pedido_rascunho_{user}.json", path)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def limpar_rascunho_pedido(user: str):
+    import threading
+    path = _rascunho_ped_path(user)
+    if os.path.exists(path):
+        os.remove(path)
+    threading.Thread(target=lambda: _gh_delete_arquivo(f"pedido_rascunho_{user}.json"), daemon=True).start()
+
+
+# ──────────────────────────────────────────────
+# Rascunho de Entrada (persiste entre sessões)
+# ──────────────────────────────────────────────
+
+_DIR_BACKUPS_ENT = os.path.join(DIR, "backups")
+os.makedirs(_DIR_BACKUPS_ENT, exist_ok=True)
+
+_BACKUP_TIMES: dict = {}
+
+def _rascunho_ent_path(user: str) -> str:
+    return os.path.join(DIR, f"entrada_rascunho_{user}.json")
+
+def _limpar_backups_antigos_ent(user: str, max_bk: int = 10):
+    import glob as _glob
+    pattern = os.path.join(_DIR_BACKUPS_ENT, f"entrada_backup_{user}_*.json")
+    arquivos = sorted(_glob.glob(pattern))
+    while len(arquivos) > max_bk:
+        os.remove(arquivos.pop(0))
+
+def salvar_rascunho_entrada(user: str, dados: dict):
+    import threading
+    now = datetime.now()
+    path = _rascunho_ent_path(user)
+    payload = {"user": user, "salvo_em": now.isoformat(), **dados}
+    conteudo = json.dumps(payload, ensure_ascii=False, default=str)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    def _push():
+        _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
+    threading.Thread(target=_push, daemon=True).start()
+
+    # Backup periódico a cada 5 minutos
+    _ts_key = f"_ent_ultimo_backup_{user}"
+    ultimo = _BACKUP_TIMES.get(_ts_key)
+    if ultimo is None or (now - ultimo).total_seconds() >= 300:
+        _BACKUP_TIMES[_ts_key] = now
+        ts_str = now.strftime("%Y%m%d_%H%M%S")
+        bk_name = f"entrada_backup_{user}_{ts_str}.json"
+        bk_path = os.path.join(_DIR_BACKUPS_ENT, bk_name)
+        with open(bk_path, "w", encoding="utf-8") as f:
+            f.write(conteudo)
+        _limpar_backups_antigos_ent(user)
+        def _push_bk(name=bk_name, cont=conteudo, ts=ts_str):
+            _gh_push_arquivo(f"backups/{name}", cont, f"Backup entrada {user} {ts}")
+        threading.Thread(target=_push_bk, daemon=True).start()
+
+def carregar_rascunho_entrada(user: str) -> dict | None:
+    path = _rascunho_ent_path(user)
+    if not os.path.exists(path):
+        _gh_baixar_arquivo(f"entrada_rascunho_{user}.json", path)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def limpar_rascunho_entrada(user: str):
+    import threading
+    path = _rascunho_ent_path(user)
+    if os.path.exists(path):
+        os.remove(path)
+    threading.Thread(target=lambda: _gh_delete_arquivo(f"entrada_rascunho_{user}.json"), daemon=True).start()
+
+
 def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:
     funcs = buscar_funcionarios(limite=200)
     criados = []

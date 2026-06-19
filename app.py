@@ -1804,7 +1804,12 @@ if _pg == "entrada":
         st.stop()
 
     if "itens_entrada" not in st.session_state:
-        st.session_state.itens_entrada = []
+        _rasc_ent = api.carregar_rascunho_entrada(_user)
+        if _rasc_ent and _rasc_ent.get("itens"):
+            st.session_state.itens_entrada = _rasc_ent["itens"]
+            st.toast("📋 Lista de entrada restaurada automaticamente.", icon="📋")
+        else:
+            st.session_state.itens_entrada = []
 
     # Carregar da área de transferência
     clip = st.session_state.get("clipboard")
@@ -2265,6 +2270,8 @@ if _pg == "entrada":
         with col_x:
             if st.button("🗑️ Limpar lista", use_container_width=True):
                 st.session_state.itens_entrada = []
+                st.session_state.pop("_ent_hash_saved", None)
+                api.limpar_rascunho_entrada(_user)
                 st.rerun()
         with col_y:
             if _pode_confirmar:
@@ -2288,6 +2295,8 @@ if _pg == "entrada":
                             st.error(f"❌ {e['produto_nome']} / {e['variacao_nome']}: {e['erro']}")
                         if not erros:
                             st.session_state.itens_entrada = []
+                            st.session_state.pop("_ent_hash_saved", None)
+                            api.limpar_rascunho_entrada(_user)
         with col_z:
             if st.button("📤 Enviar para Aprovação", use_container_width=True,
                          type="primary" if not _pode_confirmar else "secondary"):
@@ -2313,6 +2322,8 @@ if _pg == "entrada":
                             de_usuario=_user,
                         )
                     st.session_state.itens_entrada = []
+                    st.session_state.pop("_ent_hash_saved", None)
+                    api.limpar_rascunho_entrada(_user)
                     st.success(f"✅ Entrada enviada para aprovação! ID: `{_ap_id}`")
                     st.rerun()
         with col_w:
@@ -2332,6 +2343,17 @@ if _pg == "entrada":
                 st.rerun()
     else:
         st.info("Adicione produtos à lista acima.")
+
+    # Auto-save rascunho entrada
+    _ent_itens_rasc = st.session_state.get("itens_entrada", [])
+    if _ent_itens_rasc:
+        import hashlib as _hs_ent, json as _json_ent
+        _ent_hash_now = _hs_ent.md5(
+            _json_ent.dumps(_ent_itens_rasc, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        if _ent_hash_now != st.session_state.get("_ent_hash_saved", ""):
+            api.salvar_rascunho_entrada(_user, {"itens": _ent_itens_rasc})
+            st.session_state["_ent_hash_saved"] = _ent_hash_now
 
 
 # ══════════════════════════════════════════════
