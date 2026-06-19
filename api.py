@@ -1261,16 +1261,28 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
 # ──────────────────────────────────────────────
 # Transcrição de áudio via OpenAI Whisper
 # ──────────────────────────────────────────────
+def _get_openai_key() -> str:
+    """Lê OPENAI_API_KEY de os.environ ou, se rodando no Streamlit, de st.secrets."""
+    key = os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        try:
+            import streamlit as _st
+            key = _st.secrets.get("OPENAI_API_KEY", "")
+        except Exception:
+            pass
+    return key
+
+
 def transcrever_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     """
     Transcreve áudio usando OpenAI Whisper API.
-    Requer OPENAI_API_KEY no ambiente.
+    Requer OPENAI_API_KEY em os.environ ou .streamlit/secrets.toml.
     Retorna o texto transcrito.
     """
     import requests as _req
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY não configurado no ambiente.")
+    api_key = _get_openai_key()
+    if not api_key or api_key.startswith("sk-..."):
+        raise ValueError("OPENAI_API_KEY não configurado. Preencha .streamlit/secrets.toml.")
     resp = _req.post(
         "https://api.openai.com/v1/audio/transcriptions",
         headers={"Authorization": f"Bearer {api_key}"},

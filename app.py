@@ -2077,8 +2077,8 @@ if _pg == "pedido":
         st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp ou grave um áudio. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
 
         # ── Gravação de áudio ──────────────────────────────────────────────
-        import os as _os_wpp
-        _has_openai_key = bool(_os_wpp.environ.get("OPENAI_API_KEY", ""))
+        from api import _get_openai_key as _chk_key
+        _has_openai_key = bool(_chk_key()) and not _chk_key().startswith("sk-...")
         if _has_openai_key:
             st.markdown(f"<p style='color:{TXT2};font-size:0.85rem;margin-bottom:4px'>🎙️ <b>Gravar áudio</b> — grave e transcreva automaticamente</p>", unsafe_allow_html=True)
             _audio_val = st.audio_input("Gravar pedido por áudio", key="wpp_audio", label_visibility="collapsed")
