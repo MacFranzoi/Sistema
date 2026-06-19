@@ -3095,16 +3095,21 @@ TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuaç�
 2. HERANÇA DE MODELO — REGRA CRÍTICA: uma vez que um modelo é mencionado, TODOS os itens seguintes pertencem a ele até que um NOVO modelo seja explicitamente nomeado.
    "iPhone 15 Pro Max, MagSafe 129,99, 8, MagSafe 159,99, 3" → ambos os MagSafe são do iPhone 15 Pro Max.
    Nunca deixe um item sem modelo — use sempre o último modelo mencionado.
-3. nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max"). NUNCA inclua kit, variação, preço, "SL", "MG" ou qualquer outro dado no nome do produto.
-4. SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
-5. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
+3. nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max"). NUNCA inclua kit, variação, preço, "SL", "MG", "magsafe", "silicone", "masculino", "feminino" ou qualquer outro dado no nome do produto. Se tiver dúvida entre modelo e kit, o nome do modelo termina no número/geração (ex: "Pro Max", "S24+") e todo o resto é kit.
+4. ORDEM DOS TOKENS FLEXÍVEL — dentro de uma entrada, quantidade, kit e preço podem aparecer em qualquer ordem. Identifique cada token pelo tipo:
+   • número inteiro (ex: 8) → quantidade_fixa
+   • valor com vírgula/ponto (ex: 129,99 / R$129,99) → preco
+   • palavra-chave de kit → kit
+   "8, MagSafe, 129,99" = "MagSafe, 129,99, 8" = "129,99, 8, MagSafe" → todos resultam em kit="magsafe", preco="129,99", quantidade_fixa=8
+5. SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
+6. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-6. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
+7. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
    Normalize apenas plural: pretas→"preta", brancos→"branco", roxas→"roxa", amarelas→"amarela", lilases→"lilás"
    NÃO converta gênero (roxa≠roxo para o prompt; o sistema faz a normalização automaticamente)
-7. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
-8. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
-9. Uma entrada JSON por par modelo+cor ou modelo+kit
+8. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
+9. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
+10. Uma entrada JSON por par modelo+cor ou modelo+kit
 
 Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
 → A07 | kit="diversos masculino" | qtd=1
@@ -3225,17 +3230,31 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                         return _p
                             return None
 
+                        # Termos que nunca devem aparecer no nome do produto
+                        _KIT_CONTAMINANTES = [
+                            "sl mg", " sl", "sl ", " mg", "mg ", "magsafe", "silicone",
+                            "masculino", "feminino", "brilho", "diversos", "very rio",
+                            "avulso", "aveludada", "transparente", "carteira", "película",
+                        ]
+                        def _limpar_nome_produto(nome: str) -> str:
+                            n = nome.strip()
+                            for _t in _KIT_CONTAMINANTES:
+                                import re as _re_n
+                                n = _re_n.sub(r"(?i)" + _re_n.escape(_t), "", n).strip(" ,/-")
+                            return n.strip() or nome.strip()
+
                         _nao_compreendidos = []
                         for _entry in _parsed:
                             _cod  = _entry.get("cod_interno") or ""
-                            _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                            _nome_raw = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                            _nome = _limpar_nome_produto(_nome_raw)
                             _kit  = (_entry.get("kit") or "").lower()
                             _conf = _entry.get("confianca", "baixa")
                             _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
                             _qtd_fixa  = _entry.get("quantidade_fixa")
                             _nao_comp  = _entry.get("nao_compreendido", False)
                             _motivo    = _entry.get("motivo", "")
-                            _nome_lower = (_entry.get("nome_produto") or _entry.get("modelo_digitado","")).lower()
+                            _nome_lower = _nome.lower()
 
                             # Aplica regras personalizadas: ex "sl iphone = vr"
                             for _r_kit, _r_palavra, _r_sub in _regras_kit:
