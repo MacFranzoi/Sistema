@@ -2307,6 +2307,11 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
   "magsafe/mag safe/ms" → "magsafe"
   "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
   "div masc/diversos masc/dm" → "diversos masculino"
+  "diversas/diverse" sozinho → kit="avulso cor", descricao_avulso="Diversos"
+  "diversas [preço]" / "[preço] diversas" → kit="avulso cor", descricao_avulso="R$[preço] / Diversos"
+    Ex: "59,99 diversas" → descricao_avulso="R$59,99 / Diversos"
+  "space 2 [cor]" / "[cor] space 2" → kit="avulso cor", descricao_avulso="[cor] / Space 2"
+    Ex: "space 2 preta" → descricao_avulso="preta / Space 2" | "marsala space 2" → descricao_avulso="marsala / Space 2"
   "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (avulso)
   "película/pelicula/peliculas/pel" → "película"  (avulso)
   "couro/leather" → "couro"  (avulso)
@@ -2316,9 +2321,17 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
 Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
 
 REGRA SOBRE CORES — válida sempre, inclusive em texto normal:
-Palavras de cor (preta, preto, branca, verde, lilás, rosa, vinho, nude, dourada, vermelha, etc.)
-NUNCA são kits. São SEMPRE kit="avulso cor" com descricao_avulso=a cor.
+Palavras de cor (preta/preto, roxa/roxo, amarela/amarelo, branca, verde, lilás, rosa, vinho, nude, dourada, vermelha, etc.)
+NUNCA são kits. São SEMPRE kit="avulso cor" com descricao_avulso=a cor falada (sem normalizar gênero — o sistema normaliza).
 Cores NUNCA viram "masculino" ou "feminino". A regra "kit ambíguo → masculino" não se aplica a cores.
+"amarelo" / "amarela" → kit="avulso cor", descricao_avulso="amarela" (NUNCA "brilho"!)
+
+ACESSÓRIOS — produto não-capa (suporte, cabo, fone, carregador, powerbank, película, controle, etc.) + quantidade:
+→ use kit="acessorio", cod_interno=código_exato_do_catálogo, quantidade_fixa=N
+  Ex: "SPC-22 dois" → {"cod_interno":"SPC-22","kit":"acessorio","quantidade_fixa":2}
+  Ex: "suporte magsafe três" → busca no catálogo → kit="acessorio", quantidade_fixa=3
+  Ex: "cabo tipo c um" → busca no catálogo → kit="acessorio", quantidade_fixa=1
+Apenas use kit="acessorio" quando tiver certeza que é um acessório, não uma capa/kit de cores.
 
 TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuação:
 1. MODELO: "a" + número = Samsung A[número] ("a 06"=A06, "a 53"=A53). Nunca artigo.
@@ -2327,7 +2340,8 @@ TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuaç�
 3. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
 4. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
-   Normalize gênero/plural: pretas→"preta", brancos→"branca", vermelhas→"vermelha", lilases→"lilás"
+   Normalize apenas plural: pretas→"preta", brancos→"branco", roxas→"roxa", amarelas→"amarela", lilases→"lilás"
+   NÃO converta gênero (roxa≠roxo para o prompt; o sistema faz a normalização automaticamente)
 5. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
 6. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
 7. Uma entrada JSON por par modelo+cor ou modelo+kit
@@ -2466,6 +2480,38 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 )
                                 continue
 
+                            # Acessório direto: busca produto por código ou nome no catálogo
+                            if _kit == "acessorio":
+                                _prod_ac = _achar_produto(_cod, _nome)
+                                _qtd_ac = int(_qtd_fixa) if _qtd_fixa else 1
+                                if _prod_ac:
+                                    _variacoes_ac = _prod_ac.get("variacoes", [])
+                                    _var_ac = _variacoes_ac[0].get("variacao", {}) if _variacoes_ac else {}
+                                    _linhas_expandidas.append({
+                                        "✓": True, "_cod": _prod_ac.get("codigo_interno",""),
+                                        "_nome": _prod_ac.get("nome",""), "_kit": "acessorio", "_conf": "alta",
+                                        "_achado": True, "_avulso_auto": False, "_obs": "",
+                                        "_var_id": _var_ac.get("id",""), "_var_cod": _var_ac.get("codigo",""),
+                                        "_prod_id": _prod_ac.get("id",""),
+                                        "_custo": float(_prod_ac.get("valor_custo") or 0),
+                                        "Aparelho": _prod_ac.get("nome",""), "Kit": "Acessório",
+                                        "Variação": _var_ac.get("nome","") or "—",
+                                        "Qtd": _qtd_ac, "Status": "✓",
+                                        "_desc_avulso": _prod_ac.get("nome",""),
+                                    })
+                                else:
+                                    _linhas_expandidas.append({
+                                        "✓": False, "_cod": _cod, "_nome": _nome or _cod,
+                                        "_kit": "acessorio", "_conf": "baixa", "_achado": False,
+                                        "_avulso_auto": True, "_obs": "",
+                                        "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                        "Aparelho": _nome or _cod, "Kit": "Acessório",
+                                        "Variação": f"⚠ {_cod or _nome} não encontrado",
+                                        "Qtd": _qtd_ac, "Status": "⚠",
+                                        "_desc_avulso": f"{_cod or _nome}",
+                                    })
+                                continue
+
                             # Kit avulso (carteira, película, cor etc.) ou kit desconhecido
                             if _kit in _WPP_KITS_AVULSO or _kit not in _WPP_KITS:
                                 _prod_obj_av = _achar_produto(_cod, _nome)
@@ -2478,21 +2524,33 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 _var_match_av = None
                                 if _kit == "avulso cor" and _desc_avulso_extra and _prod_obj_av:
                                     _cor_busca = _desc_avulso_extra.lower().strip()
-                                    # variantes de gênero para busca mais ampla
-                                    _cor_variantes = {_cor_busca}
-                                    _genero_map = {"preta":"preto","branca":"branco","vermelha":"vermelho",
-                                                   "dourada":"dourado","rosada":"rosado","cinza":"cinza",
-                                                   "lilás":"lilas","lilas":"lilás"}
-                                    if _cor_busca in _genero_map:
-                                        _cor_variantes.add(_genero_map[_cor_busca])
-                                    # remove plural simples
-                                    if _cor_busca.endswith("s") and len(_cor_busca) > 3:
-                                        _cor_variantes.add(_cor_busca[:-1])
-                                    for _v in _prod_obj_av.get("variacoes", []):
-                                        _vn = _v.get("variacao", {}).get("nome", "").lower()
-                                        if any(c in _vn for c in _cor_variantes):
-                                            _var_match_av = _v.get("variacao", {})
-                                            break
+                                    # "cor / tipo" (ex: "preta / space 2", "R$59,99 / Diversos") → busca multi-termo
+                                    if "/" in _cor_busca:
+                                        _termos_multi = [t.strip() for t in _cor_busca.split("/")]
+                                        for _v in _prod_obj_av.get("variacoes", []):
+                                            _vn = _v.get("variacao", {}).get("nome", "").lower()
+                                            if all(t in _vn for t in _termos_multi):
+                                                _var_match_av = _v.get("variacao", {})
+                                                break
+                                    else:
+                                        _cor_variantes = {_cor_busca}
+                                        _genero_map = {
+                                            "preta":"preto", "branca":"branco", "vermelha":"vermelho",
+                                            "dourada":"dourado", "rosada":"rosado", "cinza":"cinza",
+                                            "lilás":"lilas", "lilas":"lilás",
+                                            "roxa":"roxo", "amarela":"amarelo",
+                                            "diversas":"diversos", "fúcsia":"fucsia", "fucsia":"fúcsia",
+                                            "azuis":"azul", "verdes":"verde",
+                                        }
+                                        if _cor_busca in _genero_map:
+                                            _cor_variantes.add(_genero_map[_cor_busca])
+                                        if _cor_busca.endswith("s") and len(_cor_busca) > 3:
+                                            _cor_variantes.add(_cor_busca[:-1])
+                                        for _v in _prod_obj_av.get("variacoes", []):
+                                            _vn = _v.get("variacao", {}).get("nome", "").lower()
+                                            if any(c in _vn for c in _cor_variantes):
+                                                _var_match_av = _v.get("variacao", {})
+                                                break
 
                                 if _var_match_av:
                                     # Variação encontrada no catálogo
@@ -2613,7 +2671,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 "_desc_avulso": _av["desc"],
                             })
 
-                        st.session_state["wpp_expandido"]      = _linhas_expandidas
+                        # Mescla com base do reprocessamento (itens ✓ preservados)
+                        _base_reprocess = st.session_state.pop("wpp_reprocess_base", [])
+                        st.session_state["wpp_expandido"] = _base_reprocess + _linhas_expandidas
                         st.session_state["wpp_nao_comp"] = _nao_compreendidos
                     except Exception as e:
                         st.error(f"Erro na IA: {e}")
@@ -2696,6 +2756,20 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     },
                     hide_index=True, use_container_width=True, key="wpp_editor_falhos",
                 )
+                # ── Reprocessar avulsos com IA ──────────────────────────
+                with st.expander("🔄 Reprocessar itens não encontrados com IA", expanded=False):
+                    st.markdown(f"<p style='color:{TXT2};font-size:0.82rem'>Edite os itens abaixo e reprocesse — os resultados serão adicionados ao pré-pedido existente.</p>", unsafe_allow_html=True)
+                    _reprocess_linhas = "\n".join(
+                        l.get("_desc_avulso", "") for l in _falhos if l.get("_desc_avulso","").strip()
+                    )
+                    _reprocess_txt = st.text_area("Itens para reprocessar", value=_reprocess_linhas, height=100, key="wpp_reprocess_txt", label_visibility="collapsed")
+                    if st.button("🔄 Reprocessar com IA", key="wpp_reprocess_btn", use_container_width=True):
+                        _expandido_ok = [l for l in st.session_state.get("wpp_expandido", []) if l["_achado"]]
+                        st.session_state["wpp_input"] = _reprocess_txt
+                        st.session_state["wpp_reprocess_base"] = _expandido_ok
+                        st.session_state.pop("wpp_expandido", None)
+                        st.session_state.pop("wpp_nao_comp", None)
+                        st.rerun()
             else:
                 _edited_falhos = _pd.DataFrame()
 
