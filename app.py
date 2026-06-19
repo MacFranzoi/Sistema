@@ -1742,112 +1742,192 @@ if _pg == "entrada":
         st.session_state.itens_entrada = itens_carregados
         st.rerun()
 
-    # ── Leitura de etiquetas por foto ──────────────────────────────────
-    with st.expander("📷 Ler etiquetas por foto (IA)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Fotografe as capas com etiquetas coladas. A IA lê os códigos e adiciona à lista automaticamente.</p>", unsafe_allow_html=True)
+    # ── Mapa de códigos de barras do catálogo ──────────────────────────
+    _prods_all_ent = cache.get("produtos", [])
+    _bc_map = {}   # barcode → (produto, variacao_ou_None)
+    _ci_map = {p.get("codigo_interno","").lower(): p for p in _prods_all_ent}
+    for _p in _prods_all_ent:
+        _cb = (_p.get("codigo_barra") or "").strip()
+        if _cb:
+            _bc_map[_cb] = (_p, None)
+        for _v in _p.get("variacoes", []):
+            _vd = _v.get("variacao", {})
+            for _field in ("codigo_barra", "codigo_barras", "ean"):
+                _vcb = (_vd.get(_field) or "").strip()
+                if _vcb:
+                    _bc_map[_vcb] = (_p, _vd)
 
-        _tab_cam, _tab_upl = st.tabs(["📷 Câmera", "🖼️ Carregar foto"])
-        with _tab_cam:
-            _foto_camera = st.camera_input("Fotografar etiquetas", key="ent_camera", label_visibility="collapsed")
-        with _tab_upl:
+    def _bc_add_item(prod, var, qtd=1):
+        """Adiciona item a itens_entrada a partir de produto+variação."""
+        st.session_state.itens_entrada.append({
+            "produto_id":    prod.get("id",""),
+            "produto_nome":  prod.get("nome",""),
+            "cod_interno":   prod.get("codigo_interno",""),
+            "variacao_id":   var.get("id","") if var else "",
+            "variacao_cod":  var.get("codigo","") if var else "",
+            "variacao_nome": var.get("nome","") if var else "",
+            "quantidade":    qtd,
+        })
+
+    # ── 1. Scanner ao vivo ──────────────────────────────────────────────
+    with st.expander("📹 Scanner ao vivo (código de barras)", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Aponte a câmera para o código de barras da etiqueta — o item é adicionado automaticamente.</p>", unsafe_allow_html=True)
+
+        import streamlit.components.v1 as _stc
+        import os as _os_ent
+        _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
+        _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
+        _scanned = _barcode_scanner_comp(key="ent_live_bc")
+
+        if _scanned:
+            _bc_str = str(_scanned).strip()
+            _match  = _bc_map.get(_bc_str)
+            if _match:
+                _prod_m, _var_m = _match
+                if _var_m:
+                    _bc_add_item(_prod_m, _var_m)
+                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.rerun()
+                elif len(_prod_m.get("variacoes", [])) == 1:
+                    _var_m = _prod_m["variacoes"][0].get("variacao", {})
+                    _bc_add_item(_prod_m, _var_m)
+                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.rerun()
+                else:
+                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+            else:
+                st.warning(f"Código `{_bc_str}` não encontrado no catálogo.")
+
+        # Seleção de variação quando barcode identifica só o produto
+        if "ent_bc_pending" in st.session_state:
+            _prod_p, _bc_p = st.session_state["ent_bc_pending"]
+            st.info(f"**{_prod_p.get('nome','')}** — selecione a variação:")
+            _var_opts = {v.get("variacao",{}).get("nome","?"): v.get("variacao",{})
+                         for v in _prod_p.get("variacoes",[])}
+            _var_sel_name = st.selectbox("Variação", list(_var_opts.keys()), key="ent_bc_var_sel")
+            _cv1, _cv2 = st.columns(2)
+            if _cv1.button("✓ Adicionar", key="ent_bc_var_add", type="primary", use_container_width=True):
+                _bc_add_item(_prod_p, _var_opts[_var_sel_name])
+                del st.session_state["ent_bc_pending"]
+                st.success("✅ Adicionado!")
+                st.rerun()
+            if _cv2.button("✗ Cancelar", key="ent_bc_var_cancel", use_container_width=True):
+                del st.session_state["ent_bc_pending"]
+                st.rerun()
+
+    # ── 2. Foto com código de barras ────────────────────────────────────
+    with st.expander("📷 Foto de etiqueta (código de barras)", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Tire uma foto ou carregue uma imagem com as etiquetas — o barcode é lido automaticamente.</p>", unsafe_allow_html=True)
+
+        _tab_c, _tab_u = st.tabs(["📷 Câmera", "🖼️ Carregar foto"])
+        with _tab_c:
+            _foto_camera = st.camera_input("Fotografar etiquetas", key="ent_camera2", label_visibility="collapsed")
+        with _tab_u:
             _foto_upload = st.file_uploader("Carregar foto", type=["jpg","jpeg","png","webp"],
-                                            key="ent_foto_upload", label_visibility="collapsed")
-
+                                            key="ent_foto_upload2", label_visibility="collapsed")
         _foto_src = _foto_camera or _foto_upload
 
         if _foto_src:
-            if st.button("🔍 Analisar etiquetas", key="ent_analisar_foto", type="primary", use_container_width=True):
-                with st.spinner("Lendo etiquetas com IA…"):
-                    try:
-                        import os as _os_cam
-                        _ant_key_cam = _os_cam.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
-                        if not _ant_key_cam:
-                            st.error("Configure ANTHROPIC_API_KEY nos secrets.")
-                        else:
-                            _foto_src.seek(0)
-                            _img_bytes_cam = _foto_src.read()
-                            _mtype = "image/png" if getattr(_foto_src, "name", "").lower().endswith(".png") else "image/jpeg"
-                            _cat_cam = "\n".join(
-                                f"{p.get('codigo_interno','')} | {p.get('nome','')}"
-                                for p in cache.get("produtos", []) if p.get("codigo_interno") and p.get("nome")
-                            )[:12000]
-                            _etiq_res = api.ler_etiquetas_foto(_img_bytes_cam, _cat_cam, _mtype)
-                            st.session_state["ent_foto_resultado"] = _etiq_res
-                    except Exception as _e_cam:
-                        st.error(f"Erro ao analisar foto: {_e_cam}")
+            if st.button("🔍 Ler código de barras", key="ent_analisar_foto2", type="primary", use_container_width=True):
+                with st.spinner("Decodificando barcode…"):
+                    _foto_src.seek(0)
+                    _img_bytes2 = _foto_src.read()
+                    _barcodes = api.decodificar_barcodes_foto(_img_bytes2)
+                    if _barcodes:
+                        _foto_res2 = []
+                        for _bc in _barcodes:
+                            _m2 = _bc_map.get(_bc.strip())
+                            _foto_res2.append({"barcode": _bc, "match": _m2})
+                        st.session_state["ent_foto2_resultado"] = (_img_bytes2, _foto_res2)
+                    else:
+                        st.warning("Nenhum barcode detectado. Tente com mais luz ou mais próximo.")
 
-        if "ent_foto_resultado" in st.session_state and st.session_state["ent_foto_resultado"]:
-            _prods_all_cam = cache.get("produtos", [])
-            _prods_ci_cam  = {p.get("codigo_interno","").lower(): p for p in _prods_all_cam}
-
-            _rows_cam, _meta_cam = [], []
-            for _ei in st.session_state["ent_foto_resultado"]:
-                _cod_ei   = (_ei.get("cod_interno") or "").strip()
-                _var_nome = (_ei.get("variacao_nome") or "").strip()
-                _var_cod  = (_ei.get("variacao_cod") or "").strip()
-                _qtd_ei   = int(_ei.get("quantidade") or 1)
-
-                _prod_ei = _prods_ci_cam.get(_cod_ei.lower())
-                if not _prod_ei:
-                    _cod_low = _cod_ei.lower()
-                    for _p in _prods_all_cam:
-                        if _cod_low and _cod_low in _p.get("nome","").lower():
-                            _prod_ei = _p; break
-
-                _var_ei = None
-                if _prod_ei:
-                    for _v in _prod_ei.get("variacoes", []):
-                        _vd = _v.get("variacao", {})
-                        if _var_cod and _vd.get("codigo","").lower() == _var_cod.lower():
-                            _var_ei = _vd; break
-                        if not _var_ei and _var_nome and _var_nome.lower() in _vd.get("nome","").lower():
-                            _var_ei = _vd
-
-                _achado = _prod_ei is not None and _var_ei is not None
-                _rows_cam.append({
-                    "✓": _achado,
-                    "Produto":  _prod_ei.get("nome", _cod_ei) if _prod_ei else (_cod_ei or "?"),
-                    "Variação": _var_ei.get("nome", _var_nome) if _var_ei else (_var_nome or "?"),
-                    "Qtd":      _qtd_ei,
-                    "Status":   "✓" if _achado else "⚠",
+        if "ent_foto2_resultado" in st.session_state:
+            _img_b2, _res2 = st.session_state["ent_foto2_resultado"]
+            st.image(_img_b2, use_container_width=True)
+            _rows2, _meta2 = [], []
+            for _r in _res2:
+                _bc2 = _r["barcode"]; _m2 = _r["match"]
+                _prod2 = _m2[0] if _m2 else None
+                _var2  = _m2[1] if _m2 else None
+                if _prod2 and not _var2 and len(_prod2.get("variacoes",[])) == 1:
+                    _var2 = _prod2["variacoes"][0].get("variacao",{})
+                _achado2 = _prod2 is not None and _var2 is not None
+                _rows2.append({
+                    "✓": _achado2,
+                    "Barcode":  _bc2,
+                    "Produto":  _prod2.get("nome","?") if _prod2 else "?",
+                    "Variação": _var2.get("nome","?") if _var2 else ("Selecionar ▼" if _prod2 else "?"),
+                    "Qtd": 1,
                 })
-                _meta_cam.append({"_prod": _prod_ei, "_var": _var_ei, "_achado": _achado})
+                _meta2.append({"_prod": _prod2, "_var": _var2})
 
-            _df_cam = pd.DataFrame(_rows_cam)
-            _edited_cam = st.data_editor(
-                _df_cam,
+            _df2 = pd.DataFrame(_rows2)
+            _edited2 = st.data_editor(
+                _df2,
                 column_config={
                     "✓":       st.column_config.CheckboxColumn("✓", width="small"),
+                    "Barcode": st.column_config.TextColumn("Barcode", disabled=True, width="medium"),
                     "Produto": st.column_config.TextColumn("Produto", disabled=True, width="medium"),
                     "Variação":st.column_config.TextColumn("Variação", disabled=True, width="large"),
                     "Qtd":     st.column_config.NumberColumn("Qtd", min_value=1, max_value=999, width="small"),
-                    "Status":  st.column_config.TextColumn("", width="small", disabled=True),
                 },
-                hide_index=True, use_container_width=True, key="ent_foto_editor",
+                hide_index=True, use_container_width=True, key="ent_foto2_editor",
             )
-
-            _n_cam = int(_edited_cam["✓"].sum()) if not _edited_cam.empty else 0
-            _cc1, _cc2 = st.columns(2)
-            if _cc1.button("🗑 Limpar", key="ent_foto_clear", use_container_width=True):
-                del st.session_state["ent_foto_resultado"]
+            _n2 = int(_edited2["✓"].sum()) if not _edited2.empty else 0
+            _cf1, _cf2 = st.columns(2)
+            if _cf1.button("🗑 Limpar", key="ent_foto2_clear", use_container_width=True):
+                del st.session_state["ent_foto2_resultado"]
                 st.rerun()
-            if _cc2.button(f"➕ Adicionar {_n_cam} à lista", key="ent_foto_add", type="primary",
-                           use_container_width=True, disabled=_n_cam == 0):
-                for _i, _frow in _edited_cam[_edited_cam["✓"] == True].iterrows():
-                    _m = _meta_cam[_i]
-                    if _m["_prod"] and _m["_var"]:
-                        st.session_state.itens_entrada.append({
-                            "produto_id":    _m["_prod"].get("id",""),
-                            "produto_nome":  _m["_prod"].get("nome",""),
-                            "cod_interno":   _m["_prod"].get("codigo_interno",""),
-                            "variacao_id":   _m["_var"].get("id",""),
-                            "variacao_cod":  _m["_var"].get("codigo",""),
-                            "variacao_nome": _frow["Variação"],
-                            "quantidade":    int(_frow["Qtd"]),
+            if _cf2.button(f"➕ Adicionar {_n2} à lista", key="ent_foto2_add", type="primary",
+                           use_container_width=True, disabled=_n2 == 0):
+                _itens_salvos2 = []
+                for _i2, _row2 in _edited2[_edited2["✓"] == True].iterrows():
+                    _m2 = _meta2[_i2]
+                    if _m2["_prod"] and _m2["_var"]:
+                        _bc_add_item(_m2["_prod"], _m2["_var"], int(_row2["Qtd"]))
+                        _itens_salvos2.append({
+                            "barcode": _row2["Barcode"],
+                            "produto": _row2["Produto"],
+                            "variacao": _row2["Variação"],
                         })
-                del st.session_state["ent_foto_resultado"]
-                st.success(f"✅ {_n_cam} item(ns) adicionado(s) à lista!")
+                # Salva foto com metadados
+                try:
+                    import os as _osf
+                    api.salvar_foto_entrada(
+                        _img_b2, _user, _nome_usr,
+                        str(loja_id or ""), loja_sel_nome or "",
+                        _itens_salvos2,
+                    )
+                except Exception:
+                    pass
+                del st.session_state["ent_foto2_resultado"]
+                st.success(f"✅ {_n2} item(ns) adicionado(s)!")
                 st.rerun()
+
+    # ── 3. Histórico de fotos (90 dias) ────────────────────────────────
+    _fotos_hist = api.listar_fotos_entrada()
+    if _fotos_hist:
+        with st.expander(f"📂 Histórico de fotos ({len(_fotos_hist)} registros — 90 dias)", expanded=False):
+            for _fh in _fotos_hist[:30]:
+                _ts_fh = _fh.get("timestamp","")[:16].replace("T"," ")
+                _nm_fh = _fh.get("nome_usuario", _fh.get("usuario","?"))
+                _lj_fh = _fh.get("loja_nome","")
+                _it_fh = _fh.get("itens_detectados", [])
+                with st.container():
+                    _hc1, _hc2 = st.columns([1, 2])
+                    with _hc1:
+                        _fb = api.carregar_foto_entrada(_fh.get("filename",""))
+                        if _fb:
+                            st.image(_fb, use_container_width=True)
+                    with _hc2:
+                        st.markdown(f"**{_nm_fh}** — {_ts_fh}")
+                        if _lj_fh:
+                            st.caption(_lj_fh)
+                        if _it_fh:
+                            for _ih in _it_fh[:5]:
+                                st.caption(f"• {_ih.get('produto','')} / {_ih.get('variacao','')}")
+                st.divider()
 
     # Busca e adição
     produto_sel, edited = busca_produto_ui("ent", cache, col_qtd="Qtd Entrada")

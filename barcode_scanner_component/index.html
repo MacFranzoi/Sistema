@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; font-family: sans-serif; background: #0e1117; color: #fafafa; }
+#overlay { position: relative; }
+video { width: 100%; height: 220px; object-fit: cover; background: #111; display: block; }
+#crosshair {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 220px; height: 70px;
+  border: 2px solid rgba(255,75,75,0.8);
+  border-radius: 4px; pointer-events: none;
+}
+#status {
+  padding: 12px 16px; text-align: center; font-size: 15px;
+  background: #1e2130; min-height: 46px; transition: background 0.25s, color 0.25s;
+}
+#status.scanning { color: #888; }
+#status.found    { background: #1a4731; color: #4caf50; font-weight: 600; font-size: 17px; }
+#status.error    { background: #2d1f1f; color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <video id="video" muted autoplay playsinline></video>
+  <div id="crosshair"></div>
+</div>
+<div id="status" class="scanning">📷 Aponte o código de barras para a câmera...</div>
+
+<script src="https://unpkg.com/@zxing/browser@0.1.4/umd/index.min.js"></script>
+<script>
+// ── Streamlit component protocol ─────────────────────────
+const ST = {
+  ready()      { _post({type:"streamlit:componentReady",apiVersion:1}); },
+  send(value)  { _post({type:"streamlit:setComponentValue",value,dataType:"json"}); },
+  height(h)    { _post({type:"streamlit:setFrameHeight",height:h}); }
+};
+function _post(msg) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage:true}, msg), "*");
+}
+
+ST.ready();
+ST.height(278);
+
+// ── Scanner ──────────────────────────────────────────────
+const status = document.getElementById("status");
+let lastCode = null, lastSentAt = 0;
+const COOLDOWN = 2000; // ms between equal codes
+
+try {
+  const reader = new ZXingBrowser.BrowserMultiFormatReader();
+  reader.decodeFromConstraints(
+    { video: { facingMode: { ideal: "environment" } } },
+    "video",
+    (result, err) => {
+      if (!result) return;
+      const code = result.getText();
+      const now  = Date.now();
+      if (code === lastCode && now - lastSentAt < COOLDOWN) return;
+
+      lastCode    = code;
+      lastSentAt  = now;
+
+      status.className   = "found";
+      status.textContent = "✓ " + code;
+      ST.send(code);
+
+      setTimeout(() => {
+        if (lastCode === code) {
+          status.className   = "scanning";
+          status.textContent = "📷 Aponte para o próximo código...";
+          lastCode = null;
+        }
+      }, 1500);
+    }
+  );
+} catch(e) {
+  status.className   = "error";
+  status.textContent = "Câmera não disponível: " + e.message;
+}
+</script>
+</body>
+</html>

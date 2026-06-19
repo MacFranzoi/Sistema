@@ -1259,6 +1259,93 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
 
 
 # ──────────────────────────────────────────────
+# Armazenamento de fotos de entrada (90 dias)
+# ──────────────────────────────────────────────
+_FOTOS_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fotos_entrada")
+_FOTOS_INDEX = os.path.join(_FOTOS_DIR, "index.json")
+_FOTOS_DIAS  = 90
+
+
+def _fotos_index_load() -> list:
+    if not os.path.exists(_FOTOS_INDEX):
+        return []
+    with open(_FOTOS_INDEX, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _fotos_index_save(index: list):
+    os.makedirs(_FOTOS_DIR, exist_ok=True)
+    with open(_FOTOS_INDEX, "w", encoding="utf-8") as f:
+        json.dump(index, f, ensure_ascii=False, indent=2)
+
+
+def salvar_foto_entrada(img_bytes: bytes, usuario: str, nome_usuario: str,
+                        loja_id: str, loja_nome: str, itens_detectados: list) -> str:
+    """Salva foto em disco e registra no índice. Remove entradas com +90 dias.
+    Retorna o nome do arquivo salvo."""
+    import uuid as _uuid
+    os.makedirs(_FOTOS_DIR, exist_ok=True)
+    ts       = datetime.now()
+    filename = f"{ts.strftime('%Y%m%d_%H%M%S')}_{usuario}_{_uuid.uuid4().hex[:6]}.jpg"
+    with open(os.path.join(_FOTOS_DIR, filename), "wb") as f:
+        f.write(img_bytes)
+
+    index  = _fotos_index_load()
+    cutoff = (datetime.now() - timedelta(days=_FOTOS_DIAS)).isoformat()
+    validas = []
+    for e in index:
+        if e.get("timestamp", "") >= cutoff:
+            validas.append(e)
+        else:
+            try:
+                os.remove(os.path.join(_FOTOS_DIR, e["filename"]))
+            except OSError:
+                pass
+    validas.append({
+        "filename":        filename,
+        "timestamp":       ts.isoformat(),
+        "usuario":         usuario,
+        "nome_usuario":    nome_usuario,
+        "loja_id":         loja_id,
+        "loja_nome":       loja_nome,
+        "itens_detectados": itens_detectados,
+    })
+    _fotos_index_save(validas)
+    return filename
+
+
+def listar_fotos_entrada() -> list:
+    """Retorna fotos dos últimos 90 dias, mais recentes primeiro."""
+    cutoff = (datetime.now() - timedelta(days=_FOTOS_DIAS)).isoformat()
+    return sorted(
+        [e for e in _fotos_index_load() if e.get("timestamp","") >= cutoff],
+        key=lambda x: x.get("timestamp",""), reverse=True
+    )
+
+
+def carregar_foto_entrada(filename: str) -> bytes | None:
+    """Retorna bytes da foto ou None se não encontrada."""
+    path = os.path.join(_FOTOS_DIR, filename)
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    return None
+
+
+def decodificar_barcodes_foto(img_bytes: bytes) -> list[str]:
+    """Decodifica códigos de barras de uma imagem. Retorna lista de strings."""
+    try:
+        import zxingcpp as _zx
+        from PIL import Image as _PILImage
+        import io as _io
+        img = _PILImage.open(_io.BytesIO(img_bytes)).convert("RGB")
+        results = _zx.read_barcodes(img)
+        return [r.text for r in results if r.text]
+    except Exception:
+        return []
+
+
+# ──────────────────────────────────────────────
 # Leitura de etiquetas por foto (Claude Vision)
 # ──────────────────────────────────────────────
 def ler_etiquetas_foto(img_bytes: bytes, catalogo_resumo: str,

@@ -4,3 +4,5 @@ openpyxl
 requests
 fpdf2
 anthropic
+zxing-cpp
+Pillow
