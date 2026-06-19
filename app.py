@@ -1783,34 +1783,42 @@ if _pg == "entrada":
         key="ent_live_bc",
     )
 
-    # Auto-adicionar quando scanner lê código novo (ts evita reprocessar no rerun)
-    if _scanned and isinstance(_scanned, dict) and "code" in _scanned:
-        _bc_ts  = _scanned.get("ts", 0)
-        _bc_str = str(_scanned["code"]).strip()
-        if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0) and _bc_str:
+    # Recebe frame da câmera, decodifica barcode com zxing-cpp, auto-adiciona
+    if _scanned and isinstance(_scanned, dict) and "frame" in _scanned:
+        _bc_ts = _scanned.get("ts", 0)
+        if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0):
             st.session_state["ent_bc_last_ts"] = _bc_ts
-            _match = _bc_map.get(_bc_str)
-            if _match:
-                _prod_m, _var_m = _match
-                if _var_m:
-                    _bc_add_item(_prod_m, _var_m)
-                    _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                    st.session_state["ent_bc_product_arg"] = _label
-                    st.rerun()
-                elif len(_prod_m.get("variacoes", [])) == 1:
-                    _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                    _bc_add_item(_prod_m, _var_m)
-                    _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                    st.session_state["ent_bc_product_arg"] = _label
-                    st.rerun()
+            import base64 as _b64e
+            _raw = _scanned["frame"]
+            if "," in _raw:
+                _raw = _raw.split(",", 1)[1]
+            _img_frame = _b64e.b64decode(_raw)
+            _codes = api.decodificar_barcodes_foto(_img_frame)
+            if _codes:
+                _bc_str = _codes[0].strip()
+                _match  = _bc_map.get(_bc_str)
+                if _match:
+                    _prod_m, _var_m = _match
+                    if _var_m:
+                        _bc_add_item(_prod_m, _var_m)
+                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                        st.session_state["ent_bc_product_arg"] = _label
+                        st.rerun()
+                    elif len(_prod_m.get("variacoes", [])) == 1:
+                        _var_m = _prod_m["variacoes"][0].get("variacao", {})
+                        _bc_add_item(_prod_m, _var_m)
+                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                        st.session_state["ent_bc_product_arg"] = _label
+                        st.rerun()
+                    else:
+                        st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                        st.rerun()
                 else:
-                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                    st.session_state["ent_bc_notfound_arg"] = _bc_str
+                    _bc_idx = st.session_state.get("ent_bc_idx", 0)
+                    st.session_state[f"ent_bc_input_{_bc_idx}"] = _bc_str
                     st.rerun()
-            else:
-                st.session_state["ent_bc_notfound_arg"] = _bc_str
-                _bc_idx = st.session_state.get("ent_bc_idx", 0)
-                st.session_state[f"ent_bc_input_{_bc_idx}"] = _bc_str
-                st.rerun()
+            # Se não achou barcode no frame, não faz nada — aguarda próximo frame
 
     # Seleção rápida de variação (produto com múltiplas variações)
     if "ent_bc_pending" in st.session_state:

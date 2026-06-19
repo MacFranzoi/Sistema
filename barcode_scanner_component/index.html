@@ -13,24 +13,22 @@ body { font-family: sans-serif; background: #0e1117; color: #fafafa; }
 }
 #tap-screen .icon  { font-size: 52px; }
 #tap-screen .label { font-size: 16px; color: #9099aa; }
+#tap-screen .hint  { font-size: 13px; color: #555; }
 
 #cam-screen { display: none; }
-#interactive { position: relative; width: 100%; height: 220px; overflow: hidden; background: #000; }
-#interactive video,
-#interactive canvas.drawingBuffer {
+#overlay { position: relative; width: 100%; height: 220px; overflow: hidden; background: #000; }
+video {
   position: absolute; top: 0; left: 0;
-  width: 100% !important; height: 220px !important;
-  object-fit: cover !important;
+  width: 100%; height: 220px; object-fit: cover; display: block;
 }
-#interactive canvas.drawingBuffer { opacity: 0; }
-
+canvas { display: none; }
 #crosshair {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 240px; height: 80px;
-  border: 2px solid rgba(255,75,75,0.85);
+  width: 260px; height: 90px;
+  border: 2px solid rgba(255, 75, 75, 0.9);
   border-radius: 6px; pointer-events: none;
-  box-shadow: 0 0 0 1000px rgba(0,0,0,0.35);
+  box-shadow: 0 0 0 1000px rgba(0,0,0,0.4);
   z-index: 10;
 }
 
@@ -39,7 +37,8 @@ body { font-family: sans-serif; background: #0e1117; color: #fafafa; }
   background: #1e2130; min-height: 46px; color: #9099aa;
   transition: background 0.3s, color 0.3s;
 }
-#status.searching { background: #1a2130; color: #6ea8fe; }
+#status.scanning  { color: #9099aa; }
+#status.sending   { background: #1a2640; color: #6ea8fe; }
 #status.found     { background: #1a4731; color: #4caf50; font-weight: 600; font-size: 17px; }
 #status.notfound  { background: #2d2010; color: #f0a040; }
 #status.error     { background: #2d1f1f; color: #ff6b6b; }
@@ -50,16 +49,18 @@ body { font-family: sans-serif; background: #0e1117; color: #fafafa; }
 <div id="tap-screen">
   <div class="icon">📷</div>
   <div class="label">Toque para iniciar o scanner</div>
+  <div class="hint">Aponte para o código de barras da etiqueta</div>
 </div>
 
 <div id="cam-screen">
-  <div id="interactive">
+  <div id="overlay">
+    <video id="video" muted playsinline webkit-playsinline autoplay></video>
+    <canvas id="canvas"></canvas>
     <div id="crosshair"></div>
   </div>
-  <div id="status">Iniciando câmera...</div>
+  <div id="status" class="scanning">📷 Aponte o código de barras para a câmera...</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.4.0/dist/quagga.min.js"></script>
 <script>
 const ST = {
   ready()     { _post({type:"streamlit:componentReady",apiVersion:1}); },
@@ -74,101 +75,71 @@ ST.height(278);
 
 const tapScreen = document.getElementById("tap-screen");
 const camScreen = document.getElementById("cam-screen");
+const video     = document.getElementById("video");
+const canvas    = document.getElementById("canvas");
+const ctx       = canvas.getContext("2d");
 const status    = document.getElementById("status");
 
-let lastCode = null, lastSentAt = 0, resetTimer = null;
-const COOLDOWN = 2500;
+let busy = false;
 
-// ── Recebe resposta do Python com nome do produto ─────────────
+// Recebe resposta do Python (nome do produto ou não encontrado)
 window.addEventListener("message", (e) => {
   if (!e.data || e.data.type !== "streamlit:render") return;
   const args = e.data.args || {};
-
   if (args.product_name) {
-    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     status.className   = "found";
     status.textContent = "✅ " + args.product_name;
-    resetTimer = setTimeout(() => {
-      status.className   = "";
-      status.textContent = "📷 Aponte o próximo código...";
-      lastCode  = null;
-      resetTimer = null;
-    }, 2500);
+    setTimeout(resetStatus, 2500);
   } else if (args.not_found) {
-    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
     status.className   = "notfound";
     status.textContent = "⚠️ Não encontrado: " + args.not_found;
-    resetTimer = setTimeout(() => {
-      status.className   = "";
-      status.textContent = "📷 Aponte o código de barras...";
-      lastCode  = null;
-      resetTimer = null;
-    }, 2500);
+    setTimeout(resetStatus, 2000);
   }
+  busy = false;
 });
 
-// Auto-inicia se já foi iniciado antes nesta sessão (persiste entre reruns do Streamlit)
+function resetStatus() {
+  status.className   = "scanning";
+  status.textContent = "📷 Aponte o código de barras para a câmera...";
+}
+
+function startCamera() {
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+  }).then(stream => {
+    video.srcObject = stream;
+    video.play().catch(() => {});
+    setInterval(capture, 2000);
+  }).catch(err => {
+    status.className   = "error";
+    status.textContent = "Câmera: " + err.message;
+  });
+}
+
+function capture() {
+  if (busy || video.readyState < 2 || video.paused) return;
+  busy = true;
+  canvas.width  = Math.min(video.videoWidth, 960);
+  canvas.height = Math.round(canvas.width * video.videoHeight / (video.videoWidth || 1));
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const frame = canvas.toDataURL("image/jpeg", 0.82);
+  status.className   = "sending";
+  status.textContent = "🔍 Lendo código...";
+  ST.send({ frame, ts: Date.now() });
+}
+
+// Persiste estado entre reruns do Streamlit via sessionStorage
 if (sessionStorage.getItem("sc_started") === "1") {
   tapScreen.style.display = "none";
   camScreen.style.display = "block";
-  startQuagga();
+  startCamera();
 } else {
   tapScreen.addEventListener("click", () => {
     sessionStorage.setItem("sc_started", "1");
     tapScreen.style.display = "none";
     camScreen.style.display = "block";
-    startQuagga();
+    startCamera();
   }, { once: true });
-}
-
-function startQuagga() {
-  Quagga.init({
-    inputStream: {
-      name: "Live",
-      type: "LiveStream",
-      target: document.getElementById("interactive"),
-      constraints: { facingMode: "environment" },
-    },
-    locator:      { patchSize: "medium", halfSample: true },
-    numOfWorkers: 0,
-    frequency:    8,
-    decoder: {
-      readers: [
-        "ean_reader", "ean_8_reader",
-        "code_128_reader", "code_39_reader",
-        "upc_reader", "upc_e_reader",
-      ],
-    },
-    locate: true,
-  }, (err) => {
-    if (err) {
-      status.className   = "error";
-      status.textContent = "Câmera indisponível: " + (err.message || err);
-      return;
-    }
-    Quagga.start();
-    status.textContent = "📷 Aponte o código de barras...";
-  });
-
-  Quagga.onDetected((result) => {
-    const code = result.codeResult.code;
-    if (!code) return;
-
-    const errs = (result.codeResult.decodedCodes || [])
-      .map(x => x.error).filter(e => e != null);
-    const avg = errs.length ? errs.reduce((a, b) => a + b, 0) / errs.length : 1;
-    if (avg > 0.22) return;
-
-    const now = Date.now();
-    if (code === lastCode && now - lastSentAt < COOLDOWN) return;
-    lastCode   = code;
-    lastSentAt = now;
-
-    if (resetTimer) { clearTimeout(resetTimer); resetTimer = null; }
-    status.className   = "searching";
-    status.textContent = "🔍 Buscando...";
-    ST.send({ code, ts: now });
-  });
 }
 </script>
 </body>
