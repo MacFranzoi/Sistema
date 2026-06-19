@@ -1967,10 +1967,12 @@ if _pg == "entrada":
         _n_ent = len(st.session_state.itens_entrada)
         for _i in range(_n_ent - 1, -1, -1):
             _it = st.session_state.itens_entrada[_i]
-            _lc1, _lc2, _lc3 = st.columns([6, 1, 1])
-            _lc1.markdown(f"**{_it.get('produto_nome','')}** / {_it.get('variacao_nome','')}")
-            _lc2.markdown(f"x{_it.get('quantidade', 1)}")
-            if _lc3.button("🗑️", key=f"del_ent_{_i}", help="Excluir"):
+            _lc1, _lc2 = st.columns([9, 1])
+            _lc1.markdown(
+                f"**{_it.get('produto_nome','')}** / {_it.get('variacao_nome','')} &nbsp;·&nbsp; x{_it.get('quantidade', 1)}",
+                unsafe_allow_html=True,
+            )
+            if _lc2.button("🗑️", key=f"del_ent_{_i}"):
                 st.session_state.itens_entrada.pop(_i)
                 st.rerun()
 
