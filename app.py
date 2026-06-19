@@ -3230,17 +3230,23 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                         return _p
                             return None
 
-                        # Termos que nunca devem aparecer no nome do produto
-                        _KIT_CONTAMINANTES = [
-                            "sl mg", " sl", "sl ", " mg", "mg ", "magsafe", "silicone",
-                            "masculino", "feminino", "brilho", "diversos", "very rio",
-                            "avulso", "aveludada", "transparente", "carteira", "película",
+                        # Remove contaminações de kit do nome do produto.
+                        # ATENÇÃO: só remove frases exatas que nunca aparecem em nomes de aparelhos.
+                        # NÃO remover "sl" ou "mg" isolados — podem estar em modelos legítimos.
+                        _KIT_CONTAMINANTES_EXATOS = [
+                            r"\bsl\s+mg\b",       # "SL MG" (Silicone Líquido MagSafe)
+                            r"\bmagsafe\b",        # "MagSafe"
+                            r"\bsilicone\s+l[ií]quido\b",
+                            r"\baveludad[ao]\b",
+                            r"\bvery\s+rio\b",
+                            r"\bmasculino\b",
+                            r"\bfeminino\b",
                         ]
                         def _limpar_nome_produto(nome: str) -> str:
+                            import re as _re_n
                             n = nome.strip()
-                            for _t in _KIT_CONTAMINANTES:
-                                import re as _re_n
-                                n = _re_n.sub(r"(?i)" + _re_n.escape(_t), "", n).strip(" ,/-")
+                            for _pat in _KIT_CONTAMINANTES_EXATOS:
+                                n = _re_n.sub(_pat, "", n, flags=_re_n.IGNORECASE).strip(" ,/-")
                             return n.strip() or nome.strip()
 
                         _nao_compreendidos = []
