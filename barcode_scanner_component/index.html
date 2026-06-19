@@ -130,7 +130,7 @@ function startQuagga() {
 
     status.className   = "found";
     status.textContent = "✅ " + code;
-    ST.send(code);
+    ST.send({ code, ts: now });
 
     setTimeout(() => {
       if (lastCode === code) {
