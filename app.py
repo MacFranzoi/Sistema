@@ -2375,16 +2375,17 @@ if _pg == "entrada":
 
     if st.session_state.itens_entrada:
         _n_ent = len(st.session_state.itens_entrada)
-        _CORES_ENT = ["#0e1829", "#162240"]
+        _CORES_ENT = ["#1a3560", "#0f2040"]
         for _i in range(_n_ent - 1, -1, -1):
             _it = st.session_state.itens_entrada[_i]
             _cor_ent = _CORES_ENT[_i % 2]
             _lc1, _lc2 = st.columns([9, 1])
             _lc1.markdown(
-                f'<div style="background:{_cor_ent};padding:5px 10px;border-radius:6px;margin:2px 0;'
-                f'border-left:3px solid #2a4a8a">'
-                f'<b>{_it.get("produto_nome","")}</b> / {_it.get("variacao_nome","")} &nbsp;·&nbsp; '
-                f'<span style="color:#7eb8f7">x{_it.get("quantidade", 1)}</span>'
+                f'<div style="background:{_cor_ent};padding:6px 12px;border-radius:6px;margin:2px 0;'
+                f'border-left:4px solid #4a8aff;color:#ffffff">'
+                f'<b>{_it.get("produto_nome","")}</b>'
+                f'<span style="color:#c8d8f0"> / {_it.get("variacao_nome","")}</span>'
+                f' &nbsp;·&nbsp; <span style="color:#7ef7a0;font-weight:bold">x{_it.get("quantidade", 1)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
