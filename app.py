@@ -1866,7 +1866,7 @@ if _pg == "entrada":
     # ── Modo de entrada — radio garante que só uma câmera renderiza por vez ──
     _ent_modo = st.radio(
         "Modo de entrada",
-        ["📷 Scanner ao vivo", "📸 Foto da etiqueta", "⌨️ Código manual"],
+        ["📷 Scanner ao vivo", "📸 Foto da etiqueta", "📡 Leitor externo", "⌨️ Código manual"],
         horizontal=True, key="ent_modo_radio", label_visibility="collapsed",
     )
 
@@ -2062,6 +2062,83 @@ if _pg == "entrada":
                 if _cols_fp[_vfi % 3].button(_vfv.get("nome", "?"), key=f"ent_var_fp_{_vfi}", use_container_width=True):
                     _bc_add_item(_prod_fp, _vfv)
                     st.session_state["foto_bc_product_arg"] = f"{_prod_fp.get('nome','')} / {_vfv.get('nome','')}"
+                    del st.session_state["ent_bc_pending"]
+                    st.rerun()
+
+    # ── Leitor externo (USB / Bluetooth) ─────────────────────────────────
+    elif _ent_modo == "📡 Leitor externo":
+        st.caption("Conecte o leitor USB ou Bluetooth e aponte para o código. Ele digita e confirma automaticamente.")
+
+        # Confirmação de duplicata
+        if "ent_bc_confirm" in st.session_state:
+            _conf_l = st.session_state["ent_bc_confirm"]
+            st.warning(f"⚠️ **{_conf_l['nome']}** já está na lista (qtd atual: {_conf_l['qtd_atual']}). Adicionar mais 1?")
+            _cla, _clb = st.columns(2)
+            if _cla.button("✅ Sim, adicionar", key="leitor_conf_sim", type="primary", use_container_width=True):
+                _bc_add_item(_conf_l["prod"], _conf_l["var"])
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
+            if _clb.button("❌ Não", key="leitor_conf_nao", use_container_width=True):
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
+        else:
+            # Form limpa e re-foca automaticamente após cada leitura
+            with st.form("leitor_ext_form", clear_on_submit=True):
+                _leitor_cod = st.text_input(
+                    "Leitor",
+                    placeholder="Aponte o leitor para o código de barras...",
+                    key="leitor_ext_input",
+                    label_visibility="collapsed",
+                )
+                _leitor_ok = st.form_submit_button("➕ Adicionar", use_container_width=True)
+            # Auto-foco no campo após cada rerun
+            import streamlit.components.v1 as _stc_l
+            _stc_l.html("""<script>
+            setTimeout(function(){
+              var inp = window.parent.document.querySelector('[data-testid="stTextInput"] input');
+              if(inp) inp.focus();
+            }, 120);
+            </script>""", height=0)
+            if _leitor_ok and _leitor_cod.strip():
+                _bc_str_l = _leitor_cod.strip()
+                _match_l  = _bc_map.get(_bc_str_l)
+                if _match_l:
+                    _prod_l, _var_l = _match_l
+                    if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
+                        _var_l = _prod_l["variacoes"][0].get("variacao", {})
+                    if _var_l:
+                        _vid_l   = str(_var_l.get("id", ""))
+                        _nome_l  = f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}"
+                        _ja_l    = any(it.get("variacao_id") == _vid_l for it in st.session_state.itens_entrada)
+                        if _ja_l:
+                            _qtd_l = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid_l), 1)
+                            st.session_state["ent_bc_confirm"] = {"prod": _prod_l, "var": _var_l, "nome": _nome_l, "qtd_atual": _qtd_l}
+                        else:
+                            _bc_add_item(_prod_l, _var_l)
+                            st.session_state["leitor_ultimo"] = _nome_l
+                        st.rerun()
+                    else:
+                        st.session_state["ent_bc_pending"] = (_prod_l, _bc_str_l)
+                        st.rerun()
+                else:
+                    st.session_state["leitor_nao_encontrado"] = _bc_str_l
+                    st.rerun()
+
+        _ult = st.session_state.pop("leitor_ultimo", None)
+        if _ult:
+            st.success(f"✅ {_ult} adicionado!")
+        _nf = st.session_state.pop("leitor_nao_encontrado", None)
+        if _nf:
+            st.warning(f"⚠️ Código `{_nf}` não encontrado no catálogo.")
+
+        if "ent_bc_pending" in st.session_state:
+            _prod_lp, _bc_lp = st.session_state["ent_bc_pending"]
+            st.info(f"**{_prod_lp.get('nome','')}** — qual variação?")
+            _var_lp_list = [v.get("variacao", {}) for v in _prod_lp.get("variacoes", [])]
+            _cols_lp = st.columns(min(len(_var_lp_list), 3))
+            for _lpi, _lpv in enumerate(_var_lp_list):
+                if _cols_lp[_lpi % 3].button(_lpv.get("nome", "?"), key=f"ent_var_lp_{_lpi}", use_container_width=True):
+                    _bc_add_item(_prod_lp, _lpv)
                     del st.session_state["ent_bc_pending"]
                     st.rerun()
 
