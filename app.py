@@ -1756,6 +1756,10 @@ if _pg == "entrada":
                 _vcb = (_vd.get(_field) or "").strip()
                 if _vcb:
                     _bc_map[_vcb] = (_p, _vd)
+            # também mapeia pelo código alfanumérico da variação (ex: "iphone130032")
+            _vc = (_vd.get("codigo") or "").strip()
+            if _vc:
+                _bc_map[_vc] = (_p, _vd)
 
     def _bc_add_item(prod, var, qtd=1):
         """Adiciona item a itens_entrada a partir de produto+variação."""
