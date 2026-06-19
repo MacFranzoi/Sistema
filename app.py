@@ -5,6 +5,14 @@ from datetime import date, datetime
 import api
 from fpdf import FPDF
 
+# ── Roteamento de versão (deve ser o primeiro bloco de execução) ──
+if "version" not in st.session_state:
+    st.session_state["version"] = st.query_params.get("v", "classic")
+if st.session_state.get("version") == "beta":
+    import app_beta as _beta_mod
+    _beta_mod.run()
+    st.stop()
+
 
 def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
     import os
@@ -503,6 +511,24 @@ if st.session_state.usuario_logado is None:
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
+
+        # ── Seletor de versão ──
+        st.markdown("<hr style='margin:18px 0 10px;opacity:.15'>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;font-size:.65rem;color:#94a3b8;margin-bottom:6px'>ESCOLHA A INTERFACE</div>", unsafe_allow_html=True)
+        _vb1, _vb2 = st.columns(2)
+        with _vb1:
+            _classic_active = st.session_state.get("version","classic") == "classic"
+            if st.button("⚡ Classic" + (" ✓" if _classic_active else ""), use_container_width=True, key="sel_classic"):
+                st.session_state["version"] = "classic"
+                st.query_params["v"] = "classic"
+                st.rerun()
+        with _vb2:
+            _beta_active = st.session_state.get("version") == "beta"
+            if st.button("🚀 Beta" + (" ✓" if _beta_active else ""), use_container_width=True, key="sel_beta"):
+                st.session_state["version"] = "beta"
+                st.query_params["v"] = "beta"
+                st.rerun()
+        st.markdown('<div style="text-align:center;font-size:.6rem;color:#94a3b8;margin-top:4px">Beta: UI redesenhada · Mobile-first · Alertas de estoque</div>', unsafe_allow_html=True)
     st.stop()
 
 # ── Dados do usuário ──
