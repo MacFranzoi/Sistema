@@ -1205,6 +1205,20 @@ def buscar_contas_pagar(data_ini=None, data_fim=None, pagina=1, limite=50):
 
 
 # ──────────────────────────────────────────────
+# Helpers de chave de API
+# ──────────────────────────────────────────────
+def _get_anthropic_key() -> str:
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        try:
+            import streamlit as _st
+            key = _st.secrets.get("ANTHROPIC_API_KEY", "")
+        except Exception:
+            pass
+    return key
+
+
+# ──────────────────────────────────────────────
 # Parse de pedido via IA (Claude)
 # ──────────────────────────────────────────────
 def parse_pedido_whatsapp(texto: str, catalogo_resumo: str) -> list[dict]:
@@ -1332,6 +1346,42 @@ def carregar_foto_entrada(filename: str) -> bytes | None:
     return None
 
 
+def ler_codigo_barras_foto(img_bytes: bytes, media_type: str = "image/jpeg") -> str | None:
+    """
+    Usa Claude Opus 4.8 Vision para ler o código de barras de uma etiqueta.
+    Retorna o código como string ou None se não encontrado.
+    """
+    import anthropic as _ant, base64 as _b64
+    key = _get_anthropic_key()
+    if not key:
+        raise ValueError("ANTHROPIC_API_KEY não configurado em .streamlit/secrets.toml")
+    client = _ant.Anthropic(api_key=key)
+    img_b64 = _b64.b64encode(img_bytes).decode()
+    msg = client.messages.create(
+        model="claude-opus-4-8",
+        max_tokens=64,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
+                {"type": "text", "text": (
+                    "Look at this product label image. "
+                    "Extract the barcode number (EAN, Code128, or any numeric code on the label). "
+                    "Return ONLY the code digits/characters, nothing else. "
+                    "If no barcode or readable code is visible, return exactly: null"
+                )},
+            ]
+        }]
+    )
+    result = msg.content[0].text.strip()
+    if result.lower() in ("null", "none", ""):
+        return None
+    # strip any stray whitespace/punctuation the model might add
+    import re as _re
+    m = _re.search(r"[A-Za-z0-9\-]{4,}", result)
+    return m.group() if m else None
+
+
 def decodificar_barcodes_foto(img_bytes: bytes) -> list[str]:
     """Decodifica códigos de barras de uma imagem. Retorna lista de strings."""
     try:
@@ -1356,13 +1406,7 @@ def ler_etiquetas_foto(img_bytes: bytes, catalogo_resumo: str,
       [{cod_interno, variacao_nome, variacao_cod, codigo_barras, quantidade, confianca}]
     """
     import anthropic as _ant, base64 as _b64, json, re
-    _key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not _key:
-        try:
-            import streamlit as _st
-            _key = _st.secrets.get("ANTHROPIC_API_KEY", "")
-        except Exception:
-            pass
+    _key = _get_anthropic_key()
     client = _ant.Anthropic(api_key=_key)
 
     prompt = f"""Você é assistente de uma loja de capinhas para celular no Brasil.

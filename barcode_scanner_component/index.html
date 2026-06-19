@@ -6,29 +6,52 @@
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; padding: 0; font-family: sans-serif; background: #0e1117; color: #fafafa; }
-#reader { width: 100%; overflow: hidden; }
-#reader video { width: 100% !important; height: 220px !important; object-fit: cover !important; border-radius: 0 !important; display: block !important; }
-#reader img { display: none !important; }
+#overlay { position: relative; }
+video { width: 100%; height: 220px; object-fit: cover; background: #111; display: block; }
+canvas { display: none; }
+#crosshair {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 240px; height: 80px;
+  border: 2px solid rgba(255,75,75,0.85);
+  border-radius: 6px; pointer-events: none;
+}
+#corners {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 240px; height: 80px; pointer-events: none;
+}
+#corners::before,#corners::after,
+#crosshair::before,#crosshair::after {
+  content: ""; position: absolute;
+  width: 14px; height: 14px;
+  border-color: #ff4b4b; border-style: solid;
+}
+#corners::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; }
+#corners::after  { top: -2px; right: -2px; border-width: 3px 3px 0 0; }
+#crosshair::before { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; }
+#crosshair::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
 #status {
   padding: 12px 16px; text-align: center; font-size: 15px;
-  background: #1e2130; min-height: 46px; transition: background 0.25s, color 0.25s;
+  background: #1e2130; min-height: 46px; transition: background 0.3s, color 0.3s;
 }
-#status.found { background: #1a4731; color: #4caf50; font-weight: 600; font-size: 17px; }
-#status.error { background: #2d1f1f; color: #ff6b6b; }
-/* hide html5-qrcode default dashboard */
-#reader__dashboard_section,
-#reader__header_message,
-#reader__status_span,
-#reader__filescan_input { display: none !important; }
+#status.scanning  { color: #9099aa; }
+#status.analyzing { background: #1a2640; color: #6ea8fe; }
+#status.found     { background: #1a4731; color: #4caf50; font-weight: 600; font-size: 17px; }
+#status.error     { background: #2d1f1f; color: #ff6b6b; }
 </style>
 </head>
 <body>
-<div id="reader"></div>
-<div id="status">📷 Aponte o código de barras para a câmera...</div>
+<div id="overlay">
+  <video id="video" muted autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="crosshair"></div>
+  <div id="corners"></div>
+</div>
+<div id="status" class="scanning">📷 Aponte a etiqueta para a câmera...</div>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-// ── Streamlit component protocol ────────────────────────────
+// ── Streamlit component protocol ─────────────────────────────
 const ST = {
   ready()      { _post({type:"streamlit:componentReady",apiVersion:1}); },
   send(value)  { _post({type:"streamlit:setComponentValue",value,dataType:"json"}); },
@@ -41,50 +64,69 @@ function _post(msg) {
 ST.ready();
 ST.height(278);
 
-// ── Scanner ──────────────────────────────────────────────────
+// ── Receive args from Python (processing state feedback) ─────
+window.addEventListener("message", (e) => {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  const args = e.data.args || {};
+  if (args.processing) {
+    status.className   = "analyzing";
+    status.textContent = "⏳ Claude analisando...";
+  }
+});
+
+const video  = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
 const status = document.getElementById("status");
-let lastCode = null, lastSentAt = 0;
-const COOLDOWN = 2000;
 
-const scanner = new Html5Qrcode("reader");
-scanner.start(
-  { facingMode: { ideal: "environment" } },
-  {
-    fps: 10,
-    qrbox: { width: 220, height: 80 },
-    formatsToSupport: [
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.QR_CODE,
-    ]
-  },
-  (code) => {
-    const now = Date.now();
-    if (code === lastCode && now - lastSentAt < COOLDOWN) return;
-    lastCode = code;
-    lastSentAt = now;
+let busy = false;     // waiting for Python to process a frame
+let lastSentTs = 0;
+const INTERVAL = 2500; // ms between captures
 
-    status.className   = "found";
-    status.textContent = "✓ " + code;
-    ST.send(code);
-
-    setTimeout(() => {
-      if (lastCode === code) {
-        status.className   = "";
-        status.textContent = "📷 Aponte para o próximo código...";
-        lastCode = null;
-      }
-    }, 1500);
-  },
-  () => {} // ignore per-frame decode errors
-).catch(err => {
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+}).then(stream => {
+  video.srcObject = stream;
+  video.play();
+  setInterval(captureAndSend, INTERVAL);
+}).catch(err => {
   status.className   = "error";
-  status.textContent = "Câmera não disponível: " + err;
+  status.textContent = "Câmera não disponível: " + err.message;
+});
+
+function captureAndSend() {
+  if (busy || video.readyState < 2) return;
+  busy = true;
+
+  // Downscale for faster upload
+  canvas.width  = Math.min(video.videoWidth,  800);
+  canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+  const ts      = Date.now();
+  lastSentTs    = ts;
+
+  status.className   = "analyzing";
+  status.textContent = "⏳ Claude analisando...";
+  ST.send({ frame: dataUrl, ts });
+}
+
+// Called by Python indirectly — after result is processed, Python re-renders
+// with no processing flag, which resets the UI
+window.addEventListener("message", (e) => {
+  if (!e.data) return;
+  // Component value was consumed — reset for next scan
+  if (e.data.type === "streamlit:render") {
+    const args = e.data.args || {};
+    if (!args.processing) {
+      busy = false;
+      if (status.className === "analyzing") {
+        status.className   = "scanning";
+        status.textContent = "📷 Aponte para o próximo código...";
+      }
+    }
+  }
 });
 </script>
 </body>

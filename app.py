@@ -1769,36 +1769,56 @@ if _pg == "entrada":
             "quantidade":    qtd,
         })
 
-    # ── 1. Scanner ao vivo ──────────────────────────────────────────────
-    with st.expander("📹 Scanner ao vivo (código de barras)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Aponte a câmera para o código de barras da etiqueta — o item é adicionado automaticamente.</p>", unsafe_allow_html=True)
+    # ── 1. Scanner ao vivo (Claude Opus 4.8 Vision) ─────────────────────
+    with st.expander("📹 Scanner ao vivo — Claude Vision", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Aponte a câmera para o código de barras da etiqueta — Claude lê e adiciona automaticamente.</p>", unsafe_allow_html=True)
 
         import streamlit.components.v1 as _stc
-        import os as _os_ent
+        import os as _os_ent, base64 as _b64_ent
         _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
         _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
-        _scanned = _barcode_scanner_comp(key="ent_live_bc")
+        _ent_processing = st.session_state.get("ent_cv_processing", False)
+        _scanned = _barcode_scanner_comp(processing=_ent_processing, key="ent_live_bc")
 
-        if _scanned:
-            _bc_str = str(_scanned).strip()
-            _match  = _bc_map.get(_bc_str)
-            if _match:
-                _prod_m, _var_m = _match
-                if _var_m:
-                    _bc_add_item(_prod_m, _var_m)
-                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
-                    st.rerun()
-                elif len(_prod_m.get("variacoes", [])) == 1:
-                    _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                    _bc_add_item(_prod_m, _var_m)
-                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
-                    st.rerun()
-                else:
-                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
-            else:
-                st.warning(f"Código `{_bc_str}` não encontrado no catálogo.")
+        # Process frame sent by the component
+        if _scanned and isinstance(_scanned, dict) and "frame" in _scanned:
+            _frame_ts = _scanned.get("ts", 0)
+            _last_ts  = st.session_state.get("ent_last_frame_ts", 0)
+            if _frame_ts and _frame_ts != _last_ts:
+                st.session_state["ent_last_frame_ts"] = _frame_ts
+                st.session_state["ent_cv_processing"] = True
+                _raw_b64 = _scanned["frame"]
+                # Strip data-URL prefix if present
+                if "," in _raw_b64:
+                    _raw_b64 = _raw_b64.split(",", 1)[1]
+                _img_bytes_cv = _b64_ent.b64decode(_raw_b64)
+                with st.spinner("Claude analisando etiqueta..."):
+                    try:
+                        _cv_code = api.ler_codigo_barras_foto(_img_bytes_cv)
+                    except Exception as _cv_ex:
+                        _cv_code = None
+                        st.error(f"Erro Claude Vision: {_cv_ex}")
+                st.session_state["ent_cv_processing"] = False
+                if _cv_code:
+                    _bc_str = _cv_code.strip()
+                    _match  = _bc_map.get(_bc_str)
+                    if _match:
+                        _prod_m, _var_m = _match
+                        if _var_m:
+                            _bc_add_item(_prod_m, _var_m)
+                            st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                            st.rerun()
+                        elif len(_prod_m.get("variacoes", [])) == 1:
+                            _var_m = _prod_m["variacoes"][0].get("variacao", {})
+                            _bc_add_item(_prod_m, _var_m)
+                            st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                            st.rerun()
+                        else:
+                            st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                    else:
+                        st.info(f"Código `{_bc_str}` lido — não encontrado no catálogo.")
 
-        # Seleção de variação quando barcode identifica só o produto
+        # Seleção de variação quando Claude identifica só o produto
         if "ent_bc_pending" in st.session_state:
             _prod_p, _bc_p = st.session_state["ent_bc_pending"]
             st.info(f"**{_prod_p.get('nome','')}** — selecione a variação:")
@@ -1815,9 +1835,9 @@ if _pg == "entrada":
                 del st.session_state["ent_bc_pending"]
                 st.rerun()
 
-    # ── 2. Foto com código de barras ────────────────────────────────────
-    with st.expander("📷 Foto de etiqueta (código de barras)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Tire uma foto ou carregue uma imagem com as etiquetas — o barcode é lido automaticamente.</p>", unsafe_allow_html=True)
+    # ── 2. Foto com código de barras (Claude Opus 4.8 Vision) ───────────
+    with st.expander("📷 Foto de etiqueta — Claude Vision", expanded=False):
+        st.markdown(f"<p style='color:{TXT2}'>Tire uma foto ou carregue uma imagem da etiqueta — Claude lê o código automaticamente.</p>", unsafe_allow_html=True)
 
         _tab_c, _tab_u = st.tabs(["📷 Câmera", "🖼️ Carregar foto"])
         with _tab_c:
@@ -1828,19 +1848,21 @@ if _pg == "entrada":
         _foto_src = _foto_camera or _foto_upload
 
         if _foto_src:
-            if st.button("🔍 Ler código de barras", key="ent_analisar_foto2", type="primary", use_container_width=True):
-                with st.spinner("Decodificando barcode…"):
+            if st.button("🔍 Ler com Claude Vision", key="ent_analisar_foto2", type="primary", use_container_width=True):
+                with st.spinner("Claude analisando etiqueta…"):
                     _foto_src.seek(0)
                     _img_bytes2 = _foto_src.read()
-                    _barcodes = api.decodificar_barcodes_foto(_img_bytes2)
-                    if _barcodes:
-                        _foto_res2 = []
-                        for _bc in _barcodes:
-                            _m2 = _bc_map.get(_bc.strip())
-                            _foto_res2.append({"barcode": _bc, "match": _m2})
+                    try:
+                        _cv_code2 = api.ler_codigo_barras_foto(_img_bytes2)
+                    except Exception as _ex2:
+                        _cv_code2 = None
+                        st.error(f"Erro: {_ex2}")
+                    if _cv_code2:
+                        _m2 = _bc_map.get(_cv_code2.strip())
+                        _foto_res2 = [{"barcode": _cv_code2, "match": _m2}]
                         st.session_state["ent_foto2_resultado"] = (_img_bytes2, _foto_res2)
                     else:
-                        st.warning("Nenhum barcode detectado. Tente com mais luz ou mais próximo.")
+                        st.warning("Claude não identificou código de barras nesta imagem.")
 
         if "ent_foto2_resultado" in st.session_state:
             _img_b2, _res2 = st.session_state["ent_foto2_resultado"]
