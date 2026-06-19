@@ -5,6 +5,12 @@ from datetime import date, datetime
 import api
 from fpdf import FPDF
 
+# set_page_config DEVE ser a primeira chamada — antes do routing de versão
+st.set_page_config(
+    page_title="Plug ERP", page_icon="⚡",
+    layout="wide", initial_sidebar_state="expanded"
+)
+
 # ── Roteamento de versão (deve ser o primeiro bloco de execução) ──
 if "version" not in st.session_state:
     st.session_state["version"] = st.query_params.get("v", "classic")
@@ -78,8 +84,6 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
                  ln=True, align="R")
 
     return bytes(pdf.output())
-
-st.set_page_config(page_title="Plug ERP", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # ── Tema fixo claro (ignora preferência do sistema) ──
 if "tema" not in st.session_state:

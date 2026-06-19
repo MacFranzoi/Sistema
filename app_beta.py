@@ -165,7 +165,15 @@ _CSS = """<style>
   color:#4f46e5!important;border-bottom-color:#4f46e5!important;
   font-weight:700!important}
 
-/* ── Mobile: hide sidebar, full width ── */
+/* ── Forçar sidebar sempre visível no desktop ── */
+[data-testid="stSidebar"]{
+  transform:none!important;
+  visibility:visible!important;
+  display:block!important}
+/* Esconde botão de colapsar */
+button[data-testid="collapsedControl"]{display:none!important}
+
+/* ── Mobile: sidebar como drawer, conteúdo full ── */
 @media(max-width:768px){
   [data-testid="stSidebar"]{display:none!important}
   .block-container{padding:16px 14px 60px!important}
@@ -231,18 +239,28 @@ def _copiar_html(texto):
         f'}})();</script>', height=46)
 
 def _stock_bar_html(name, current, ref=20):
-    pct = min(100, int(current / max(1, ref) * 100))
-    fg = "#ef4444" if current <= 3 else ("#f59e0b" if current <= 10 else "#22c55e")
-    bg = "#fee2e2" if current <= 3 else ("#fef3c7" if current <= 10 else "#dcfce7")
+    # Sempre mostra barra vermelha para críticos/negativos
+    if current <= 0:
+        fg, bg, pct = "#ef4444", "#fee2e2", 100
+    elif current <= 3:
+        fg, bg = "#ef4444", "#fee2e2"
+        pct = max(5, min(100, int(current / max(1, ref) * 100)))
+    elif current <= 10:
+        fg, bg = "#f59e0b", "#fef3c7"
+        pct = max(10, min(100, int(current / max(1, ref) * 100)))
+    else:
+        fg, bg = "#22c55e", "#dcfce7"
+        pct = max(20, min(100, int(current / max(1, ref) * 100)))
+    label = f"{current} un" if current >= 0 else f"⚠️ {current} un"
     return (
         f'<div style="margin-bottom:10px">'
         f'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
         f'<span style="font-size:.73rem;font-weight:500;color:#374151">{name[:38]}</span>'
-        f'<span style="font-size:.72rem;font-weight:700;color:{fg}">{current} un</span>'
+        f'<span style="font-size:.72rem;font-weight:700;color:{fg}">{label}</span>'
         f'</div>'
         f'<div style="background:{bg};border-radius:4px;height:6px;overflow:hidden">'
-        f'<div style="width:{pct}%;height:100%;background:{fg};border-radius:4px;'
-        f'transition:width .3s"></div></div></div>')
+        f'<div style="width:{pct}%;height:100%;background:{fg};border-radius:4px"></div>'
+        f'</div></div>')
 
 
 # ══════════════════════════════════════════════════════════════════
