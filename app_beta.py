@@ -333,18 +333,24 @@ def _header(nome, loja_nome):
 
 @st.cache_data(ttl=300)
 def _alertas_estoque(loja_id):
-    c = api.carregar_cache(loja_id)
-    criticos, baixos = [], []
-    for p in (c or {}).get("produtos", []):
-        for v in p.get("variacoes", []):
-            vd  = v.get("variacao", v)
-            est = int(vd.get("estoque", 0) or 0)
-            item = {"produto": p.get("nome", ""), "variacao": vd.get("nome", ""),
-                    "cod": vd.get("codigo", ""), "estoque": est}
-            if est <= 3:    criticos.append(item)
-            elif est <= 10: baixos.append(item)
-    return (sorted(criticos, key=lambda x: x["estoque"]),
-            sorted(baixos,   key=lambda x: x["estoque"]))
+    try:
+        c = api.carregar_cache(loja_id)
+        criticos, baixos = [], []
+        for p in (c or {}).get("produtos", []):
+            for v in p.get("variacoes", []):
+                vd  = v.get("variacao", v)
+                try:
+                    est = int(float(str(vd.get("estoque", 0) or 0)))
+                except (ValueError, TypeError):
+                    est = 0
+                item = {"produto": p.get("nome", ""), "variacao": vd.get("nome", ""),
+                        "cod": vd.get("codigo", ""), "estoque": est}
+                if est <= 3:    criticos.append(item)
+                elif est <= 10: baixos.append(item)
+        return (sorted(criticos, key=lambda x: x["estoque"]),
+                sorted(baixos,   key=lambda x: x["estoque"]))
+    except Exception:
+        return ([], [])
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -679,7 +685,7 @@ def _pedidos(cache, loja_id):
                     for vd in vars_:
                         vc1, vc2, vc3 = st.columns([3, 1, 1])
                         vc1.caption(f"**{vd.get('nome','')}** · `{vd.get('codigo','')}`")
-                        est_v = int(vd.get("estoque", 0) or 0)
+                        est_v = int(float(str(vd.get("estoque", 0) or 0)))
                         est_cor = "🔴" if est_v <= 3 else ("🟡" if est_v <= 10 else "🟢")
                         vc2.caption(f"{est_cor} {est_v} un")
                         _qtds[vd["id"]] = vc3.number_input(
@@ -929,11 +935,15 @@ def _estoque(cache, loja_id):
         return
 
     # Stats rápidos
+    def _est(vd):
+        try: return int(float(str(vd.get("estoque", 0) or 0)))
+        except (ValueError, TypeError): return 0
+
     all_vars = [(p, v.get("variacao", v)) for p in cache.get("produtos", [])
                 for v in p.get("variacoes", [])]
     n_total = len(all_vars)
-    n_crit  = sum(1 for _, vd in all_vars if int(vd.get("estoque", 0) or 0) <= 3)
-    n_baixo = sum(1 for _, vd in all_vars if 3 < int(vd.get("estoque", 0) or 0) <= 10)
+    n_crit  = sum(1 for _, vd in all_vars if _est(vd) <= 3)
+    n_baixo = sum(1 for _, vd in all_vars if 3 < _est(vd) <= 10)
     n_ok    = n_total - n_crit - n_baixo
     s1, s2, s3, s4 = st.columns(4)
     with s1: _kpi(f"{n_total}", "Variações", "kpi-ind", "📦")
@@ -953,7 +963,10 @@ def _estoque(cache, loja_id):
         _sec("Itens com estoque crítico ou baixo")
         rows_crit = []
         for p, vd in all_vars:
-            est = int(vd.get("estoque", 0) or 0)
+            try:
+                est = int(float(str(vd.get("estoque", 0) or 0)))
+            except (ValueError, TypeError):
+                est = 0
             if est <= 10:
                 status = "🔴 Crítico" if est <= 3 else "🟡 Baixo"
                 rows_crit.append({
@@ -1008,7 +1021,7 @@ def _estoque(cache, loja_id):
             qtds: dict[str, int] = {}
             _sec("Variações")
             for vd in vars_:
-                est_atual = int(vd.get("estoque", 0) or 0)
+                est_atual = int(float(str(vd.get("estoque", 0) or 0)))
                 v1, v2, v3 = st.columns([3, 1, 1])
                 v1.markdown(f'<div style="font-size:.83rem;font-weight:600">{vd.get("nome","")}</div>'
                             f'<div style="font-size:.7rem;color:#94a3b8">`{vd.get("codigo","")}`</div>',
@@ -1558,7 +1571,10 @@ def _relatorios(cache, loja_id):
             for p in cache.get("produtos", []):
                 for v in p.get("variacoes", []):
                     vd  = v.get("variacao", v)
-                    est = int(vd.get("estoque", 0) or 0)
+                    try:
+                        est = int(float(str(vd.get("estoque", 0) or 0)))
+                    except (ValueError, TypeError):
+                        est = 0
                     rows_e.append({
                         "Status":   "🔴" if est <= 3 else ("🟡" if est <= 10 else "🟢"),
                         "Produto":  p.get("nome", "")[:30],
@@ -1887,4 +1903,8 @@ def run():
     tabs = st.tabs(_pgs)
     for tab, fn in zip(tabs, _fns):
         with tab:
-            fn()
+            try:
+                fn()
+            except Exception as _e:
+                st.error(f"Erro nesta página: {_e}")
+                st.caption("Recarregue a página ou contate o administrador.")
