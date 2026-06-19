@@ -1780,9 +1780,16 @@ if _pg == "entrada":
         import os as _os_ent
         _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
         _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
-        _scanned = _barcode_scanner_comp(key="ent_live_bc")
+        # Passa nome do produto de volta para o componente exibir
+        _ent_product_arg  = st.session_state.pop("ent_bc_product_arg", "")
+        _ent_notfound_arg = st.session_state.pop("ent_bc_notfound_arg", "")
+        _scanned = _barcode_scanner_comp(
+            product_name=_ent_product_arg,
+            not_found=_ent_notfound_arg,
+            key="ent_live_bc",
+        )
 
-        # Auto-adicionar quando o scanner lê um código novo (usa ts para deduplicar reruns)
+        # Auto-adicionar quando o scanner lê um código novo (ts evita reprocessar no rerun)
         if _scanned and isinstance(_scanned, dict) and "code" in _scanned:
             _bc_ts  = _scanned.get("ts", 0)
             _bc_str = str(_scanned["code"]).strip()
@@ -1793,21 +1800,23 @@ if _pg == "entrada":
                     _prod_m, _var_m = _match
                     if _var_m:
                         _bc_add_item(_prod_m, _var_m)
-                        st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                        st.session_state["ent_bc_product_arg"] = _label
                         st.rerun()
                     elif len(_prod_m.get("variacoes", [])) == 1:
                         _var_m = _prod_m["variacoes"][0].get("variacao", {})
                         _bc_add_item(_prod_m, _var_m)
-                        st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                        _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                        st.session_state["ent_bc_product_arg"] = _label
                         st.rerun()
                     else:
                         st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
                         st.rerun()
                 else:
-                    # Pré-preenche o campo manual com o código não encontrado
+                    st.session_state["ent_bc_notfound_arg"] = _bc_str
                     _bc_idx = st.session_state.get("ent_bc_idx", 0)
                     st.session_state[f"ent_bc_input_{_bc_idx}"] = _bc_str
-                    st.warning(f"Código `{_bc_str}` não encontrado no catálogo.")
+                    st.rerun()
 
         # Campo manual — fallback quando scanner não lê ou produto não está no catálogo
         _bc_idx  = st.session_state.get("ent_bc_idx", 0)
