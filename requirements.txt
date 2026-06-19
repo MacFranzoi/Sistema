@@ -7,3 +7,4 @@ anthropic
 zxing-cpp
 pyzbar
 Pillow
+python-barcode[images]

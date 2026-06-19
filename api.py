@@ -388,6 +388,134 @@ def gerar_url_etiquetas(entradas):
     return f"https://plug.gestaoclick.com/etiquetas/gerar_etiquetas?busca=a150&selecionados={encoded}"
 
 
+# ── Formatos de etiqueta Pimaco ────────────────────────────────────────────
+# Medidas em mm (A4 = 210 × 297 mm)
+FORMATOS_ETIQUETA = {
+    "pimaco_a4351": {
+        "label": "Pimaco A4351 (3×10, 63,5×29,7mm — 30/folha)",
+        "cols": 3, "rows": 10,
+        "larg": 63.5, "alt": 29.7,
+        "ml": 5.0, "mt": 13.0,   # margem esquerda / topo
+        "gh": 3.0, "gv": 0.0,    # gap horizontal / vertical entre etiquetas
+    },
+    "pimaco_a4362": {
+        "label": "Pimaco A4362 (2×7, 99×42mm — 14/folha)",
+        "cols": 2, "rows": 7,
+        "larg": 99.0, "alt": 42.0,
+        "ml": 5.0, "mt": 5.0,
+        "gh": 2.0, "gv": 0.0,
+    },
+    "pimaco_a4356": {
+        "label": "Pimaco A4356 (4×10, 45×25,4mm — 40/folha)",
+        "cols": 4, "rows": 10,
+        "larg": 45.0, "alt": 25.4,
+        "ml": 10.0, "mt": 21.5,
+        "gh": 2.5, "gv": 0.0,
+    },
+}
+
+
+def gerar_pdf_etiquetas(itens: list, formato: str = "pimaco_a4351") -> bytes:
+    """
+    Gera PDF de etiquetas com barcode Code 128.
+    Cada item da lista é expandido pela quantidade.
+    """
+    from PIL import Image as _PIL, ImageDraw as _ID, ImageFont as _IF
+    import io as _io
+
+    cfg = FORMATOS_ETIQUETA.get(formato, FORMATOS_ETIQUETA["pimaco_a4351"])
+
+    DPI      = 200
+    MM2PX    = DPI / 25.4
+    def _mm(v): return int(v * MM2PX)
+
+    A4W, A4H = _mm(210), _mm(297)
+    larg_px  = _mm(cfg["larg"])
+    alt_px   = _mm(cfg["alt"])
+    ml_px    = _mm(cfg["ml"])
+    mt_px    = _mm(cfg["mt"])
+    gh_px    = _mm(cfg["gh"])
+    gv_px    = _mm(cfg["gv"])
+    per_page = cfg["cols"] * cfg["rows"]
+
+    # Expande itens pela quantidade
+    labels = []
+    for it in itens:
+        for _ in range(max(1, int(it.get("quantidade", 1)))):
+            labels.append(it)
+
+    def _barcode_img(text: str, w_px: int, h_px: int):
+        try:
+            import barcode as _bc
+            from barcode.writer import ImageWriter as _IW
+            buf = _io.BytesIO()
+            # Calcula module_width a partir da largura disponível
+            mw = max(0.2, (w_px / DPI * 25.4) / (len(text) * 11 + 20))
+            _bc.Code128(text, writer=_IW()).write(buf, options={
+                "module_width": mw, "module_height": h_px / DPI * 25.4 - 2,
+                "quiet_zone": 2.0, "text_distance": 1.0,
+                "font_size": 5, "dpi": DPI, "write_text": True,
+            })
+            buf.seek(0)
+            img = _PIL.open(buf).convert("RGB")
+            return img.resize((w_px, h_px), _PIL.LANCZOS)
+        except Exception:
+            # Fallback: retorna imagem em branco com texto
+            img = _PIL.new("RGB", (w_px, h_px), "white")
+            _ID.Draw(img).text((4, h_px // 3), text, fill="black")
+            return img
+
+    try:
+        font_b = _IF.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", _mm(3.2))
+        font_n = _IF.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", _mm(2.6))
+        font_s = _IF.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", _mm(2.2))
+    except Exception:
+        font_b = font_n = font_s = _IF.load_default()
+
+    pages = []
+    for page_start in range(0, max(1, len(labels)), per_page):
+        page_labels = labels[page_start: page_start + per_page]
+        page = _PIL.new("RGB", (A4W, A4H), "white")
+        draw = _ID.Draw(page)
+
+        for i, it in enumerate(page_labels):
+            col = i % cfg["cols"]
+            row = i // cfg["cols"]
+            x = ml_px + col * (larg_px + gh_px)
+            y = mt_px + row * (alt_px + gv_px)
+
+            # Borda da etiqueta (linha cinza fina)
+            draw.rectangle([x, y, x + larg_px - 1, y + alt_px - 1],
+                           outline=(200, 200, 200), width=1)
+
+            pad = _mm(1.0)
+            # Linha 1: nome do produto (negrito)
+            nome = (it.get("produto_nome") or "")[:40]
+            draw.text((x + pad, y + pad), nome, font=font_b, fill="black")
+
+            # Linha 2: variação
+            var = (it.get("variacao_nome") or "")[:45]
+            draw.text((x + pad, y + pad + _mm(3.6)), var, font=font_n, fill=(60, 60, 60))
+
+            # Barcode: usa variacao_cod ou variacao_id como fallback
+            bc_text = (it.get("variacao_cod") or str(it.get("variacao_id", ""))).strip()
+            if bc_text:
+                bc_h = alt_px - _mm(10.0)
+                bc_y = y + alt_px - bc_h - pad
+                bc_w = larg_px - pad * 2
+                bc_img = _barcode_img(bc_text, bc_w, bc_h)
+                page.paste(bc_img, (x + pad, bc_y))
+
+        pages.append(page)
+
+    buf = _io.BytesIO()
+    if pages:
+        pages[0].save(buf, format="PDF", resolution=DPI,
+                      save_all=True, append_images=pages[1:])
+    buf.seek(0)
+    return buf.read()
+
+
 # ──────────────────────────────────────────────
 # GitHub sync para listas
 # ──────────────────────────────────────────────
