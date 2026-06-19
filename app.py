@@ -2068,9 +2068,11 @@ if _pg == "entrada":
     # ── Leitor externo (USB / Bluetooth) ─────────────────────────────────
     elif _ent_modo == "📡 Leitor externo":
         st.caption("Conecte o leitor USB ou Bluetooth e aponte para o código. Ele digita e confirma automaticamente.")
+        _leitor_rapido = st.checkbox("🚀 Modo rápido — bipar tudo sem parar (soma quantidade automaticamente)",
+                                     key="leitor_modo_rapido")
 
-        # Confirmação de duplicata
-        if "ent_bc_confirm" in st.session_state:
+        # Confirmação de duplicata (só no modo normal)
+        if "ent_bc_confirm" in st.session_state and not _leitor_rapido:
             _conf_l = st.session_state["ent_bc_confirm"]
             st.warning(f"⚠️ **{_conf_l['nome']}** já está na lista (qtd atual: {_conf_l['qtd_atual']}). Adicionar mais 1?")
             _cla, _clb = st.columns(2)
@@ -2082,6 +2084,8 @@ if _pg == "entrada":
                 del st.session_state["ent_bc_confirm"]
                 st.rerun()
         else:
+            if _leitor_rapido and "ent_bc_confirm" in st.session_state:
+                del st.session_state["ent_bc_confirm"]
             # Form limpa e re-foca automaticamente após cada leitura
             with st.form("leitor_ext_form", clear_on_submit=True):
                 _leitor_cod = st.text_input(
@@ -2107,10 +2111,10 @@ if _pg == "entrada":
                     if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
                         _var_l = _prod_l["variacoes"][0].get("variacao", {})
                     if _var_l:
-                        _vid_l   = str(_var_l.get("id", ""))
-                        _nome_l  = f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}"
-                        _ja_l    = any(it.get("variacao_id") == _vid_l for it in st.session_state.itens_entrada)
-                        if _ja_l:
+                        _vid_l  = str(_var_l.get("id", ""))
+                        _nome_l = f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}"
+                        _ja_l   = any(it.get("variacao_id") == _vid_l for it in st.session_state.itens_entrada)
+                        if _ja_l and not _leitor_rapido:
                             _qtd_l = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid_l), 1)
                             st.session_state["ent_bc_confirm"] = {"prod": _prod_l, "var": _var_l, "nome": _nome_l, "qtd_atual": _qtd_l}
                         else:
