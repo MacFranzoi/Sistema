@@ -1812,14 +1812,29 @@ if _pg == "entrada":
                     _match  = _bc_map.get(_bc_str)
                     if _match:
                         _prod_m, _var_m = _match
+                        import time as _t_bc
+                        _last_vid, _last_t = st.session_state.get("ent_bc_last_vid", ("", 0))
                         if _var_m:
-                            _bc_add_item(_prod_m, _var_m)
-                            st.session_state["ent_bc_product_arg"] = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                            _vid = str(_var_m.get("id", ""))
+                            _nome_exib = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                            if _vid == _last_vid and (_t_bc.time() - _last_t) < 3:
+                                # mesmo produto em < 3s — ignora duplicata
+                                st.session_state["ent_bc_product_arg"] = _nome_exib
+                            else:
+                                _bc_add_item(_prod_m, _var_m)
+                                st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
+                                st.session_state["ent_bc_product_arg"] = _nome_exib
                             st.rerun()
                         elif len(_prod_m.get("variacoes", [])) == 1:
                             _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                            _bc_add_item(_prod_m, _var_m)
-                            st.session_state["ent_bc_product_arg"] = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                            _vid = str(_var_m.get("id", ""))
+                            _nome_exib = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
+                            if _vid == _last_vid and (_t_bc.time() - _last_t) < 3:
+                                st.session_state["ent_bc_product_arg"] = _nome_exib
+                            else:
+                                _bc_add_item(_prod_m, _var_m)
+                                st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
+                                st.session_state["ent_bc_product_arg"] = _nome_exib
                             st.rerun()
                         else:
                             st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)

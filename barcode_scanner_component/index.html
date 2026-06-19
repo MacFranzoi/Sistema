@@ -138,7 +138,7 @@ window.addEventListener("message", (e) => {
     status.className   = "found";
     status.textContent = "✅ " + args.product_name;
     setTimeout(resetStatus, 2500);
-    setBusy(false);
+    setTimeout(() => setBusy(false), 1000);  // 1s antes de tentar nova leitura
   } else if (args.not_found) {
     if (args.not_found !== "frame") playBeep(false);
     status.className   = "notfound";
