@@ -1259,6 +1259,30 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
 
 
 # ──────────────────────────────────────────────
+# Transcrição de áudio via OpenAI Whisper
+# ──────────────────────────────────────────────
+def transcrever_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
+    """
+    Transcreve áudio usando OpenAI Whisper API.
+    Requer OPENAI_API_KEY no ambiente.
+    Retorna o texto transcrito.
+    """
+    import requests as _req
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY não configurado no ambiente.")
+    resp = _req.post(
+        "https://api.openai.com/v1/audio/transcriptions",
+        headers={"Authorization": f"Bearer {api_key}"},
+        files={"file": (filename, audio_bytes, "audio/webm")},
+        data={"model": "whisper-1", "language": "pt"},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json().get("text", "")
+
+
+# ──────────────────────────────────────────────
 # Situações
 # ──────────────────────────────────────────────
 

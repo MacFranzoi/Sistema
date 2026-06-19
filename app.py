@@ -2074,7 +2074,33 @@ if _pg == "pedido":
                          "avulso cor", "outro"}
 
     with st.expander("🤖  Importar pedido via WhatsApp (IA)", expanded=False):
-        st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:{TXT2}'>Cole o texto do WhatsApp ou grave um áudio. A IA identifica o modelo e aplica os kits de cores exatos (mesmo comportamento dos botões Masculino/Feminino).</p>", unsafe_allow_html=True)
+
+        # ── Gravação de áudio ──────────────────────────────────────────────
+        import os as _os_wpp
+        _has_openai_key = bool(_os_wpp.environ.get("OPENAI_API_KEY", ""))
+        if _has_openai_key:
+            st.markdown(f"<p style='color:{TXT2};font-size:0.85rem;margin-bottom:4px'>🎙️ <b>Gravar áudio</b> — grave e transcreva automaticamente</p>", unsafe_allow_html=True)
+            _audio_val = st.audio_input("Gravar pedido por áudio", key="wpp_audio", label_visibility="collapsed")
+            if _audio_val is not None:
+                if st.button("📝 Transcrever áudio", key="wpp_transcrever", type="secondary"):
+                    with st.spinner("Transcrevendo áudio…"):
+                        try:
+                            from api import transcrever_audio as _transcrever
+                            _audio_bytes = _audio_val.read()
+                            _transcricao = _transcrever(_audio_bytes, filename="audio.webm")
+                            st.session_state["wpp_transcricao"] = _transcricao
+                            st.success("Transcrição concluída!")
+                        except Exception as _e:
+                            st.error(f"Erro na transcrição: {_e}")
+            st.divider()
+        else:
+            st.info("💡 Configure `OPENAI_API_KEY` para habilitar gravação de áudio.")
+
+        # ── Campo de texto (pré-populado pela transcrição se disponível) ──
+        _texto_inicial = st.session_state.pop("wpp_transcricao", "")
+        if _texto_inicial:
+            st.session_state["wpp_input"] = _texto_inicial
         wpp_texto = st.text_area(
             "Texto do WhatsApp",
             placeholder="Poco x3 - masculino e brilho\nX6- femininas\nNote13pro4g- masculinas e femininas",
