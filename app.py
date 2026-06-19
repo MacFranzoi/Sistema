@@ -2085,12 +2085,12 @@ if _pg == "entrada":
         }
         import streamlit.components.v1 as _cv1_lext
         _cv1_lext.html(f"""
-<div style="font-family:sans-serif;font-size:0.82rem;color:#888;line-height:1.8;padding:2px 0">
-  <span id="lext-total" style="font-weight:600;color:#bbb">0 linha(s)</span>
+<div style="font-family:sans-serif;font-size:0.85rem;line-height:1.8;padding:2px 0;font-weight:700;color:#111">
+  <span id="lext-total">0 linha(s)</span>
   <span style="margin:0 6px;opacity:.4">|</span>
-  <span id="lext-modelos" style="color:#bbb">0 modelo(s)</span>
+  <span id="lext-modelos">0 modelo(s)</span>
   <span style="margin:0 6px;opacity:.4">|</span>
-  <span id="lext-breakdown" style="color:#999"></span>
+  <span id="lext-breakdown" style="font-weight:600"></span>
 </div>
 <script>
 (function(){{
@@ -3770,12 +3770,12 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
             }
             import streamlit.components.v1 as _cv1_pb
             _cv1_pb.html(f"""
-<div style="font-family:sans-serif;font-size:0.82rem;color:#888;line-height:1.8;padding:2px 0">
-  <span id="pb-total" style="font-weight:600;color:#bbb">0 linha(s)</span>
+<div style="font-family:sans-serif;font-size:0.85rem;line-height:1.8;padding:2px 0;font-weight:700;color:#111">
+  <span id="pb-total">0 linha(s)</span>
   <span style="margin:0 6px;opacity:.4">|</span>
-  <span id="pb-modelos" style="color:#bbb">0 modelo(s)</span>
+  <span id="pb-modelos">0 modelo(s)</span>
   <span style="margin:0 6px;opacity:.4">|</span>
-  <span id="pb-breakdown" style="color:#999"></span>
+  <span id="pb-breakdown" style="font-weight:600"></span>
 </div>
 <script>
 (function(){{
