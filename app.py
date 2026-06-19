@@ -1889,7 +1889,7 @@ if _pg == "entrada":
 
         if _scanned and isinstance(_scanned, dict) and ("frame" in _scanned or "codes" in _scanned):
             _bc_ts = _scanned.get("ts", 0)
-            if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0):
+            if _bc_ts and _bc_ts != st.session_state.get("ent_bc_last_ts", 0) and "ent_bc_confirm" not in st.session_state:
                 st.session_state["ent_bc_last_ts"] = _bc_ts
                 if "codes" in _scanned:
                     # Decodificado pelo BarcodeDetector do JS — sem processamento de imagem
@@ -1912,22 +1912,34 @@ if _pg == "entrada":
                             if _vid == _last_vid and (_t_bc.time() - _last_t) < 3:
                                 # mesmo produto em < 3s — ignora duplicata
                                 st.session_state["ent_bc_product_arg"] = _nome_exib
+                                st.rerun()
                             else:
-                                _bc_add_item(_prod_m, _var_m)
-                                st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
-                                st.session_state["ent_bc_product_arg"] = _nome_exib
-                            st.rerun()
+                                _ja_na_lista = any(it.get("variacao_id") == _vid for it in st.session_state.itens_entrada)
+                                if _ja_na_lista:
+                                    _qtd_atual = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid), 1)
+                                    st.session_state["ent_bc_confirm"] = {"prod": _prod_m, "var": _var_m, "nome": _nome_exib, "qtd_atual": _qtd_atual}
+                                else:
+                                    _bc_add_item(_prod_m, _var_m)
+                                    st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
+                                    st.session_state["ent_bc_product_arg"] = _nome_exib
+                                st.rerun()
                         elif len(_prod_m.get("variacoes", [])) == 1:
                             _var_m = _prod_m["variacoes"][0].get("variacao", {})
                             _vid = str(_var_m.get("id", ""))
                             _nome_exib = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
                             if _vid == _last_vid and (_t_bc.time() - _last_t) < 3:
                                 st.session_state["ent_bc_product_arg"] = _nome_exib
+                                st.rerun()
                             else:
-                                _bc_add_item(_prod_m, _var_m)
-                                st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
-                                st.session_state["ent_bc_product_arg"] = _nome_exib
-                            st.rerun()
+                                _ja_na_lista = any(it.get("variacao_id") == _vid for it in st.session_state.itens_entrada)
+                                if _ja_na_lista:
+                                    _qtd_atual = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid), 1)
+                                    st.session_state["ent_bc_confirm"] = {"prod": _prod_m, "var": _var_m, "nome": _nome_exib, "qtd_atual": _qtd_atual}
+                                else:
+                                    _bc_add_item(_prod_m, _var_m)
+                                    st.session_state["ent_bc_last_vid"] = (_vid, _t_bc.time())
+                                    st.session_state["ent_bc_product_arg"] = _nome_exib
+                                st.rerun()
                         else:
                             st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
                             st.rerun()
@@ -1938,6 +1950,19 @@ if _pg == "entrada":
                     # Nenhum barcode no frame — avisa o componente
                     st.session_state["ent_bc_notfound_arg"] = "frame"
                     st.rerun()
+
+        # ── Confirmação de duplicata ──────────────────────────────────────────
+        if "ent_bc_confirm" in st.session_state:
+            _conf = st.session_state["ent_bc_confirm"]
+            st.warning(f"⚠️ **{_conf['nome']}** já está na lista (qtd atual: {_conf['qtd_atual']}). Adicionar mais 1?")
+            _cca, _ccb = st.columns(2)
+            if _cca.button("✅ Sim, adicionar", key="bc_conf_sim", type="primary", use_container_width=True):
+                _bc_add_item(_conf["prod"], _conf["var"])
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
+            if _ccb.button("❌ Não", key="bc_conf_nao", use_container_width=True):
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
 
         if st.session_state.itens_entrada:
             if st.button("↩️ Desfazer último", key="ent_undo_scan"):
@@ -1971,9 +1996,22 @@ if _pg == "entrada":
             key="ent_photo_bc",
         )
 
+        # ── Confirmação de duplicata (foto) ──────────────────────────────────
+        if "ent_bc_confirm" in st.session_state:
+            _conf_f = st.session_state["ent_bc_confirm"]
+            st.warning(f"⚠️ **{_conf_f['nome']}** já está na lista (qtd atual: {_conf_f['qtd_atual']}). Adicionar mais 1?")
+            _cfa, _cfb = st.columns(2)
+            if _cfa.button("✅ Sim, adicionar", key="foto_conf_sim", type="primary", use_container_width=True):
+                _bc_add_item(_conf_f["prod"], _conf_f["var"])
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
+            if _cfb.button("❌ Não", key="foto_conf_nao", use_container_width=True):
+                del st.session_state["ent_bc_confirm"]
+                st.rerun()
+
         if _foto_scanned and isinstance(_foto_scanned, dict) and ("frame" in _foto_scanned or "codes" in _foto_scanned):
             _foto_ts = _foto_scanned.get("ts", 0)
-            if _foto_ts and _foto_ts != st.session_state.get("foto_bc_last_ts", 0):
+            if _foto_ts and _foto_ts != st.session_state.get("foto_bc_last_ts", 0) and "ent_bc_confirm" not in st.session_state:
                 st.session_state["foto_bc_last_ts"] = _foto_ts
                 if "codes" in _foto_scanned:
                     _foto_codes = [c for c in (_foto_scanned.get("codes") or []) if c]
@@ -1992,14 +2030,18 @@ if _pg == "entrada":
                     _match_f  = _bc_map.get(_bc_str_f)
                     if _match_f:
                         _prod_f, _var_f = _match_f
-                        if _var_f:
-                            _bc_add_item(_prod_f, _var_f)
-                            st.session_state["foto_bc_product_arg"] = f"{_prod_f.get('nome','')} / {_var_f.get('nome','')}"
-                            st.rerun()
-                        elif len(_prod_f.get("variacoes", [])) == 1:
+                        if not _var_f and len(_prod_f.get("variacoes", [])) == 1:
                             _var_f = _prod_f["variacoes"][0].get("variacao", {})
-                            _bc_add_item(_prod_f, _var_f)
-                            st.session_state["foto_bc_product_arg"] = f"{_prod_f.get('nome','')} / {_var_f.get('nome','')}"
+                        if _var_f:
+                            _vid_f = str(_var_f.get("id", ""))
+                            _nome_f = f"{_prod_f.get('nome','')} / {_var_f.get('nome','')}"
+                            _ja_f = any(it.get("variacao_id") == _vid_f for it in st.session_state.itens_entrada)
+                            if _ja_f:
+                                _qtd_f = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid_f), 1)
+                                st.session_state["ent_bc_confirm"] = {"prod": _prod_f, "var": _var_f, "nome": _nome_f, "qtd_atual": _qtd_f}
+                            else:
+                                _bc_add_item(_prod_f, _var_f)
+                                st.session_state["foto_bc_product_arg"] = _nome_f
                             st.rerun()
                         else:
                             st.session_state["ent_bc_pending"] = (_prod_f, _bc_str_f)
