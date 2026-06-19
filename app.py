@@ -2150,6 +2150,7 @@ if _pg == "entrada":
             if _sem_var_l:
                 st.info(f"ℹ️ {len(_sem_var_l)} produto(s) com múltiplas variações — adicione manualmente: {', '.join(_sem_var_l[:5])}")
             if _ok_l:
+                st.session_state["leitor_area_txt"] = ""
                 st.rerun()
 
     # ── Código manual ─────────────────────────────────────────────────────
@@ -3855,6 +3856,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 if _sem_var_ped:
                     st.info(f"ℹ️ {len(_sem_var_ped)} produto(s) com múltiplas variações — adicione manualmente.")
                 if _ok_ped:
+                    st.session_state["ped_bc_area_txt"] = ""
                     st.rerun()
 
         # ── Custos por tipo ──
