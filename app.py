@@ -1772,7 +1772,7 @@ if _pg == "entrada":
     # ── 1. Scanner ao vivo ────────────────────────────────────────────────
     with st.expander("📷 Scanner ao vivo", expanded=False):
         st.markdown(
-            f"<p style='color:{TXT2}'>Toque para iniciar — depois é só apontar o código de barras da etiqueta.</p>",
+            f"<p style='color:{TXT2}'>Toque para iniciar a câmera. O scanner preenche o código automaticamente — confirme para adicionar.</p>",
             unsafe_allow_html=True,
         )
 
@@ -1782,34 +1782,63 @@ if _pg == "entrada":
         _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
         _scanned = _barcode_scanner_comp(key="ent_live_bc")
 
+        # Se o scanner leu um código, pré-preenche o campo de texto
         if _scanned:
-            _bc_str = str(_scanned).strip()
+            _novo = str(_scanned).strip()
+            if _novo != st.session_state.get("ent_bc_last", ""):
+                st.session_state["ent_bc_last"]  = _novo
+                # força atualização do widget incrementando o idx
+                _idx = st.session_state.get("ent_bc_idx", 0)
+                st.session_state[f"ent_bc_input_{_idx}"] = _novo
+
+        # Campo de código — auto-preenchido pelo scanner ou digitado manualmente
+        _bc_idx   = st.session_state.get("ent_bc_idx", 0)
+        _bc_wkey  = f"ent_bc_input_{_bc_idx}"
+        _bc_codigo = st.text_input(
+            "Código de barras",
+            key=_bc_wkey,
+            placeholder="Lido pelo scanner ou digite manualmente...",
+        )
+
+        _qtd_sc = st.number_input("Quantidade", min_value=1, max_value=999, value=1, key="ent_bc_qtd")
+
+        if st.button("➕ Adicionar à lista", key="ent_bc_add_btn", type="primary",
+                     use_container_width=True, disabled=not _bc_codigo.strip()):
+            _bc_str = _bc_codigo.strip()
             _match  = _bc_map.get(_bc_str)
             if _match:
                 _prod_m, _var_m = _match
                 if _var_m:
-                    _bc_add_item(_prod_m, _var_m)
+                    _bc_add_item(_prod_m, _var_m, int(_qtd_sc))
                     st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.session_state["ent_bc_idx"] = _bc_idx + 1
+                    st.session_state.pop("ent_bc_last", None)
                     st.rerun()
                 elif len(_prod_m.get("variacoes", [])) == 1:
                     _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                    _bc_add_item(_prod_m, _var_m)
+                    _bc_add_item(_prod_m, _var_m, int(_qtd_sc))
                     st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.session_state["ent_bc_idx"] = _bc_idx + 1
+                    st.session_state.pop("ent_bc_last", None)
                     st.rerun()
                 else:
-                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str, int(_qtd_sc))
                     st.rerun()
+            else:
+                st.warning(f"Código `{_bc_str}` não encontrado no catálogo.")
 
         if "ent_bc_pending" in st.session_state:
-            _prod_p, _bc_p = st.session_state["ent_bc_pending"]
+            _prod_p, _bc_p, _qtd_p = st.session_state["ent_bc_pending"]
             st.info(f"**{_prod_p.get('nome','')}** — selecione a variação:")
             _var_opts = {v.get("variacao",{}).get("nome","?"): v.get("variacao",{})
                          for v in _prod_p.get("variacoes",[])}
             _var_sel_name = st.selectbox("Variação", list(_var_opts.keys()), key="ent_bc_var_sel")
             _cv1, _cv2 = st.columns(2)
             if _cv1.button("✓ Adicionar", key="ent_bc_var_add", type="primary", use_container_width=True):
-                _bc_add_item(_prod_p, _var_opts[_var_sel_name])
+                _bc_add_item(_prod_p, _var_opts[_var_sel_name], _qtd_p)
                 del st.session_state["ent_bc_pending"]
+                st.session_state["ent_bc_idx"] = st.session_state.get("ent_bc_idx", 0) + 1
+                st.session_state.pop("ent_bc_last", None)
                 st.success("✅ Adicionado!")
                 st.rerun()
             if _cv2.button("✗ Cancelar", key="ent_bc_var_cancel", use_container_width=True):
