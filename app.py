@@ -870,20 +870,12 @@ def painel_etiquetas(itens, key_suffix=""):
     """Bloco de geração de etiquetas reutilizável."""
     st.divider()
     st.subheader("🏷️ Etiquetas")
-    _fmt_opts = {v["label"]: k for k, v in api.FORMATOS_ETIQUETA.items()}
-    _fmt_sel  = st.selectbox("Formato de etiqueta", list(_fmt_opts.keys()),
-                              key=f"etiq_fmt_{key_suffix}", label_visibility="collapsed")
-    _fmt_key  = _fmt_opts[_fmt_sel]
     col1, col2 = st.columns(2)
     with col1:
-        _pdf_etiq = api.gerar_pdf_etiquetas(itens, _fmt_key)
-        st.download_button(
-            "🖨️ Baixar PDF de etiquetas", _pdf_etiq,
-            file_name=f"etiquetas_{_fmt_key}.pdf",
-            mime="application/pdf",
-            type="primary", use_container_width=True,
-            key=f"etiq_pdf_{key_suffix}",
-        )
+        if st.button("🏷️ Gerar URL de etiquetas", type="primary", use_container_width=True, key=f"etiq_url_{key_suffix}"):
+            url = api.gerar_url_etiquetas(itens)
+            st.markdown(f"### [👉 Abrir gerador de etiquetas]({url})")
+            st.code(url, language=None)
     with col2:
         if st.button("📋 Enviar para aba Etiquetas", use_container_width=True, key=f"etiq_envia_{key_suffix}"):
             st.session_state.clipboard = {
@@ -2619,33 +2611,16 @@ if _pg == "etiquetas":
 
             painel_salvar(st.session_state.etiq_itens, "etiquetas", key_suffix="etiq")
 
-            _etiq_fmt_opts = {v["label"]: k for k, v in api.FORMATOS_ETIQUETA.items()}
-            _etiq_fmt_sel  = st.selectbox("Formato de etiqueta", list(_etiq_fmt_opts.keys()),
-                                           key="etiq_page_fmt", label_visibility="collapsed")
-            _etiq_fmt_key  = _etiq_fmt_opts[_etiq_fmt_sel]
-            col1, col2, col3 = st.columns([1, 2, 1])
+            col1, col2 = st.columns(2)
             with col1:
                 if st.button("🗑️ Limpar", key="limpar_etiq", use_container_width=True):
                     st.session_state.etiq_itens = []
                     st.rerun()
             with col2:
-                _pdf_etiq_main = api.gerar_pdf_etiquetas(st.session_state.etiq_itens, _etiq_fmt_key)
-                st.download_button(
-                    "🖨️ Baixar PDF de etiquetas", _pdf_etiq_main,
-                    file_name=f"etiquetas_{_etiq_fmt_key}.pdf",
-                    mime="application/pdf",
-                    type="primary", use_container_width=True,
-                    key="etiq_pdf_main",
-                )
-            with col3:
-                if st.button("📋 Copiar →", key="etiq_copiar", use_container_width=True,
-                             help="Enviar para área de transferência"):
-                    st.session_state.clipboard = {
-                        "tipo": "etiquetas",
-                        "origem": "etiquetas",
-                        "itens": st.session_state.etiq_itens,
-                    }
-                    st.success("Copiado!")
+                if st.button("🏷️ Gerar URL de etiquetas", type="primary", use_container_width=True):
+                    url = api.gerar_url_etiquetas(st.session_state.etiq_itens)
+                    st.markdown(f"### [👉 Imprimir etiquetas]({url})")
+                    st.code(url, language=None)
         else:
             st.info("Adicione produtos ou importe de outra aba.")
 
