@@ -1958,45 +1958,70 @@ if _pg == "entrada":
 
     # ── Foto da etiqueta ──────────────────────────────────────────────────
     elif _ent_modo == "📸 Foto da etiqueta":
-        st.markdown(f"<p style='color:{TXT2}'>Tire uma foto ou carregue a imagem — o barcode é lido automaticamente.</p>", unsafe_allow_html=True)
-        _foto_camera = st.camera_input("Fotografar", key="ent_camera2", label_visibility="collapsed")
-        _foto_upload = st.file_uploader("ou carregue", type=["jpg","jpeg","png","webp"],
-                                        key="ent_foto_upload2", label_visibility="collapsed")
-        _foto_src = _foto_camera or _foto_upload
-        if _foto_src:
-            _foto_src.seek(0)
-            _img_bytes2 = _foto_src.read()
-            try:
-                _codes2 = api.decodificar_barcodes_foto(_img_bytes2)
-            except Exception as _foto_err:
-                _codes2 = []
-                st.error(f"Erro ao decodificar imagem: {_foto_err}")
-            if _codes2:
-                _added2 = 0
-                _nao_cat2 = []
-                for _bc2 in _codes2:
-                    _m2 = _bc_map.get(_bc2.strip())
-                    if _m2:
-                        _prod2, _var2 = _m2
-                        if not _var2 and len(_prod2.get("variacoes", [])) == 1:
-                            _var2 = _prod2["variacoes"][0].get("variacao", {})
-                        if _var2:
-                            _bc_add_item(_prod2, _var2)
-                            _added2 += 1
-                        else:
-                            st.session_state["ent_bc_pending"] = (_prod2, _bc2.strip())
-                    else:
-                        _nao_cat2.append(_bc2.strip())
-                if _added2 > 0:
-                    st.success(f"✅ {_added2} item(ns) adicionado(s)!")
-                    st.rerun()
-                elif "ent_bc_pending" in st.session_state:
-                    st.rerun()
+        import streamlit.components.v1 as _stc2
+        import os as _os_foto, base64 as _b64f
+        _photo_path = _os_foto.path.join(_os_foto.path.dirname(_os_foto.path.abspath(__file__)), "photo_scanner_component")
+        _photo_comp = _stc2.declare_component("photo_scanner", path=_photo_path)
+
+        _foto_prod_arg     = st.session_state.pop("foto_bc_product_arg", "")
+        _foto_notfound_arg = st.session_state.pop("foto_bc_notfound_arg", "")
+        _foto_scanned = _photo_comp(
+            product_name=_foto_prod_arg,
+            not_found=_foto_notfound_arg,
+            key="ent_photo_bc",
+        )
+
+        if _foto_scanned and isinstance(_foto_scanned, dict) and ("frame" in _foto_scanned or "codes" in _foto_scanned):
+            _foto_ts = _foto_scanned.get("ts", 0)
+            if _foto_ts and _foto_ts != st.session_state.get("foto_bc_last_ts", 0):
+                st.session_state["foto_bc_last_ts"] = _foto_ts
+                if "codes" in _foto_scanned:
+                    _foto_codes = [c for c in (_foto_scanned.get("codes") or []) if c]
                 else:
-                    for _nf2 in _nao_cat2:
-                        st.warning(f"⚠️ Código lido: `{_nf2}` — não encontrado no catálogo. Tente o modo manual.")
-            else:
-                st.warning("Nenhum barcode detectado — tente com melhor iluminação ou use ⌨️ Código manual.")
+                    _raw_f = _foto_scanned["frame"]
+                    if "," in _raw_f:
+                        _raw_f = _raw_f.split(",", 1)[1]
+                    try:
+                        _foto_codes = api.decodificar_barcodes_foto(_b64f.b64decode(_raw_f))
+                    except Exception as _fe:
+                        _foto_codes = []
+                        st.session_state["foto_bc_notfound_arg"] = "frame"
+                        st.rerun()
+                if _foto_codes:
+                    _bc_str_f = _foto_codes[0].strip()
+                    _match_f  = _bc_map.get(_bc_str_f)
+                    if _match_f:
+                        _prod_f, _var_f = _match_f
+                        if _var_f:
+                            _bc_add_item(_prod_f, _var_f)
+                            st.session_state["foto_bc_product_arg"] = f"{_prod_f.get('nome','')} / {_var_f.get('nome','')}"
+                            st.rerun()
+                        elif len(_prod_f.get("variacoes", [])) == 1:
+                            _var_f = _prod_f["variacoes"][0].get("variacao", {})
+                            _bc_add_item(_prod_f, _var_f)
+                            st.session_state["foto_bc_product_arg"] = f"{_prod_f.get('nome','')} / {_var_f.get('nome','')}"
+                            st.rerun()
+                        else:
+                            st.session_state["ent_bc_pending"] = (_prod_f, _bc_str_f)
+                            st.rerun()
+                    else:
+                        st.session_state["foto_bc_notfound_arg"] = _bc_str_f
+                        st.rerun()
+                else:
+                    st.session_state["foto_bc_notfound_arg"] = "frame"
+                    st.rerun()
+
+        if "ent_bc_pending" in st.session_state:
+            _prod_fp, _bc_fp = st.session_state["ent_bc_pending"]
+            st.info(f"**{_prod_fp.get('nome','')}** — qual variação?")
+            _var_fp_list = [v.get("variacao", {}) for v in _prod_fp.get("variacoes", [])]
+            _cols_fp = st.columns(min(len(_var_fp_list), 3))
+            for _vfi, _vfv in enumerate(_var_fp_list):
+                if _cols_fp[_vfi % 3].button(_vfv.get("nome", "?"), key=f"ent_var_fp_{_vfi}", use_container_width=True):
+                    _bc_add_item(_prod_fp, _vfv)
+                    st.session_state["foto_bc_product_arg"] = f"{_prod_fp.get('nome','')} / {_vfv.get('nome','')}"
+                    del st.session_state["ent_bc_pending"]
+                    st.rerun()
 
     # ── Código manual ─────────────────────────────────────────────────────
     else:

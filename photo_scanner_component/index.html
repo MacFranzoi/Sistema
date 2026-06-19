@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: sans-serif; background: #0e1117; color: #fafafa; padding: 10px; }
+
+#btn-foto {
+  display: block; width: 100%; padding: 14px;
+  font-size: 15px; font-weight: 600; text-align: center;
+  background: #1e2540; border: 2px solid #4a5080;
+  border-radius: 10px; color: #fff; cursor: pointer;
+  user-select: none; transition: background 0.15s;
+}
+#btn-foto:active { background: #2a3560; }
+
+#status {
+  margin-top: 8px; padding: 9px 14px; border-radius: 8px;
+  font-size: 14px; min-height: 38px; color: #9099aa;
+  transition: background 0.25s, color 0.25s;
+}
+.scanning { color: #9099aa; }
+.reading  { background: #1a2d40; color: #60cfff; font-weight: 600; }
+.found    { background: #1a4731; color: #4caf50; font-weight: 600; }
+.notfound { background: #2d2010; color: #f0a040; }
+.error    { background: #2d1f1f; color: #ff6b6b; }
+
+input[type=file] { display: none; }
+canvas { display: none; }
+</style>
+</head>
+<body>
+
+<label id="btn-foto" for="foto-input">📸 Fotografar etiqueta</label>
+<input type="file" id="foto-input" accept="image/*" capture="environment">
+<canvas id="canvas"></canvas>
+<div id="status" class="scanning">Toque para fotografar o código de barras da etiqueta</div>
+
+<script>
+const ST = {
+  ready()     { _post({type:"streamlit:componentReady",apiVersion:1}); },
+  send(value) { _post({type:"streamlit:setComponentValue",value,dataType:"json"}); },
+  height(h)   { _post({type:"streamlit:setFrameHeight",height:h}); }
+};
+function _post(msg) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage:true}, msg), "*");
+}
+ST.ready();
+ST.height(120);
+
+const status = document.getElementById("status");
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
+
+const _detector = (() => {
+  try {
+    if (!("BarcodeDetector" in window)) return null;
+    return new BarcodeDetector({
+      formats: ["code_128","code_39","ean_13","ean_8","upc_a","upc_e","qr_code","data_matrix","pdf417"]
+    });
+  } catch(_) { return null; }
+})();
+
+document.getElementById("foto-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  status.className   = "reading";
+  status.textContent = "🔍 Analisando imagem...";
+
+  const img = new Image();
+  img.onload = async () => {
+    canvas.width  = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
+
+    // Tenta BarcodeDetector nativo (igual ao scanner ao vivo)
+    if (_detector) {
+      try {
+        const results = await _detector.detect(canvas);
+        if (results.length > 0) {
+          const code = results[0].rawValue;
+          status.className   = "reading";
+          status.textContent = "📍 " + code + " — buscando produto...";
+          ST.send({ codes: [code], ts: Date.now() });
+          URL.revokeObjectURL(img.src);
+          return;
+        }
+      } catch(_) {}
+    }
+
+    // Fallback: envia JPEG para o Python decodificar com pyzbar
+    status.className   = "reading";
+    status.textContent = "🔍 Lendo no servidor...";
+    const frame = canvas.toDataURL("image/jpeg", 0.95);
+    ST.send({ frame, ts: Date.now() });
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = () => {
+    status.className   = "error";
+    status.textContent = "Erro ao carregar a imagem.";
+  };
+  img.src = URL.createObjectURL(file);
+
+  // reset para permitir re-escanear o mesmo arquivo
+  e.target.value = "";
+});
+
+// Resposta do Python (igual ao scanner ao vivo)
+window.addEventListener("message", (e) => {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  const args = e.data.args || {};
+  if (args.product_name) {
+    status.className   = "found";
+    status.textContent = "✅ " + args.product_name;
+    setTimeout(resetStatus, 2500);
+  } else if (args.not_found) {
+    status.className   = "notfound";
+    status.textContent = args.not_found === "frame"
+      ? "⚠️ Não detectado — tente com melhor iluminação"
+      : "⚠️ Código não cadastrado: " + args.not_found;
+    setTimeout(resetStatus, 3000);
+  }
+});
+
+function resetStatus() {
+  status.className   = "scanning";
+  status.textContent = "Toque para fotografar o código de barras da etiqueta";
+}
+</script>
+</body>
+</html>
