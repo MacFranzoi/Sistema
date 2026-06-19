@@ -3092,15 +3092,19 @@ Apenas use kit="acessorio" quando tiver certeza que é um acessório, não uma c
 TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuação:
 1. MODELO: "a" + número = Samsung A[número] ("a 06"=A06, "a 53"=A53). Nunca artigo.
    Outros: "iphone 15"=iPhone 15, "edge 30"=Edge 30, "g 54"=Moto G54.
-2. MÚLTIPLOS MODELOS em sequência: ao detectar novo modelo, inicia entradas para ele.
-3. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
+2. HERANÇA DE MODELO — REGRA CRÍTICA: uma vez que um modelo é mencionado, TODOS os itens seguintes pertencem a ele até que um NOVO modelo seja explicitamente nomeado.
+   "iPhone 15 Pro Max, MagSafe 129,99, 8, MagSafe 159,99, 3" → ambos os MagSafe são do iPhone 15 Pro Max.
+   Nunca deixe um item sem modelo — use sempre o último modelo mencionado.
+3. nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max"). NUNCA inclua kit, variação, preço, "SL", "MG" ou qualquer outro dado no nome do produto.
+4. SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
+5. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-4. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
+6. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
    Normalize apenas plural: pretas→"preta", brancos→"branco", roxas→"roxa", amarelas→"amarela", lilases→"lilás"
    NÃO converta gênero (roxa≠roxo para o prompt; o sistema faz a normalização automaticamente)
-5. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
-6. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
-7. Uma entrada JSON por par modelo+cor ou modelo+kit
+7. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
+8. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
+9. Uma entrada JSON por par modelo+cor ou modelo+kit
 
 Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
 → A07 | kit="diversos masculino" | qtd=1
@@ -3116,6 +3120,11 @@ Exemplo B — só cores: "A 06 duas pretas uma verde militar duas lilás a 07 br
 → A07 | kit="brilho" | qtd=1
 → A07 | kit="avulso cor" descricao_avulso="preta" | qtd=2
 → A07 | kit="avulso cor" descricao_avulso="branca" | qtd=1
+
+Exemplo C — herança de modelo com preços: "iPhone 15 Pro Max, Diversos, R$99,99, 10, MagSafe, R$129,99, 8, MagSafe, R$159,99, 3"
+→ iPhone 15 Pro Max | kit="avulso cor" descricao_avulso="R$99,99 / Diversos" | qtd=10
+→ iPhone 15 Pro Max | kit="magsafe" | preco="129,99" | qtd=8
+→ iPhone 15 Pro Max | kit="magsafe" | preco="159,99" | qtd=3   ← herda o modelo, NÃO fica solto
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
