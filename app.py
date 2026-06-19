@@ -2328,7 +2328,7 @@ Cores NUNCA viram "masculino" ou "feminino". A regra "kit ambíguo → masculino
 
 ACESSÓRIOS — produto não-capa (suporte, cabo, fone, carregador, powerbank, película, controle, etc.) + quantidade:
 → use kit="acessorio", cod_interno=código_exato_do_catálogo, quantidade_fixa=N
-  Ex: "SPC-22 dois" → {"cod_interno":"SPC-22","kit":"acessorio","quantidade_fixa":2}
+  Ex: "SPC-22 dois" → {{"cod_interno":"SPC-22","kit":"acessorio","quantidade_fixa":2}}
   Ex: "suporte magsafe três" → busca no catálogo → kit="acessorio", quantidade_fixa=3
   Ex: "cabo tipo c um" → busca no catálogo → kit="acessorio", quantidade_fixa=1
 Apenas use kit="acessorio" quando tiver certeza que é um acessório, não uma capa/kit de cores.
