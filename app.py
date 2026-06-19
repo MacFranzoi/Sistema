@@ -2523,7 +2523,8 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 # Normaliza gênero: preta→preto, branca→branco, vermelha→vermelho, etc.
                                 _var_match_av = None
                                 if _kit == "avulso cor" and _desc_avulso_extra and _prod_obj_av:
-                                    _cor_busca = _desc_avulso_extra.lower().strip()
+                                    # Normaliza hífen para espaço (ex: "cinza-chumbo" → "cinza chumbo")
+                                    _cor_busca = _desc_avulso_extra.lower().strip().replace("-", " ")
                                     # "cor / tipo" (ex: "preta / space 2", "R$59,99 / Diversos") → busca multi-termo
                                     if "/" in _cor_busca:
                                         _termos_multi = [t.strip() for t in _cor_busca.split("/")]
@@ -2541,9 +2542,14 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                             "roxa":"roxo", "amarela":"amarelo",
                                             "diversas":"diversos", "fúcsia":"fucsia", "fucsia":"fúcsia",
                                             "azuis":"azul", "verdes":"verde",
+                                            "clara":"claro", "escura":"escuro",
                                         }
                                         if _cor_busca in _genero_map:
                                             _cor_variantes.add(_genero_map[_cor_busca])
+                                        # Cores compostas: normaliza último adjetivo (ex: "azul clara" → "azul claro")
+                                        _palavras = _cor_busca.split()
+                                        if len(_palavras) > 1 and _palavras[-1] in _genero_map:
+                                            _cor_variantes.add(" ".join(_palavras[:-1] + [_genero_map[_palavras[-1]]]))
                                         if _cor_busca.endswith("s") and len(_cor_busca) > 3:
                                             _cor_variantes.add(_cor_busca[:-1])
                                         for _v in _prod_obj_av.get("variacoes", []):
@@ -2765,7 +2771,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     _reprocess_txt = st.text_area("Itens para reprocessar", value=_reprocess_linhas, height=100, key="wpp_reprocess_txt", label_visibility="collapsed")
                     if st.button("🔄 Reprocessar com IA", key="wpp_reprocess_btn", use_container_width=True):
                         _expandido_ok = [l for l in st.session_state.get("wpp_expandido", []) if l["_achado"]]
-                        st.session_state["wpp_input"] = _reprocess_txt
+                        st.session_state["wpp_transcricao"] = _reprocess_txt
                         st.session_state["wpp_reprocess_base"] = _expandido_ok
                         st.session_state.pop("wpp_expandido", None)
                         st.session_state.pop("wpp_nao_comp", None)
