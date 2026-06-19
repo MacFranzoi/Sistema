@@ -1,166 +1,237 @@
-"""
-Sistema Beta — UI redesenhada, mobile-first, SaaS-ready.
-Usa o mesmo api.py e dados da versão Classic.
-"""
+"""Sistema Beta v3 — Rich UI, mobile-first, market-ready."""
 
+import json
 import streamlit as st
 import pandas as pd
 import io
 from datetime import date, datetime, timedelta
 import api
 
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 # CSS
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 
-_BETA_CSS = """
-<style>
-[data-testid="stHeader"]  { display: none !important; }
-[data-testid="stSidebar"] { display: none !important; }
-[data-testid="stToolbar"] { display: none !important; }
-.block-container { padding: 0 !important; max-width: 100% !important; }
+_CSS = """<style>
+[data-testid="stHeader"],[data-testid="stSidebar"],
+[data-testid="stToolbar"],[data-testid="stDecoration"]{display:none!important}
+.block-container{padding:0!important;max-width:100%!important}
+[data-testid="stAppViewContainer"],[data-testid="stMain"]{background:#f0f2f8!important}
 
-/* ── Cores ── */
-:root {
-  --acc: #4f46e5;
-  --acc2: #7c3aed;
-  --bg: #f1f5f9;
-  --card: #ffffff;
-  --txt: #0f172a;
-  --txt2: #64748b;
-  --bor: #e2e8f0;
-  --red: #ef4444;
-  --grn: #22c55e;
-  --yel: #f59e0b;
-}
+/* ── Top bar ── */
+.bh{background:linear-gradient(135deg,#1e1b4b 0%,#4f46e5 60%,#7c3aed 100%);
+color:#fff;padding:0 20px;height:56px;display:flex;align-items:center;
+justify-content:space-between;position:sticky;top:0;z-index:300;
+box-shadow:0 2px 20px rgba(79,70,229,.4)}
+.bh-brand{display:flex;align-items:center;gap:10px}
+.bh-icon{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.18);
+display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+.bh-name{font-weight:800;font-size:1rem;letter-spacing:-.3px}
+.bh-pill{background:rgba(255,255,255,.22);padding:2px 8px;border-radius:20px;
+font-size:.55rem;font-weight:700;letter-spacing:1px}
+.bh-right{display:flex;align-items:center;gap:10px;font-size:.72rem}
+.bh-loja{background:rgba(255,255,255,.15);padding:4px 10px;border-radius:20px;
+font-size:.68rem;font-weight:600}
 
-[data-testid="stAppViewContainer"] {
-  background: var(--bg) !important;
-}
+/* ── Nav tabs ── */
+[data-testid="stTabs"]>[data-baseweb="tab-list"]{background:#fff!important;
+border-bottom:1px solid #e2e8f0!important;padding:0 16px!important;
+gap:0!important;overflow-x:auto!important;flex-wrap:nowrap!important;
+box-shadow:0 1px 4px rgba(0,0,0,.06)!important}
+[data-testid="stTabs"]>[data-baseweb="tab-list"] [data-baseweb="tab"]{
+font-size:.78rem!important;font-weight:500!important;padding:12px 16px!important;
+color:#64748b!important;background:none!important;border:none!important;
+border-bottom:2.5px solid transparent!important;margin-bottom:-1px!important;
+white-space:nowrap!important}
+[data-testid="stTabs"]>[data-baseweb="tab-list"] [aria-selected="true"]{
+color:#4f46e5!important;border-bottom-color:#4f46e5!important;font-weight:700!important}
+[data-testid="stTabs"]>[data-baseweb="tab-list"] [data-baseweb="tab"]:hover{
+color:#4f46e5!important;background:#f5f3ff!important}
 
-/* ── Header ── */
-.bh {
-  background: linear-gradient(135deg, var(--acc) 0%, var(--acc2) 100%);
-  color: white;
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky; top: 0; z-index: 100;
-}
-.bh-logo { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.3px; }
-.bh-beta {
-  background: rgba(255,255,255,0.25);
-  padding: 2px 7px; border-radius: 20px;
-  font-size: 0.6rem; font-weight: 700;
-  letter-spacing: 0.8px; margin-left: 7px;
-}
-.bh-right { font-size: 0.75rem; opacity: 0.85; }
+/* ── Nested tabs ── */
+[data-testid="stTabs"] [data-testid="stTabs"]>[data-baseweb="tab-list"]{
+background:transparent!important;border-bottom:1px solid #dde3ee!important;
+padding:0!important;box-shadow:none!important}
+[data-testid="stTabs"] [data-testid="stTabs"]>[data-baseweb="tab-list"] [data-baseweb="tab"]{
+padding:8px 12px!important;font-size:.75rem!important}
 
-/* ── Conteúdo ── */
-.bc { padding: 14px 16px; max-width: 860px; margin: 0 auto; }
+/* ── Page ── */
+.pg{padding:20px 24px 60px;max-width:960px;margin:0 auto}
+.pg-title{font-size:1.15rem;font-weight:800;color:#0f172a;letter-spacing:-.4px;margin:0}
+.pg-sub{font-size:.74rem;color:#94a3b8;margin-top:3px;margin-bottom:16px}
 
-/* ── Seção título ── */
-.b-sec {
-  font-size: 0.65rem; font-weight: 700; color: var(--txt2);
-  text-transform: uppercase; letter-spacing: 0.8px;
-  margin: 16px 0 8px;
-}
+/* ── Cards ── */
+.card{background:#fff;border-radius:14px;padding:18px 20px;margin-bottom:14px;
+box-shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.03);border:1px solid rgba(0,0,0,.04)}
+.card-sm{background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:8px;
+box-shadow:0 1px 3px rgba(0,0,0,.05);border:1px solid #f1f5f9}
+.card-grad{border-radius:14px;padding:20px 22px;color:#fff;margin-bottom:14px}
+.card-ind{background:linear-gradient(135deg,#4f46e5,#7c3aed)}
+.card-grn{background:linear-gradient(135deg,#059669,#10b981)}
+.card-amb{background:linear-gradient(135deg,#d97706,#f59e0b)}
+.card-red{background:linear-gradient(135deg,#dc2626,#ef4444)}
 
-/* ── KPI card ── */
-.bk {
-  background: var(--card);
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.07);
-}
-.bk-val {
-  font-size: 1.55rem; font-weight: 700;
-  color: var(--txt); line-height: 1.1;
-}
-.bk-lbl { font-size: 0.68rem; color: var(--txt2); font-weight: 500; margin-top: 3px; }
-.bk-red  { color: var(--red) !important; }
-.bk-grn  { color: var(--grn) !important; }
-.bk-acc  { color: var(--acc) !important; }
+/* ── KPI ── */
+.kpi{background:#fff;border-radius:13px;padding:16px 18px;
+box-shadow:0 1px 3px rgba(0,0,0,.07);height:100%;border:1px solid rgba(0,0,0,.04)}
+.kpi-lbl{font-size:.63rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px}
+.kpi-icon{font-size:1.2rem;float:right;opacity:.6;margin-top:-2px}
+.kpi-val{font-size:1.6rem;font-weight:800;color:#0f172a;line-height:1.1;margin-top:6px}
+.kpi-sub{font-size:.67rem;color:#94a3b8;margin-top:5px}
+.kpi-grn .kpi-val{color:#059669}.kpi-red .kpi-val{color:#dc2626}
+.kpi-ind .kpi-val{color:#4f46e5}.kpi-amb .kpi-val{color:#d97706}
 
-/* ── Alert card ── */
-.ba {
-  border-left: 4px solid var(--red);
-  background: #fff5f5;
-  border-radius: 0 8px 8px 0;
-  padding: 9px 12px; margin-bottom: 7px;
-}
-.ba-warn { border-left-color: var(--yel); background: #fffbeb; }
-.ba-ok   { border-left-color: var(--grn); background: #f0fdf4; }
-.ba-t  { font-size: 0.8rem; font-weight: 600; color: var(--txt); }
-.ba-s  { font-size: 0.7rem; color: var(--txt2); margin-top: 2px; }
+/* ── Section label ── */
+.sec{font-size:.6rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+letter-spacing:.9px;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+.sec::after{content:'';flex:1;height:1px;background:#e8ecf2}
 
-/* ── Card genérico ── */
-.bcard {
-  background: var(--card);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
-  margin-bottom: 12px;
-}
+/* ── Alerts ── */
+.alerta{border-left:3px solid #ef4444;background:#fff5f5;border-radius:0 10px 10px 0;
+padding:10px 14px;margin-bottom:8px}
+.alerta-yel{border-left-color:#f59e0b;background:#fffbeb}
+.alerta-grn{border-left-color:#22c55e;background:#f0fdf4}
+.alerta-ind{border-left-color:#4f46e5;background:#f5f3ff}
+.alerta-t{font-size:.8rem;font-weight:600;color:#0f172a}
+.alerta-s{font-size:.69rem;color:#64748b;margin-top:2px}
 
-/* ── Botões de nav ── */
-[data-testid="stButton"] > button {
-  border-radius: 8px !important;
-  font-size: 0.8rem !important;
-  font-weight: 500 !important;
-  min-height: 38px !important;
-}
+/* ── Chips ── */
+.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;
+font-size:.6rem;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.chip-red{background:#fee2e2;color:#b91c1c}.chip-yel{background:#fef3c7;color:#92400e}
+.chip-grn{background:#dcfce7;color:#15803d}.chip-ind{background:#ede9fe;color:#4338ca}
+.chip-blue{background:#dbeafe;color:#1e40af}.chip-gray{background:#f1f5f9;color:#475569}
 
-/* ── Tag / chip ── */
-.chip {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 20px;
-  font-size: 0.65rem;
-  font-weight: 600;
-}
-.chip-red  { background:#fee2e2; color:#dc2626; }
-.chip-yel  { background:#fef3c7; color:#b45309; }
-.chip-grn  { background:#dcfce7; color:#15803d; }
-.chip-blue { background:#ede9fe; color:#4f46e5; }
+/* ── List rows ── */
+.li{background:#fff;border-radius:10px;padding:12px 15px;margin-bottom:7px;
+border:1px solid #f1f5f9;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.li-name{font-size:.83rem;font-weight:600;color:#0f172a}
+.li-sub{font-size:.7rem;color:#64748b;margin-top:2px}
+
+/* ── Buttons ── */
+[data-testid="stButton"]>button{border-radius:9px!important;font-weight:600!important;
+font-size:.82rem!important;min-height:42px!important}
+[data-testid="stButton"]>button[kind="primary"]{
+background:linear-gradient(135deg,#4f46e5,#7c3aed)!important;
+border:none!important;color:#fff!important;
+box-shadow:0 2px 8px rgba(79,70,229,.3)!important}
+
+/* ── Inputs ── */
+[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea,
+[data-testid="stNumberInput"] input{border-radius:9px!important;font-size:.85rem!important}
+[data-testid="stTextInput"] label,[data-testid="stNumberInput"] label,
+[data-testid="stSelectbox"] label,[data-testid="stTextArea"] label{
+font-size:.74rem!important;font-weight:600!important;color:#475569!important}
+
+/* ── DataFrames ── */
+[data-testid="stDataFrame"]>div{border-radius:12px!important;overflow:hidden!important;
+box-shadow:0 1px 4px rgba(0,0,0,.06)!important;border:1px solid #f1f5f9!important}
+
+/* ── Expanders ── */
+[data-testid="stExpander"]{border:1px solid #e2e8f0!important;border-radius:12px!important;
+background:#fff!important;margin-bottom:10px!important}
+[data-testid="stExpander"] summary{font-size:.84rem!important;font-weight:600!important}
 
 /* ── Mobile ── */
-@media (max-width:640px) {
-  .bc { padding: 10px 10px 70px !important; }
-}
+@media(max-width:640px){
+.pg{padding:14px 12px 70px!important}
+.bh{padding:0 14px!important;height:50px!important}
+.bh-loja{display:none!important}
+.kpi-val{font-size:1.3rem!important}
+[data-testid="stTabs"]>[data-baseweb="tab-list"] [data-baseweb="tab"]{
+padding:10px 11px!important;font-size:.7rem!important}}
+</style>"""
 
-/* ── Divider ── */
-.b-div { border: none; border-top: 1px solid var(--bor); margin: 14px 0; }
 
-/* ── Versão switcher ── */
-.vsw {
-  font-size:0.68rem; color:var(--txt2); text-align:center; margin-top:6px;
-}
-</style>
-"""
+# ══════════════════════════════════════════════════════════════════
+# Visual helpers
+# ══════════════════════════════════════════════════════════════════
 
-# ──────────────────────────────────────────────────────────────────
-# Helpers de UI
-# ──────────────────────────────────────────────────────────────────
-
-def _kpi(val, lbl, cls=""):
-    st.markdown(f'<div class="bk"><div class="bk-val {cls}">{val}</div><div class="bk-lbl">{lbl}</div></div>', unsafe_allow_html=True)
+def _kpi(val, lbl, cls="", icon="", sub=""):
+    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    ico_html  = f'<span class="kpi-icon">{icon}</span>' if icon else ""
+    st.markdown(
+        f'<div class="kpi {cls}">'
+        f'<div class="kpi-lbl">{lbl}{ico_html}</div>'
+        f'<div class="kpi-val">{val}</div>'
+        f'{sub_html}</div>',
+        unsafe_allow_html=True,
+    )
 
 def _alerta(titulo, sub="", tipo="red"):
-    cls = "ba" if tipo == "red" else ("ba ba-warn" if tipo == "yel" else "ba ba-ok")
-    st.markdown(f'<div class="{cls}"><div class="ba-t">{titulo}</div><div class="ba-s">{sub}</div></div>', unsafe_allow_html=True)
+    cls = "alerta" + ("" if tipo == "red" else f" alerta-{tipo}")
+    sub_html = f'<div class="alerta-s">{sub}</div>' if sub else ""
+    st.markdown(
+        f'<div class="{cls}"><div class="alerta-t">{titulo}</div>{sub_html}</div>',
+        unsafe_allow_html=True,
+    )
 
-def _sec(titulo):
-    st.markdown(f'<div class="b-sec">{titulo}</div>', unsafe_allow_html=True)
+def _sec(txt):
+    st.markdown(f'<div class="sec">{txt}</div>', unsafe_allow_html=True)
 
-def _chip(texto, cor="blue"):
-    return f'<span class="chip chip-{cor}">{texto}</span>'
+def _chip(txt, cor="ind"):
+    return f'<span class="chip chip-{cor}">{txt}</span>'
+
+def _pg_header(title, subtitle=""):
+    st.markdown(
+        f'<div class="pg-title">{title}</div>'
+        f'<div class="pg-sub">{subtitle}</div>' if subtitle else f'<div class="pg-title" style="margin-bottom:16px">{title}</div>',
+        unsafe_allow_html=True,
+    )
+
+def _empty_state(icon, msg, hint=""):
+    hint_html = f'<div style="font-size:.73rem;color:#94a3b8;margin-top:6px">{hint}</div>' if hint else ""
+    st.markdown(
+        f'<div class="card" style="text-align:center;padding:38px 20px">'
+        f'<div style="font-size:2.6rem;margin-bottom:10px">{icon}</div>'
+        f'<div style="font-size:.88rem;font-weight:600;color:#475569">{msg}</div>'
+        f'{hint_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+def _copiar_html(texto):
+    import html as _h, streamlit.components.v1 as cv
+    cv.html(
+        f'<textarea id="ct" style="position:fixed;top:-9999px">{_h.escape(texto)}</textarea>'
+        f'<p style="margin:0;font:13px sans-serif;color:#059669">✅ Copiado para área de transferência!</p>'
+        f'<script>(function(){{var e=document.getElementById("ct");e.focus();e.select();'
+        f'try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}});'
+        f'}}catch(ex){{document.execCommand("copy");}}}})();</script>',
+        height=35,
+    )
+
+def _stock_bar_html(name, current, ref=20):
+    pct = min(100, int(current / max(1, ref) * 100))
+    if current <= 3:
+        fg, bg = "#ef4444", "#fee2e2"
+    elif current <= 10:
+        fg, bg = "#f59e0b", "#fef3c7"
+    else:
+        fg, bg = "#22c55e", "#dcfce7"
+    return (
+        f'<div style="margin-bottom:9px">'
+        f'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
+        f'<span style="font-size:.72rem;font-weight:600;color:#475569">{name[:36]}</span>'
+        f'<span style="font-size:.7rem;font-weight:700;color:#0f172a">{current} un</span>'
+        f'</div>'
+        f'<div style="background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden">'
+        f'<div style="width:{pct}%;height:100%;background:{fg};border-radius:4px"></div>'
+        f'</div></div>'
+    )
+
+def _grad_card(icon, val, lbl, color="ind"):
+    st.markdown(
+        f'<div class="card-grad card-{color}">'
+        f'<div style="font-size:1.5rem;opacity:.75">{icon}</div>'
+        f'<div style="font-size:1.8rem;font-weight:800;margin:4px 0;line-height:1">{val}</div>'
+        f'<div style="font-size:.67rem;font-weight:700;opacity:.8;text-transform:uppercase;letter-spacing:.5px">{lbl}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 # Auth
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 
 def _check_auth():
     if "usuario_logado" not in st.session_state:
@@ -175,54 +246,46 @@ def _check_auth():
     return st.session_state.usuario_logado is not None
 
 
-def _login_page():
-    _, col, _ = st.columns([1, 1.2, 1])
+def _tela_login():
+    _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        st.markdown(f"""
+        st.markdown("""
         <style>
-        [data-testid="stAppViewContainer"] {{
-          background: linear-gradient(135deg, #ede9fe 0%, #f1f5f9 100%) !important;
-        }}
-        section[data-testid="stMain"] {{
-          display:flex !important; align-items:center !important;
-          justify-content:center !important; min-height:100dvh !important;
-        }}
-        [data-testid="stForm"] {{
-          background:#fff !important;
-          border:1px solid #e2e8f0 !important;
-          border-radius:16px !important;
-          padding:2rem !important;
-          box-shadow:0 8px 40px rgba(79,70,229,.12) !important;
-        }}
-        [data-testid="stForm"] button[type="submit"] {{
-          background:linear-gradient(135deg,#4f46e5,#7c3aed) !important;
-          color:#fff !important; font-weight:600 !important;
-          border:none !important; border-radius:8px !important;
-          margin-top:.8rem !important;
-        }}
+        [data-testid="stAppViewContainer"]{
+          background:linear-gradient(160deg,#ede9fe 0%,#dbeafe 100%)!important}
+        [data-testid="stForm"]{background:#fff!important;border:1px solid #e2e8f0!important;
+          border-radius:18px!important;padding:2.2rem 2rem 1.8rem!important;
+          box-shadow:0 8px 48px rgba(79,70,229,.14)!important}
+        [data-testid="stForm"] button[type="submit"]{
+          background:linear-gradient(135deg,#4f46e5,#7c3aed)!important;
+          color:#fff!important;font-weight:700!important;border:none!important;
+          border-radius:9px!important;min-height:44px!important;
+          font-size:.88rem!important;margin-top:.6rem!important;
+          box-shadow:0 2px 16px rgba(79,70,229,.35)!important}
         </style>
-        <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="text-align:center;margin-bottom:1.8rem">
           <div style="display:inline-flex;align-items:center;justify-content:center;
-            width:52px;height:52px;border-radius:14px;
+            width:56px;height:56px;border-radius:16px;
             background:linear-gradient(135deg,#4f46e5,#7c3aed);
-            box-shadow:0 4px 20px rgba(79,70,229,.35);margin-bottom:12px">
-            <span style="font-size:1.5rem">⚡</span>
+            box-shadow:0 6px 24px rgba(79,70,229,.4);margin-bottom:14px">
+            <span style="font-size:1.6rem">⚡</span>
           </div>
-          <div style="font-size:1.3rem;font-weight:700;color:#0f172a;letter-spacing:-.4px">
-            Plug ERP <span style="background:#ede9fe;color:#4f46e5;
-            font-size:.6rem;padding:2px 7px;border-radius:12px;font-weight:700;
-            vertical-align:middle;margin-left:4px">BETA</span>
+          <div style="font-size:1.4rem;font-weight:800;color:#0f172a;letter-spacing:-.5px">
+            Plug ERP
+            <span style="background:#ede9fe;color:#4338ca;font-size:.52rem;
+              padding:3px 8px;border-radius:12px;font-weight:700;
+              vertical-align:middle;margin-left:6px">BETA</span>
           </div>
-          <div style="font-size:.72rem;color:#94a3b8;margin-top:4px">
-            Interface redesenhada · Mobile-first
+          <div style="font-size:.72rem;color:#94a3b8;margin-top:5px">
+            Interface redesenhada · Mobile-first · Mais recursos
           </div>
         </div>
         """, unsafe_allow_html=True)
 
         with st.form("beta_login"):
-            u_in = st.text_input("Usuário")
-            s_in = st.text_input("Senha", type="password")
-            ok   = st.form_submit_button("Entrar", use_container_width=True)
+            u_in = st.text_input("Usuário", placeholder="seu usuário")
+            s_in = st.text_input("Senha", type="password", placeholder="••••••")
+            ok   = st.form_submit_button("Entrar →", use_container_width=True)
 
         if ok:
             u = u_in.strip().lower()
@@ -237,873 +300,1591 @@ def _login_page():
             else:
                 st.error("Usuário ou senha incorretos.")
 
-        st.markdown('<div class="vsw">Prefere a versão anterior?</div>', unsafe_allow_html=True)
-        if st.button("← Voltar para o Classic", use_container_width=True, key="beta_login_switch"):
+        st.markdown('<hr style="margin:16px 0 12px;opacity:.12">', unsafe_allow_html=True)
+        if st.button("← Usar versão Classic", use_container_width=True, key="beta_login_cls"):
             st.session_state["version"] = "classic"
             st.query_params["v"] = "classic"
             st.rerun()
 
 
-# ──────────────────────────────────────────────────────────────────
-# Navegação
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# Header
+# ══════════════════════════════════════════════════════════════════
 
-_NAV = [
-    ("🏠", "dashboard",  "Início"),
-    ("🛒", "pedidos",    "Pedidos"),
-    ("📦", "estoque",    "Estoque"),
-    ("💰", "financeiro", "Financeiro"),
-    ("📊", "relatorios", "Relatórios"),
-    ("⚙️", "config",    "Config"),
-]
-
-_PG_MAP = {
-    "dashboard":  ["dashboard"],
-    "pedidos":    ["pedido"],
-    "estoque":    ["entrada", "acerto", "estoque_loja", "etiquetas"],
-    "financeiro": ["financeiro"],
-    "relatorios": ["relatorios"],
-    "config":     ["sincronizacao", "usuarios", "listas"],
-}
-
-def _allowed_beta_pages(paginas_perm):
-    result = []
-    for _, pid, _ in _NAV:
-        reqs = _PG_MAP.get(pid, [pid])
-        if any(r in paginas_perm for r in reqs):
-            result.append(pid)
-    return result
-
-def _get_beta_page(allowed):
-    if "beta_pagina" not in st.session_state:
-        _p = st.query_params.get("bp", "dashboard")
-        st.session_state["beta_pagina"] = _p if _p in allowed else (allowed[0] if allowed else "dashboard")
-    if st.session_state["beta_pagina"] not in allowed:
-        st.session_state["beta_pagina"] = allowed[0] if allowed else "dashboard"
-    return st.session_state["beta_pagina"]
-
-def _render_nav(pg, nome_usr, allowed):
-    items = [(e, pid, lbl) for e, pid, lbl in _NAV if pid in allowed]
-    cols = st.columns(len(items))
-    for col, (emoji, pid, lbl) in zip(cols, items):
-        active = pg == pid
-        tp = "primary" if active else "secondary"
-        if col.button(f"{emoji} {lbl}", use_container_width=True, type=tp, key=f"bnav_{pid}"):
-            st.session_state["beta_pagina"] = pid
-            st.query_params["bp"] = pid
-            st.rerun()
-
-def _render_header(nome_usr, loja_nome):
-    st.markdown(f"""
-    <div class="bh">
-      <div class="bh-logo">⚡ Plug ERP <span class="bh-beta">BETA</span></div>
-      <div class="bh-right">🏪 {loja_nome} · {nome_usr}</div>
-    </div>
-    """, unsafe_allow_html=True)
+def _header(nome, loja_nome):
+    st.markdown(
+        f'<div class="bh">'
+        f'<div class="bh-brand">'
+        f'<div class="bh-icon">⚡</div>'
+        f'<div class="bh-name">Plug ERP</div>'
+        f'<div class="bh-pill">BETA</div>'
+        f'</div>'
+        f'<div class="bh-right">'
+        f'<div class="bh-loja">🏪 {loja_nome}</div>'
+        f'<div style="opacity:.75">{nome.split()[0]}</div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
-# ──────────────────────────────────────────────────────────────────
-# Alertas de estoque baixo
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# Stock alerts (cached 5 min)
+# ══════════════════════════════════════════════════════════════════
 
-def _detectar_alertas_estoque(cache, limiar_critico=3, limiar_baixo=10):
+@st.cache_data(ttl=300)
+def _alertas_estoque(loja_id):
+    c = api.carregar_cache(loja_id)
     criticos, baixos = [], []
-    for p in (cache or {}).get("produtos", []):
+    for p in (c or {}).get("produtos", []):
         for v in p.get("variacoes", []):
-            vd = v.get("variacao", v)
+            vd  = v.get("variacao", v)
             est = int(vd.get("estoque", 0) or 0)
-            item = {
-                "produto": p.get("nome", ""),
-                "variacao": vd.get("nome", ""),
-                "cod": vd.get("codigo", ""),
-                "estoque": est,
-            }
-            if est <= limiar_critico:
-                criticos.append(item)
-            elif est <= limiar_baixo:
-                baixos.append(item)
+            item = {"produto": p.get("nome", ""), "variacao": vd.get("nome", ""),
+                    "cod": vd.get("codigo", ""), "estoque": est}
+            if est <= 3:    criticos.append(item)
+            elif est <= 10: baixos.append(item)
     return (sorted(criticos, key=lambda x: x["estoque"]),
             sorted(baixos,   key=lambda x: x["estoque"]))
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Dashboard
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# DASHBOARD
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_dashboard(cache, loja_id, loja_nome):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _dashboard(cache, loja_id, loja_nome, nome, is_adm):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
 
-    # KPIs principais
+    hora  = datetime.now().hour
+    saud  = "Bom dia" if hora < 12 else ("Boa tarde" if hora < 18 else "Boa noite")
+    hoje  = date.today().strftime("%A, %d de %B de %Y")
+    # Translate weekday/month to Portuguese
+    _dias = {"Monday":"Segunda","Tuesday":"Terça","Wednesday":"Quarta",
+              "Thursday":"Quinta","Friday":"Sexta","Saturday":"Sábado","Sunday":"Domingo"}
+    _mes  = {"January":"janeiro","February":"fevereiro","March":"março",
+              "April":"abril","May":"maio","June":"junho","July":"julho",
+              "August":"agosto","September":"setembro","October":"outubro",
+              "November":"novembro","December":"dezembro"}
+    for en, pt in {**_dias, **_mes}.items():
+        hoje = hoje.replace(en, pt)
+
+    st.markdown(
+        f'<div style="margin-bottom:18px">'
+        f'<div style="font-size:1.05rem;font-weight:700;color:#0f172a">'
+        f'{saud}, {nome.split()[0]} 👋</div>'
+        f'<div style="font-size:.72rem;color:#94a3b8;margin-top:2px">{hoje}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── KPIs principais ──
     _sec("Visão geral")
-    total_prods = cache.get("total", 0) if cache else 0
-    sync_em = (cache.get("sincronizado_em","") or "")[:10] if cache else "—"
-    total_lojas = len(api.LOJAS)
+    total   = cache.get("total", 0) if cache else 0
+    n_lojas = len(api.LOJAS)
+    sync_em = (cache.get("sincronizado_em", "") or "")[:10] if cache else "—"
+    criticos, baixos = _alertas_estoque(loja_id) if cache else ([], [])
+    n_crit  = len(criticos)
+    alerta_cor = "kpi-red" if n_crit > 0 else "kpi-grn"
 
-    k1, k2, k3 = st.columns(3)
-    with k1: _kpi(f"{total_prods:,}", "Produtos no catálogo", "bk-acc")
-    with k2: _kpi(total_lojas, "Lojas ativas")
-    with k3: _kpi(sync_em, "Última sync")
-
-    # Alertas de estoque
-    _sec("⚠️ Alertas de estoque")
-    if cache:
-        criticos, baixos = _detectar_alertas_estoque(cache)
-        if not criticos and not baixos:
-            _alerta("Estoque saudável — nenhuma variação crítica", tipo="ok")
+    k1, k2, k3, k4 = st.columns(4)
+    with k1: _kpi(f"{total:,}",  "Produtos",      "kpi-ind", "📦", f"sync {sync_em}")
+    with k2: _kpi(str(n_lojas),  "Lojas ativas",  "",        "🏪")
+    with k3: _kpi(str(n_crit),   "Críticos",      alerta_cor,"🚨", f"+ {len(baixos)} baixo(s)")
+    with k4:
+        _fin_key = f"beta_fin_{loja_id}"
+        if _fin_key in st.session_state:
+            tr, tp = st.session_state[_fin_key]
+            res    = tr - tp
+            _kpi(f"R$ {res:,.0f}", "Resultado mês",
+                 "kpi-grn" if res >= 0 else "kpi-red", "💰")
         else:
+            _kpi("—", "Resultado mês", "", "💰", "clique em Financeiro")
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+    # ── Estoque visual ──
+    if cache:
+        _sec("⚠️ Saúde do estoque")
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            if criticos or baixos:
+                top = (criticos + baixos)[:12]
+                bars_html = "".join(_stock_bar_html(
+                    f"{it['produto']} / {it['variacao']}", it["estoque"]
+                ) for it in top)
+                st.markdown(f'<div class="card" style="padding:16px 18px">{bars_html}</div>',
+                            unsafe_allow_html=True)
+            else:
+                _alerta("✅  Todos os produtos com estoque saudável", tipo="grn")
+
+        with c2:
+            total_vars = sum(len(p.get("variacoes", [])) for p in cache.get("produtos", []))
+            n_ok = total_vars - len(criticos) - len(baixos)
+            _kpi(f"{n_crit}", "Críticos (≤3 un)", "kpi-red", "🔴",
+                 f"{len(baixos)} baixos · {n_ok} ok")
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
             if criticos:
-                for item in criticos[:5]:
-                    _alerta(
-                        f"CRÍTICO · {item['produto']} / {item['variacao']}",
-                        f"Estoque: {item['estoque']} un · Cód: {item['cod']}",
-                        "red"
+                # Top 3 mais críticos
+                for it in criticos[:3]:
+                    st.markdown(
+                        f'<div class="card-sm">'
+                        f'<div class="li-name">{it["produto"][:28]}</div>'
+                        f'<div class="li-sub">{it["variacao"]} · '
+                        f'<b style="color:#dc2626">{it["estoque"]} un</b></div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
                     )
-                if len(criticos) > 5:
-                    st.caption(f"+ {len(criticos)-5} outros itens críticos")
-            if baixos:
-                for item in baixos[:3]:
-                    _alerta(
-                        f"Baixo · {item['produto']} / {item['variacao']}",
-                        f"Estoque: {item['estoque']} un",
-                        "yel"
-                    )
-                if len(baixos) > 3:
-                    st.caption(f"+ {len(baixos)-3} outros com estoque baixo")
-    else:
-        st.info("Sincronize os produtos para ver alertas de estoque.")
 
-    # Resumo financeiro
-    _sec("💰 Financeiro do mês")
-    if "beta_fin" not in st.session_state:
-        try:
-            _ini = date.today().replace(day=1)
-            _fim = date.today()
-            _rec = api.buscar_contas_receber(data_ini=str(_ini), data_fim=str(_fim), limite=500)
-            _pag = api.buscar_contas_pagar(data_ini=str(_ini), data_fim=str(_fim), limite=500)
-            if not isinstance(_rec, list): _rec = []
-            if not isinstance(_pag, list): _pag = []
-            _tr = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in _rec)
-            _tp = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in _pag)
-            st.session_state["beta_fin"] = (_tr, _tp)
-        except Exception:
-            st.session_state["beta_fin"] = (0.0, 0.0)
+        if st.button("🔄 Atualizar alertas", key="dash_refresh_alerta"):
+            _alertas_estoque.clear()
+            st.rerun()
 
-    _tr, _tp = st.session_state.get("beta_fin", (0.0, 0.0))
-    _res = _tr - _tp
+    # ── Financeiro do mês ──
+    _sec("💰 Financeiro — mês atual")
+    _fin_key = f"beta_fin_{loja_id}"
+    if _fin_key not in st.session_state:
+        with st.spinner("Carregando financeiro…"):
+            try:
+                ini = date.today().replace(day=1)
+                fim = date.today()
+                rec = api.buscar_contas_receber(str(ini), str(fim), limite=500)
+                pag = api.buscar_contas_pagar(str(ini), str(fim), limite=500)
+                if not isinstance(rec, list): rec = []
+                if not isinstance(pag, list): pag = []
+                tr = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in rec)
+                tp = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in pag)
+                st.session_state[_fin_key] = (tr, tp)
+            except Exception:
+                st.session_state[_fin_key] = (0.0, 0.0)
+
+    tr, tp = st.session_state.get(_fin_key, (0.0, 0.0))
+    res     = tr - tp
     f1, f2, f3 = st.columns(3)
-    with f1: _kpi(f"R$ {_tr:,.0f}", "A receber", "bk-grn")
-    with f2: _kpi(f"R$ {_tp:,.0f}", "A pagar", "bk-red")
-    with f3: _kpi(f"R$ {_res:,.0f}", "Resultado", "bk-grn" if _res >= 0 else "bk-red")
+    with f1: _grad_card("💚", f"R$ {tr:,.0f}", "A receber", "grn")
+    with f2: _grad_card("❤️",  f"R$ {tp:,.0f}", "A pagar",   "red")
+    with f3: _grad_card("⚡", f"R$ {res:,.0f}", "Resultado", "ind" if res >= 0 else "red")
 
-    if st.button("🔄 Atualizar financeiro", key="dash_fin_refresh"):
-        st.session_state.pop("beta_fin", None)
+    if tr > 0 or tp > 0:
+        df_fin = pd.DataFrame({"Valor": {"Receitas": tr, "Despesas": tp, "Resultado": max(0, res)}})
+        st.bar_chart(df_fin)
+
+    if st.button("🔄 Atualizar financeiro", key="dash_refresh_fin"):
+        st.session_state.pop(_fin_key, None)
         st.rerun()
 
-    # Status lojas
+    # ── Status das lojas ──
     _sec("🏪 Status das lojas")
-    cols_l = st.columns(len(api.LOJAS))
-    for col, (lid, lnome) in zip(cols_l, api.LOJAS.items()):
+    lcols = st.columns(len(api.LOJAS))
+    for col, (lid, lnm) in zip(lcols, api.LOJAS.items()):
         c = api.carregar_cache(lid)
         t = c.get("total", 0) if c else 0
-        s = (c.get("sincronizado_em","") or "")[:10] if c else "—"
-        cor = "#22c55e" if c else "#ef4444"
-        col.markdown(f"""
-        <div class="bcard" style="text-align:center;padding:12px">
-          <div style="font-size:.65rem;color:#64748b;font-weight:600">{lnome}</div>
-          <div style="font-size:1.4rem;font-weight:700;color:#0f172a;margin:4px 0">{t}</div>
-          <div style="font-size:.6rem;color:{cor};font-weight:600">
-            {"● Online" if c else "● Sem cache"}
-          </div>
-          <div style="font-size:.6rem;color:#94a3b8;margin-top:2px">{s}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        s = (c.get("sincronizado_em", "") or "")[:10] if c else "—"
+        cor  = "#16a34a" if c else "#dc2626"
+        txt  = "● Online" if c else "● Sem dados"
+        col.markdown(
+            f'<div class="card" style="text-align:center;padding:13px 8px">'
+            f'<div style="font-size:.63rem;font-weight:600;color:#64748b">{lnm}</div>'
+            f'<div style="font-size:1.4rem;font-weight:800;color:#0f172a;margin:5px 0">{t}</div>'
+            f'<div style="font-size:.58rem;font-weight:700;color:{cor}">{txt}</div>'
+            f'<div style="font-size:.57rem;color:#94a3b8;margin-top:3px">{s}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Ações rápidas ──
+    _sec("⚡ Ações rápidas")
+    qa1, qa2, qa3 = st.columns(3)
+    if qa1.button("🛒 Novo Pedido", use_container_width=True, key="dash_qa_ped"):
+        st.info("Abra a aba **Pedidos** acima para criar um novo pedido.")
+    if qa2.button("🔄 Sincronizar", use_container_width=True, key="dash_qa_sync"):
+        st.info("Abra **Config → Sincronização** para sincronizar.")
+    if qa3.button("📊 Ver Relatórios", use_container_width=True, key="dash_qa_rel"):
+        st.info("Abra a aba **Relatórios** para ver análises detalhadas.")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Pedidos (simplificado, mobile-first)
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# PEDIDOS
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_pedidos(cache, loja_id):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _pedidos(cache, loja_id):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("🛒 Pedidos de Compra", "Crie, gerencie e exporte pedidos")
 
-    if "beta_ped_itens" not in st.session_state:
-        st.session_state.beta_ped_itens = []
+    if "beta_ped" not in st.session_state:
+        st.session_state.beta_ped = []
+    itens = st.session_state.beta_ped
 
-    itens = st.session_state.beta_ped_itens
-
-    # Banner lista aberta
-    _lista_arq = st.session_state.get("beta_lista_arq")
-    if _lista_arq:
-        import json as _jb, os as _ob
-        _cam = _ob.path.join(api.DIR_LISTAS, _lista_arq)
+    # ── Lista aberta ──
+    _arq = st.session_state.get("beta_ped_arq")
+    if _arq:
         try:
-            with open(_cam, encoding="utf-8") as _fb:
-                _db = json.load(_fb)
-            _ln = _db.get("nome","—")
+            import os as _os
+            cam = _os.path.join(api.DIR_LISTAS, _arq)
+            with open(cam, encoding="utf-8") as f:
+                _d = json.load(f)
+            _ln = _d.get("nome", _arq)
         except Exception:
-            _ln = _lista_arq
-        _bla1, _bla2, _bla3 = st.columns([4, 1, 1])
-        _bla1.info(f"📂 **{_ln}**")
-        if _bla2.button("💾", use_container_width=True, key="beta_sv_lista"):
+            _ln = _arq
+        b1, b2, b3 = st.columns([5, 1, 1])
+        b1.info(f"📂 Lista aberta: **{_ln}**")
+        if b2.button("💾 Salvar", key="ped_sv", use_container_width=True):
             try:
-                import json as _jsv, os as _osv
-                _cam_sv = _osv.path.join(api.DIR_LISTAS, _lista_arq)
-                with open(_cam_sv, encoding="utf-8") as _f_sv:
-                    _d_sv = _jsv.load(_f_sv)
-                _d_sv["itens"] = itens
-                _d_sv["atualizado_em"] = datetime.now().isoformat()
-                _sv_str = _jsv.dumps(_d_sv, ensure_ascii=False, indent=2)
-                with open(_cam_sv, "w", encoding="utf-8") as _f_sv:
-                    _f_sv.write(_sv_str)
-                api._gh_push_arquivo(f"listas/{_lista_arq}", _sv_str, f"Salva: {_ln}")
-                st.success("✅ Salvo!")
-            except Exception as _ex_sv:
-                st.error(f"Erro: {_ex_sv}")
-        if _bla3.button("✕", use_container_width=True, key="beta_fechar_lista"):
-            st.session_state.pop("beta_lista_arq", None)
+                import os as _os2
+                cam = _os2.path.join(api.DIR_LISTAS, _arq)
+                with open(cam, encoding="utf-8") as f:
+                    _d = json.load(f)
+                _d["itens"] = itens
+                _d["atualizado_em"] = datetime.now().isoformat()
+                _s = json.dumps(_d, ensure_ascii=False, indent=2)
+                with open(cam, "w", encoding="utf-8") as f:
+                    f.write(_s)
+                api._gh_push_arquivo(f"listas/{_arq}", _s, f"Salva: {_ln}")
+                st.success("✅ Lista salva!")
+            except Exception as ex:
+                st.error(f"Erro: {ex}")
+        if b3.button("✕", key="ped_fechar", use_container_width=True):
+            st.session_state.pop("beta_ped_arq", None)
             st.rerun()
 
-    # Abas de input
-    tab_wpp, tab_cat, tab_avl, tab_lst = st.tabs(["📱 WhatsApp", "🔍 Catálogo", "✏️ Avulso", "📂 Listas"])
+    # ── Tabs de input ──
+    tab_wpp, tab_cat, tab_avl, tab_lst = st.tabs([
+        "📱 WhatsApp / IA", "🔍 Catálogo", "✏️ Avulso", "📂 Listas"
+    ])
 
+    # ─── WhatsApp ───
     with tab_wpp:
-        _sec("Colar pedido do WhatsApp")
-        _txt_wpp = st.text_area("Cole o texto aqui", height=150, key="beta_wpp_txt",
-                                 placeholder="Ex:\niPhone 15 - masculino 2, feminino 3\nSamsung A55 - brilho 5")
-        if st.button("🤖 Processar com IA", use_container_width=True, type="primary", key="beta_wpp_proc"):
-            if not _txt_wpp.strip():
+        _sec("Cole o pedido do WhatsApp")
+        txt_wpp = st.text_area(
+            "Texto", height=130, key="beta_wpp_txt",
+            placeholder="Ex:\niPhone 15 - masculino 2, feminino 3\nSamsung A55 - brilho 5",
+            label_visibility="collapsed",
+        )
+        if st.button("🤖 Processar com IA", use_container_width=True, type="primary", key="wpp_proc"):
+            if not txt_wpp.strip():
                 st.warning("Cole o texto do pedido.")
             elif not cache:
                 st.warning("Sincronize os produtos primeiro.")
             else:
                 with st.spinner("Processando com IA…"):
                     try:
-                        catalogo = "\n".join(
+                        cat = "\n".join(
                             f"{p.get('codigo_interno','')} | {p.get('nome','')}"
-                            for p in cache.get("produtos", [])[:300]
+                            for p in cache.get("produtos", [])[:400]
                         )
-                        resultado = api.parse_pedido_whatsapp(_txt_wpp, catalogo)
-                        st.session_state["beta_wpp_resultado"] = resultado
-                    except Exception as _ex_wpp:
-                        st.error(f"Erro na IA: {_ex_wpp}")
+                        res = api.parse_pedido_whatsapp(txt_wpp, cat)
+                        st.session_state["beta_wpp_res"] = res
+                        for i, r in enumerate(res):
+                            st.session_state[f"beta_wpp_chk_{i}"] = bool(r.get("nome_produto"))
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Erro na IA: {ex}")
 
-        if "beta_wpp_resultado" in st.session_state:
-            _res = st.session_state["beta_wpp_resultado"]
-            _sec(f"Resultado ({len(_res)} itens)")
-            _adicionar = []
-            for _i, _r in enumerate(_res):
-                _conf = _r.get("confianca","")
-                _cor = "grn" if _conf == "alta" else ("yel" if _conf == "media" else "red")
-                _cbr1, _cbr2 = st.columns([4, 1])
-                _check = _cbr1.checkbox(
-                    f"**{_r.get('nome_produto') or _r.get('modelo_digitado','')}** "
-                    f"{'/ ' + str(_r.get('variacoes',[])) if _r.get('variacoes') else ''} "
-                    f"— {_r.get('quantidade',1)} un",
-                    value=bool(_r.get("nome_produto")),
-                    key=f"beta_wpp_{_i}"
+        res = st.session_state.get("beta_wpp_res", [])
+        if res:
+            _sec(f"Resultado IA — {len(res)} item(ns)")
+            for i, r in enumerate(res):
+                conf = r.get("confianca", "baixa")
+                cor  = "grn" if conf == "alta" else ("yel" if conf == "media" else "red")
+                c1, c2 = st.columns([5, 1])
+                nome_p = r.get("nome_produto") or r.get("modelo_digitado", "—")
+                label  = f"{nome_p} · {', '.join(str(v) for v in r.get('variacoes',[]))} · {r.get('quantidade',1)} un"
+                st.session_state[f"beta_wpp_chk_{i}"] = c1.checkbox(
+                    label,
+                    value=st.session_state.get(f"beta_wpp_chk_{i}", bool(r.get("nome_produto"))),
+                    key=f"wpp_chk_r_{i}",
                 )
-                _cbr2.markdown(_chip(_conf.upper() if _conf else "?", _cor), unsafe_allow_html=True)
-                if _check and _r.get("nome_produto"):
-                    _prods_match = api.buscar_produtos(_r.get("cod_interno") or _r.get("nome_produto",""), cache)
-                    if _prods_match:
-                        _p = _prods_match[0]
-                        _variacoes = _r.get("variacoes", ["padrão"])
-                        for _var in (_variacoes if _variacoes else ["padrão"]):
-                            _adicionar.append({
-                                "produto_id": _p["id"],
-                                "produto_nome": _p["nome"],
-                                "variacao_nome": str(_var),
-                                "variacao_id": None,
-                                "quantidade": int(_r.get("quantidade", 1)),
-                                "fornecedor": "",
-                                "valor_custo": "",
-                                "observacao": "",
-                            })
+                c2.markdown(_chip(conf.upper(), cor), unsafe_allow_html=True)
 
-            if st.button("➕ Adicionar selecionados ao pedido", use_container_width=True, type="primary", key="beta_wpp_add"):
-                if _adicionar:
-                    st.session_state.beta_ped_itens.extend(_adicionar)
-                    st.session_state.pop("beta_wpp_resultado", None)
-                    st.success(f"✅ {len(_adicionar)} item(ns) adicionado(s)!")
+            ca, cb = st.columns(2)
+            if ca.button("➕ Adicionar selecionados", use_container_width=True,
+                         type="primary", key="wpp_add"):
+                added = 0
+                for i, r in enumerate(res):
+                    if not st.session_state.get(f"beta_wpp_chk_{i}", False):
+                        continue
+                    np_ = r.get("nome_produto")
+                    if not np_ or not cache:
+                        st.session_state.beta_ped.append({
+                            "produto_nome": r.get("modelo_digitado", np_ or "—"),
+                            "variacao_nome": ", ".join(str(v) for v in r.get("variacoes", [])),
+                            "quantidade": int(r.get("quantidade", 1)),
+                            "fornecedor": "", "valor_custo": "", "_avulso": True,
+                        })
+                        added += 1
+                        continue
+                    prods_m = api.buscar_produtos(r.get("cod_interno") or np_, cache)
+                    if prods_m:
+                        p = prods_m[0]
+                        for vr in (r.get("variacoes") or [""]):
+                            vd_m = None
+                            for v in p.get("variacoes", []):
+                                vd = v.get("variacao", v)
+                                if str(vr).lower() in (vd.get("nome", "")).lower():
+                                    vd_m = vd; break
+                            if vd_m:
+                                st.session_state.beta_ped.append({
+                                    "produto_id": p["id"], "produto_nome": p["nome"],
+                                    "cod_interno": p.get("codigo_interno", ""),
+                                    "variacao_id": vd_m["id"],
+                                    "variacao_nome": vd_m.get("nome", ""),
+                                    "variacao_cod": vd_m.get("codigo", ""),
+                                    "quantidade": int(r.get("quantidade", 1)),
+                                    "fornecedor": "", "valor_custo": "",
+                                })
+                            else:
+                                st.session_state.beta_ped.append({
+                                    "produto_id": p["id"], "produto_nome": p["nome"],
+                                    "variacao_nome": str(vr),
+                                    "quantidade": int(r.get("quantidade", 1)),
+                                    "fornecedor": "", "valor_custo": "",
+                                })
+                            added += 1
+                    else:
+                        st.session_state.beta_ped.append({
+                            "produto_nome": np_,
+                            "variacao_nome": ", ".join(str(v) for v in r.get("variacoes", [])),
+                            "quantidade": int(r.get("quantidade", 1)),
+                            "fornecedor": "", "valor_custo": "", "_avulso": True,
+                        })
+                        added += 1
+                if added:
+                    st.session_state.pop("beta_wpp_res", None)
+                    st.success(f"✅ {added} item(ns) adicionado(s)!")
                     st.rerun()
+            if cb.button("✕ Descartar", use_container_width=True, key="wpp_clear"):
+                st.session_state.pop("beta_wpp_res", None)
+                st.rerun()
 
+    # ─── Catálogo ───
     with tab_cat:
         if not cache:
             st.warning("Sincronize os produtos primeiro.")
         else:
             _sec("Buscar no catálogo")
-            _termo_cat = st.text_input("🔍 Produto", key="beta_cat_busca", placeholder="ex: iPhone 15, Samsung A55…")
-            _prods_cat = api.buscar_produtos(_termo_cat, cache) if _termo_cat else []
-            if _prods_cat:
-                _nomes_cat = [f"{p.get('codigo_interno','')} — {p['nome']}" for p in _prods_cat]
-                _sel_cat   = st.selectbox("Selecione", _nomes_cat, key="beta_cat_sel")
-                _prod_sel  = _prods_cat[_nomes_cat.index(_sel_cat)]
+            termo = st.text_input("🔍 Produto", key="cat_busca",
+                                   placeholder="Ex: iPhone 15, Samsung A55…",
+                                   label_visibility="collapsed")
+            prods = api.buscar_produtos(termo, cache) if termo else []
+            if prods:
+                nomes = [f"{p.get('codigo_interno','')} — {p['nome']}" for p in prods]
+                sel   = st.selectbox("Produto", nomes, key="cat_sel", label_visibility="collapsed")
+                prod  = prods[nomes.index(sel)]
+                vars_ = [v.get("variacao", v) for v in prod.get("variacoes", [])]
 
-                _vars_cat = [v["variacao"] for v in _prod_sel.get("variacoes", [])]
-                if _vars_cat:
-                    _df_vars = pd.DataFrame([{
-                        "_vid": vd["id"],
-                        "Variação": vd.get("nome",""),
-                        "Cód": vd.get("codigo",""),
-                        "Estoque": int(vd.get("estoque",0) or 0),
-                        "Qtd": 0
-                    } for vd in _vars_cat])
-
-                    _qtd_cols = {}
-                    for _, _vrow in _df_vars.iterrows():
-                        _vc1, _vc2, _vc3 = st.columns([3, 1, 1])
-                        _vc1.caption(f"{_vrow['Variação']} ({_vrow['Cód']})")
-                        _vc2.caption(f"Est: {_vrow['Estoque']}")
-                        _qtd_cols[_vrow.name] = _vc3.number_input(
-                            "Qtd", min_value=0, value=0, key=f"beta_var_qtd_{_vrow.name}",
-                            label_visibility="collapsed"
+                if vars_:
+                    _qtds = {}
+                    _sec("Variações e quantidades")
+                    for vd in vars_:
+                        vc1, vc2, vc3 = st.columns([3, 1, 1])
+                        vc1.caption(f"**{vd.get('nome','')}** · `{vd.get('codigo','')}`")
+                        est_v = int(vd.get("estoque", 0) or 0)
+                        est_cor = "🔴" if est_v <= 3 else ("🟡" if est_v <= 10 else "🟢")
+                        vc2.caption(f"{est_cor} {est_v} un")
+                        _qtds[vd["id"]] = vc3.number_input(
+                            "q", min_value=0, value=0, step=1,
+                            key=f"cat_qtd_{vd['id']}", label_visibility="collapsed",
                         )
 
-                    _forn_cat = st.text_input("Fornecedor", key="beta_cat_forn")
-                    _custo_cat = st.text_input("Custo unit. (R$)", key="beta_cat_custo")
+                    cf1, cf2 = st.columns(2)
+                    forn  = cf1.text_input("Fornecedor", key="cat_forn")
+                    custo = cf2.text_input("Custo unit. (R$)", key="cat_custo")
 
-                    if st.button("➕ Adicionar ao pedido", use_container_width=True, type="primary", key="beta_cat_add"):
-                        _adicionados = 0
-                        for _idx, _vrow in _df_vars.iterrows():
-                            _q = _qtd_cols.get(_idx, 0)
-                            if _q > 0:
-                                _vd_obj = _vars_cat[_idx]
-                                st.session_state.beta_ped_itens.append({
-                                    "produto_id": _prod_sel["id"],
-                                    "produto_nome": _prod_sel["nome"],
-                                    "cod_interno": _prod_sel.get("codigo_interno",""),
-                                    "variacao_id": _vd_obj["id"],
-                                    "variacao_nome": _vd_obj.get("nome",""),
-                                    "variacao_cod": _vd_obj.get("codigo",""),
-                                    "quantidade": int(_q),
-                                    "fornecedor": _forn_cat,
-                                    "valor_custo": _custo_cat,
-                                    "observacao": "",
+                    if st.button("➕ Adicionar ao pedido", use_container_width=True,
+                                  type="primary", key="cat_add"):
+                        added_c = 0
+                        for vd in vars_:
+                            q = int(_qtds.get(vd["id"], 0))
+                            if q > 0:
+                                st.session_state.beta_ped.append({
+                                    "produto_id": prod["id"], "produto_nome": prod["nome"],
+                                    "cod_interno": prod.get("codigo_interno", ""),
+                                    "variacao_id": vd["id"],
+                                    "variacao_nome": vd.get("nome", ""),
+                                    "variacao_cod": vd.get("codigo", ""),
+                                    "quantidade": q, "fornecedor": forn,
+                                    "valor_custo": custo, "observacao": "",
                                 })
-                                _adicionados += 1
-                        if _adicionados:
-                            st.success(f"✅ {_adicionados} variação(ões) adicionada(s)!")
+                                added_c += 1
+                        if added_c:
+                            st.success(f"✅ {added_c} variação(ões) adicionada(s)!")
                             st.rerun()
                         else:
                             st.warning("Preencha a quantidade em pelo menos uma variação.")
+            elif termo:
+                st.info("Nenhum produto encontrado.")
 
+    # ─── Avulso ───
     with tab_avl:
-        _sec("Adicionar item avulso")
-        _av1, _av2 = st.columns([3, 1])
-        _desc_av = _av1.text_input("Descrição", key="beta_av_desc", placeholder="ex: Película Samsung A55")
-        _qtd_av  = _av2.number_input("Qtd", min_value=1, value=1, key="beta_av_qtd")
-        _av3, _av4 = st.columns(2)
-        _forn_av  = _av3.text_input("Fornecedor", key="beta_av_forn")
-        _custo_av = _av4.text_input("Custo unit.", key="beta_av_custo")
-        if st.button("➕ Adicionar avulso", use_container_width=True, key="beta_av_add"):
-            if _desc_av.strip():
-                st.session_state.beta_ped_itens.append({
-                    "produto_nome": _desc_av,
-                    "variacao_nome": "",
-                    "quantidade": int(_qtd_av),
-                    "fornecedor": _forn_av,
-                    "valor_custo": _custo_av,
-                    "observacao": "",
-                    "_avulso": True,
+        _sec("Item fora do catálogo")
+        a1, a2 = st.columns([3, 1])
+        desc  = a1.text_input("Descrição", key="avl_desc",
+                               placeholder="Ex: Película Samsung A55 5G")
+        qtd_a = a2.number_input("Qtd", min_value=1, value=1, key="avl_qtd")
+        b1, b2 = st.columns(2)
+        forn_a  = b1.text_input("Fornecedor", key="avl_forn")
+        custo_a = b2.text_input("Custo unit. (R$)", key="avl_custo")
+        if st.button("➕ Adicionar avulso", use_container_width=True, key="avl_add"):
+            if desc.strip():
+                st.session_state.beta_ped.append({
+                    "produto_nome": desc.strip(), "variacao_nome": "",
+                    "quantidade": int(qtd_a), "fornecedor": forn_a,
+                    "valor_custo": custo_a, "_avulso": True,
                 })
                 st.success("✅ Adicionado!")
                 st.rerun()
+            else:
+                st.warning("Digite uma descrição.")
 
+    # ─── Listas salvas ───
     with tab_lst:
-        _sec("Carregar lista salva")
-        _listas = api.listar_listas_salvas("pedido")
-        if _listas:
-            for _lst in _listas[:10]:
-                _lc1, _lc2 = st.columns([4, 1])
-                _lnome_lst = _lst.get("nome","—")
-                _lqtd_lst  = len(_lst.get("itens", []))
-                _ldata_lst = (_lst.get("criado_em","") or "")[:10]
-                _lc1.write(f"**{_lnome_lst}** · {_lqtd_lst} itens · {_ldata_lst}")
-                if _lc2.button("Abrir", key=f"beta_lst_open_{_lst['_arquivo']}", use_container_width=True):
-                    st.session_state.beta_ped_itens = list(_lst.get("itens", []))
-                    st.session_state["beta_lista_arq"] = _lst["_arquivo"]
+        _sec("Listas de pedido salvas")
+        listas = api.listar_listas_salvas("pedido")
+        if listas:
+            for lst in listas[:15]:
+                lnm = lst.get("nome", "—")
+                lqt = len(lst.get("itens", []))
+                ldt = (lst.get("criado_em", "") or "")[:10]
+                lc1, lc2 = st.columns([5, 1])
+                lc1.markdown(f'<div class="li"><div class="li-name">{lnm}</div>'
+                             f'<div class="li-sub">{lqt} itens · {ldt}</div></div>',
+                             unsafe_allow_html=True)
+                if lc2.button("Abrir", key=f"lst_op_{lst['_arquivo']}", use_container_width=True):
+                    st.session_state.beta_ped = list(lst.get("itens", []))
+                    st.session_state["beta_ped_arq"] = lst["_arquivo"]
                     st.rerun()
         else:
-            st.info("Nenhuma lista de pedido salva.")
+            _empty_state("📂", "Nenhuma lista salva", "Salve seu pedido abaixo")
 
-        _sec("Salvar lista atual")
-        _novo_nome = st.text_input("Nome da nova lista", key="beta_nova_lista_nome")
-        if st.button("💾 Salvar lista atual", use_container_width=True, key="beta_salvar_lista"):
+        st.divider()
+        _sec("Salvar pedido atual")
+        nn = st.text_input("Nome da lista", key="ped_novo_nome",
+                            placeholder="Ex: Pedido Distribuidora 15/06")
+        if st.button("💾 Salvar lista", use_container_width=True, key="ped_salvar"):
             if not itens:
                 st.warning("O pedido está vazio.")
-            elif not _novo_nome.strip():
-                st.warning("Digite um nome para a lista.")
+            elif not nn.strip():
+                st.warning("Digite um nome.")
             else:
-                api.salvar_lista(_novo_nome, "pedido", itens)
-                st.success(f"✅ Lista '{_novo_nome}' salva!")
+                api.salvar_lista(nn.strip(), "pedido", itens)
+                st.success(f"✅ Lista '{nn}' salva!")
                 st.rerun()
 
-    # ── Pedido atual ──────────────────────────────────────────────
+    # ════════════════════════════════════════
+    # Pedido atual
+    # ════════════════════════════════════════
     if itens:
         st.divider()
-        _sec(f"Pedido atual — {len(itens)} item(ns)")
+        # Total de itens e valor estimado
+        total_qtd = sum(int(it.get("quantidade", 0)) for it in itens)
+        custos = []
+        for it in itens:
+            try:
+                custos.append(float(str(it.get("valor_custo","0") or "0").replace(",","."))
+                              * int(it.get("quantidade", 1)))
+            except Exception:
+                pass
+        total_val = sum(custos)
 
-        _ped_header = st.columns([4, 1, 1])
-        _ped_header[0].caption("Produto / Variação")
-        _ped_header[1].caption("Qtd")
-        _ped_header[2].caption("Del")
+        h1, h2, h3 = st.columns(3)
+        h1.metric("Itens", len(itens))
+        h2.metric("Unidades", total_qtd)
+        if total_val > 0:
+            h3.metric("Custo total", f"R$ {total_val:,.2f}")
 
-        for _pi, _pit in enumerate(list(itens)):
-            _pnome = f"{_pit.get('produto_nome','')} / {_pit.get('variacao_nome','')}" if _pit.get('variacao_nome') else _pit.get('produto_nome','')
-            _pc1, _pc2, _pc3 = st.columns([4, 1, 1])
-            _pc1.caption(_pnome[:45] + ("…" if len(_pnome) > 45 else ""))
-            _nova_q = _pc2.number_input("q", min_value=1, value=int(_pit.get("quantidade",1)),
-                                         label_visibility="collapsed", key=f"beta_pit_q_{_pi}")
-            if _nova_q != _pit.get("quantidade"):
-                st.session_state.beta_ped_itens[_pi]["quantidade"] = _nova_q
-            if _pc3.button("🗑", key=f"beta_pit_del_{_pi}", use_container_width=True):
-                st.session_state.beta_ped_itens.pop(_pi)
+        _sec(f"Itens do pedido")
+        for i, it in enumerate(list(itens)):
+            nome_v   = it.get("variacao_nome", "")
+            linha    = it.get("produto_nome", "")
+            if nome_v: linha += f" / {nome_v}"
+            is_avulso = it.get("_avulso", False)
+
+            pc1, pc2, pc3 = st.columns([5, 1, 1])
+            pc1.markdown(
+                f'<div class="li"><div class="li-name">{linha[:50]}</div>'
+                f'<div class="li-sub">'
+                + (f'Fornecedor: {it.get("fornecedor","")} · ' if it.get("fornecedor") else '')
+                + (f'Custo: R$ {it.get("valor_custo","")} · ' if it.get("valor_custo") else '')
+                + (_chip("avulso", "gray") if is_avulso else '')
+                + f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            nova_q = pc2.number_input(
+                "q", min_value=1,
+                value=max(1, int(it.get("quantidade", 1))),
+                step=1, label_visibility="collapsed", key=f"ped_q_{i}",
+            )
+            if nova_q != it.get("quantidade"):
+                st.session_state.beta_ped[i]["quantidade"] = nova_q
+            if pc3.button("🗑", key=f"ped_del_{i}", use_container_width=True):
+                st.session_state.beta_ped.pop(i)
                 st.rerun()
 
-        # Export row
+        # ── Exportações ──
+        st.divider()
         _sec("Exportar")
-        _exp1, _exp2, _exp3 = st.columns(3)
+        ea, eb, ec = st.columns(3)
 
-        # Excel
-        _buf_ped = io.BytesIO()
-        _df_ped = pd.DataFrame([{
-            "Produto": it.get("produto_nome",""),
-            "Variação": it.get("variacao_nome",""),
-            "Qtd": it.get("quantidade",0),
-            "Fornecedor": it.get("fornecedor",""),
-            "Custo": it.get("valor_custo",""),
+        buf = io.BytesIO()
+        df_exp = pd.DataFrame([{
+            "Produto":     it.get("produto_nome", ""),
+            "Variação":    it.get("variacao_nome", ""),
+            "Qtd":         it.get("quantidade", 0),
+            "Fornecedor":  it.get("fornecedor", ""),
+            "Custo Unit.": it.get("valor_custo", ""),
         } for it in itens])
-        with pd.ExcelWriter(_buf_ped, engine="openpyxl") as _wr:
-            _df_ped.to_excel(_wr, index=False, sheet_name="Pedido")
-        _buf_ped.seek(0)
-        _exp1.download_button("📄 Excel", _buf_ped, f"pedido_{date.today()}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               use_container_width=True)
+        with pd.ExcelWriter(buf, engine="openpyxl") as wr:
+            df_exp.to_excel(wr, index=False, sheet_name="Pedido")
+        buf.seek(0)
+        ea.download_button(
+            "📄 Excel", buf, f"pedido_{date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
-        # Texto
-        if _exp2.button("📋 Copiar texto", use_container_width=True, key="beta_ped_txt"):
-            import html as _h, streamlit.components.v1 as _cv
-            _linhas = [f"PEDIDO {date.today()}", "="*40]
-            for _it in itens:
-                _linhas.append(f"{_it.get('produto_nome','')} / {_it.get('variacao_nome','')} — {_it.get('quantidade',0)} un")
-            _txt = "\n".join(_linhas)
-            _cv.html(f'<textarea id="ct" style="position:fixed;top:-9999px">{_h.escape(_txt)}</textarea>'
-                     f'<p style="margin:0;font:13px sans-serif;color:#28a745">✅ Copiado!</p>'
-                     f'<script>(function(){{var e=document.getElementById("ct");e.focus();e.select();'
-                     f'try{{navigator.clipboard.writeText(e.value).catch(function(){{document.execCommand("copy")}})}}catch(ex){{document.execCommand("copy")}}}})()</script>',
-                     height=35)
+        if eb.button("📋 Copiar texto", use_container_width=True, key="ped_txt"):
+            linhas = [f"PEDIDO — {date.today()}", "=" * 42]
+            for it in itens:
+                v = f" / {it['variacao_nome']}" if it.get("variacao_nome") else ""
+                linhas.append(f"{it.get('produto_nome','')}{v} — {it.get('quantidade',0)} un")
+            _copiar_html("\n".join(linhas))
 
-        # Limpar
-        if _exp3.button("🗑️ Limpar tudo", use_container_width=True, key="beta_ped_clear"):
-            st.session_state.beta_ped_itens = []
-            st.session_state.pop("beta_lista_arq", None)
+        if ec.button("🗑️ Limpar tudo", use_container_width=True, key="ped_limpar"):
+            st.session_state.beta_ped = []
+            st.session_state.pop("beta_ped_arq", None)
             st.rerun()
+
+        # ── Registrar no GestãoClick ──
+        with st.expander("📤 Registrar Compra no GestãoClick"):
+            itens_cad = [it for it in itens if it.get("produto_id") and it.get("variacao_id")]
+            itens_avs = [it for it in itens if not it.get("produto_id")]
+            st.info(f"**{len(itens_cad)}** cadastrado(s) serão enviados · **{len(itens_avs)}** avulso(s) ignorado(s).")
+
+            rg1, rg2 = st.columns(2)
+            forn_gc = rg1.text_input("Buscar fornecedor", key="gc_forn")
+            data_gc = rg2.date_input("Data", value=date.today(), key="gc_data")
+            obs_gc  = st.text_input("Observações", key="gc_obs")
+
+            if st.button("🔍 Buscar fornecedor", use_container_width=True, key="gc_buscar"):
+                with st.spinner("Buscando…"):
+                    try:
+                        st.session_state["gc_forns"] = api.buscar_fornecedores(forn_gc, limite=20)
+                    except Exception as ex:
+                        st.error(f"Erro: {ex}")
+
+            forns = st.session_state.get("gc_forns", [])
+            if forns:
+                opts = {
+                    f"{f.get('razao_social') or f.get('nome','—')} ({f.get('cnpj','')})": f["id"]
+                    for f in forns
+                }
+                fsel = st.selectbox("Fornecedor", list(opts.keys()), key="gc_fsel")
+                fid  = opts[fsel]
+
+                if "gc_sits" not in st.session_state:
+                    try:
+                        sits = api.buscar_situacoes_compras()
+                        st.session_state["gc_sits"] = {
+                            s.get("nome", "—"): s.get("id", "1")
+                            for s in sits if isinstance(s, dict) and s.get("nome")
+                        } or {"Aguardando recebimento": "1"}
+                    except Exception:
+                        st.session_state["gc_sits"] = {"Aguardando recebimento": "1"}
+
+                sit_sel = st.selectbox("Situação", list(st.session_state["gc_sits"].keys()), key="gc_sit")
+                sit_id  = st.session_state["gc_sits"][sit_sel]
+
+                if st.button("✅ Confirmar e registrar", type="primary",
+                              use_container_width=True, key="gc_confirmar"):
+                    if not itens_cad:
+                        st.error("Nenhum item cadastrado no pedido.")
+                    else:
+                        with st.spinner("Enviando…"):
+                            try:
+                                api.registrar_compra_gestaoclick(
+                                    itens_cad, fid, data_gc, sit_id, obs_gc, loja_id,
+                                )
+                                st.success("✅ Compra registrada no GestãoClick!")
+                                st.session_state.pop("gc_forns", None)
+                            except Exception as ex:
+                                st.error(f"Erro: {ex}")
     else:
-        st.info("Pedido vazio — use as abas acima para adicionar itens.")
+        _empty_state("🛒", "Pedido vazio", "Use as abas acima para adicionar produtos")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Estoque (entrada + acerto + etiquetas unificados)
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# ESTOQUE
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_estoque(cache, loja_id):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _estoque(cache, loja_id):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("📦 Estoque", "Entrada, acerto e etiquetas")
 
     if not cache:
-        st.warning("Sincronize os produtos primeiro.")
+        _empty_state("📦", "Cache vazio", "Vá em Config → Sincronização para atualizar")
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    _modo = st.radio("Modo", ["📥 Entrada", "📊 Acerto", "🏷️ Etiquetas"],
-                      horizontal=True, key="beta_est_modo", label_visibility="collapsed")
+    # Stats rápidos
+    all_vars = [(p, v.get("variacao", v)) for p in cache.get("produtos", [])
+                for v in p.get("variacoes", [])]
+    n_total = len(all_vars)
+    n_crit  = sum(1 for _, vd in all_vars if int(vd.get("estoque", 0) or 0) <= 3)
+    n_baixo = sum(1 for _, vd in all_vars if 3 < int(vd.get("estoque", 0) or 0) <= 10)
+    n_ok    = n_total - n_crit - n_baixo
+    s1, s2, s3, s4 = st.columns(4)
+    with s1: _kpi(f"{n_total}", "Variações", "kpi-ind", "📦")
+    with s2: _kpi(f"{n_crit}",  "Críticos",  "kpi-red" if n_crit else "", "🔴")
+    with s3: _kpi(f"{n_baixo}", "Baixos",    "kpi-amb" if n_baixo else "", "🟡")
+    with s4: _kpi(f"{n_ok}",    "Saudáveis", "kpi-grn", "🟢")
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
+    modo = st.radio(
+        "Modo", ["📥 Entrada", "📊 Acerto", "🏷️ Etiquetas", "📋 Visão geral"],
+        horizontal=True, key="est_modo", label_visibility="collapsed",
+    )
     st.divider()
-    _termo_est = st.text_input("🔍 Buscar produto", key="beta_est_busca", placeholder="Nome ou código")
-    _prods_est = api.buscar_produtos(_termo_est, cache) if _termo_est else []
 
-    if not _prods_est:
-        if _termo_est:
-            st.info("Nenhum produto encontrado.")
+    # ── Visão geral ──
+    if modo == "📋 Visão geral":
+        _sec("Itens com estoque crítico ou baixo")
+        rows_crit = []
+        for p, vd in all_vars:
+            est = int(vd.get("estoque", 0) or 0)
+            if est <= 10:
+                status = "🔴 Crítico" if est <= 3 else "🟡 Baixo"
+                rows_crit.append({
+                    "Status":   status,
+                    "Produto":  p.get("nome", "")[:30],
+                    "Variação": vd.get("nome", "")[:25],
+                    "Cód.":     vd.get("codigo", ""),
+                    "Estoque":  est,
+                })
+        if rows_crit:
+            df_crit = pd.DataFrame(rows_crit).sort_values("Estoque")
+            st.dataframe(df_crit, use_container_width=True, hide_index=True)
+            bars = "".join(
+                _stock_bar_html(f"{r['Produto']} / {r['Variação']}", r["Estoque"])
+                for r in rows_crit[:15]
+            )
+            st.markdown(f'<div class="card" style="padding:16px 18px"><b style="font-size:.75rem;color:#94a3b8">VISUALIZAÇÃO GRÁFICA</b><div style="height:10px"></div>{bars}</div>',
+                        unsafe_allow_html=True)
+        else:
+            _alerta("✅ Todos os itens com estoque saudável!", tipo="grn")
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    _nomes_est = [f"{p.get('codigo_interno','')} — {p['nome']}" for p in _prods_est]
-    _sel_est   = st.selectbox("Produto", _nomes_est, key="beta_est_sel", label_visibility="collapsed")
-    _prod_est  = _prods_est[_nomes_est.index(_sel_est)]
-    _vars_est  = [v["variacao"] for v in _prod_est.get("variacoes", [])]
+    # ── Busca de produto ──
+    termo = st.text_input("🔍 Buscar produto", key="est_busca",
+                           placeholder="Nome ou código interno")
+    prods = api.buscar_produtos(termo, cache) if termo else []
+    if not prods:
+        if termo:
+            st.info("Nenhum produto encontrado.")
+        elif modo != "🏷️ Etiquetas":
+            pass
+        if modo != "🏷️ Etiquetas":
+            st.markdown('</div>', unsafe_allow_html=True)
+            return
 
-    if _modo == "📥 Entrada" or _modo == "📊 Acerto":
-        _modo_api = "soma" if "Entrada" in _modo else "set"
-        _label_qtd = "Qtd a adicionar" if _modo_api == "soma" else "Novo estoque"
+    if prods:
+        nomes = [f"{p.get('codigo_interno','')} — {p['nome']}" for p in prods]
+        sel   = st.selectbox("Produto", nomes, key="est_sel", label_visibility="collapsed")
+        prod  = prods[nomes.index(sel)]
+        vars_ = [v.get("variacao", v) for v in prod.get("variacoes", [])]
 
-        _qtds_est = {}
-        for _vd in _vars_est:
-            _vc1, _vc2, _vc3 = st.columns([3, 1, 1])
-            _vc1.write(f"**{_vd.get('nome','')}** · {_vd.get('codigo','')}")
-            _vc2.caption(f"Atual: {int(_vd.get('estoque',0) or 0)}")
-            _qtds_est[_vd["id"]] = _vc3.number_input(
-                _label_qtd, min_value=0, value=0,
-                key=f"beta_est_q_{_vd['id']}", label_visibility="collapsed"
-            )
+        if not vars_:
+            st.warning("Produto sem variações.")
+            st.markdown('</div>', unsafe_allow_html=True)
+            return
 
-        _obs_est = st.text_input("Observação", key="beta_est_obs")
-        if st.button(f"✅ Aplicar {_modo}", use_container_width=True, type="primary", key="beta_est_apply"):
-            _erros, _ok = [], 0
-            for _vid, _q in _qtds_est.items():
-                if _q > 0:
-                    try:
-                        api.atualizar_estoque_variacao(_prod_est["id"], _vid, _q, loja_id=loja_id, modo=_modo_api)
-                        _ok += 1
-                    except Exception as _ex_est:
-                        _erros.append(str(_ex_est))
-            if _ok:
-                st.success(f"✅ {_ok} variação(ões) atualizada(s)!")
-            if _erros:
-                for _e in _erros:
-                    st.error(_e)
+        if modo in ("📥 Entrada", "📊 Acerto"):
+            modo_api = "soma" if "Entrada" in modo else "set"
+            lbl_q    = "Qtd a adicionar" if modo_api == "soma" else "Novo estoque"
 
-    else:  # Etiquetas
-        if "beta_etiq_itens" not in st.session_state:
-            st.session_state.beta_etiq_itens = []
+            qtds: dict[str, int] = {}
+            _sec("Variações")
+            for vd in vars_:
+                est_atual = int(vd.get("estoque", 0) or 0)
+                v1, v2, v3 = st.columns([3, 1, 1])
+                v1.markdown(f'<div style="font-size:.83rem;font-weight:600">{vd.get("nome","")}</div>'
+                            f'<div style="font-size:.7rem;color:#94a3b8">`{vd.get("codigo","")}`</div>',
+                            unsafe_allow_html=True)
+                cor_est = "🔴" if est_atual <= 3 else ("🟡" if est_atual <= 10 else "🟢")
+                v2.metric("Atual", f"{cor_est} {est_atual}")
+                qtds[vd["id"]] = v3.number_input(
+                    lbl_q, min_value=0, value=0, step=1,
+                    key=f"est_q_{vd['id']}", label_visibility="collapsed",
+                )
 
-        _qtds_etiq = {}
-        for _vd in _vars_est:
-            _ve1, _ve2 = st.columns([4, 1])
-            _ve1.write(f"{_vd.get('nome','')} · {_vd.get('codigo','')}")
-            _qtds_etiq[_vd["id"]] = _ve2.number_input(
-                "Qtd", min_value=0, value=0,
-                key=f"beta_etiq_q_{_vd['id']}", label_visibility="collapsed"
-            )
+            obs_e = st.text_input("Observação", key="est_obs")
 
-        if st.button("➕ Adicionar à lista", use_container_width=True, key="beta_etiq_add"):
-            _add_etiq = 0
-            for _vd in _vars_est:
-                _q = _qtds_etiq.get(_vd["id"], 0)
-                if _q > 0:
-                    st.session_state.beta_etiq_itens.append({
-                        "variacao_id": _vd["id"],
-                        "produto_nome": _prod_est["nome"],
-                        "variacao_nome": _vd.get("nome",""),
-                        "variacao_cod": _vd.get("codigo",""),
-                        "quantidade": int(_q),
-                    })
-                    _add_etiq += 1
-            if _add_etiq:
-                st.success(f"✅ {_add_etiq} adicionado(s)!")
+            if st.button(f"✅ Aplicar {modo}", use_container_width=True,
+                          type="primary", key="est_apply"):
+                erros, ok = [], 0
+                for vd in vars_:
+                    q = int(qtds.get(vd["id"], 0))
+                    if q > 0:
+                        try:
+                            api.atualizar_estoque_variacao(
+                                prod["id"], vd["id"], q, loja_id=loja_id, modo=modo_api
+                            )
+                            ok += 1
+                        except Exception as ex:
+                            erros.append(f"{vd.get('nome','')}: {ex}")
+                if ok:
+                    st.success(f"✅ {ok} variação(ões) atualizada(s)!")
+                    _alertas_estoque.clear()
+                for e in erros:
+                    st.error(e)
 
-        if st.session_state.beta_etiq_itens:
-            _sec(f"Lista de etiquetas ({len(st.session_state.beta_etiq_itens)} itens)")
-            _df_etiq = pd.DataFrame(st.session_state.beta_etiq_itens)
-            st.dataframe(_df_etiq[["produto_nome","variacao_nome","quantidade"]].rename(
-                columns={"produto_nome":"Produto","variacao_nome":"Variação","quantidade":"Qtd"}
-            ), use_container_width=True, hide_index=True)
+    # ── Etiquetas ──
+    if modo == "🏷️ Etiquetas":
+        if "beta_etiq" not in st.session_state:
+            st.session_state.beta_etiq = []
 
-            _url_etiq = api.gerar_url_etiquetas([
+        if prods and vars_:
+            qtds_e: dict[str, int] = {}
+            for vd in vars_:
+                e1, e2 = st.columns([4, 1])
+                e1.write(f"{vd.get('nome','')} · `{vd.get('codigo','')}`")
+                qtds_e[vd["id"]] = e2.number_input(
+                    "Qtd", min_value=0, value=0, step=1,
+                    key=f"etiq_q_{vd['id']}", label_visibility="collapsed",
+                )
+            if st.button("➕ Adicionar à lista", use_container_width=True, key="etiq_add"):
+                added_e = 0
+                for vd in vars_:
+                    q = int(qtds_e.get(vd["id"], 0))
+                    if q > 0:
+                        st.session_state.beta_etiq.append({
+                            "variacao_id": vd["id"],
+                            "produto_nome": prod["nome"],
+                            "variacao_nome": vd.get("nome", ""),
+                            "variacao_cod": vd.get("codigo", ""),
+                            "quantidade": q,
+                        })
+                        added_e += 1
+                if added_e:
+                    st.success(f"✅ {added_e} adicionado(s)!")
+                    st.rerun()
+
+        etiq_itens = st.session_state.get("beta_etiq", [])
+        if etiq_itens:
+            _sec(f"Lista de etiquetas — {len(etiq_itens)} item(ns)")
+            df_et = pd.DataFrame(etiq_itens)[["produto_nome", "variacao_nome", "quantidade"]]
+            df_et.columns = ["Produto", "Variação", "Qtd"]
+            st.dataframe(df_et, use_container_width=True, hide_index=True)
+
+            url_et = api.gerar_url_etiquetas([
                 {"variacao_id": it["variacao_id"], "quantidade": it["quantidade"]}
-                for it in st.session_state.beta_etiq_itens
-                if it.get("variacao_id")
+                for it in etiq_itens if it.get("variacao_id")
             ])
-            if _url_etiq:
-                st.link_button("🏷️ Gerar Etiquetas no GestãoClick", _url_etiq, use_container_width=True)
-
-            if st.button("🗑️ Limpar lista", use_container_width=True, key="beta_etiq_clear"):
-                st.session_state.beta_etiq_itens = []
+            if url_et:
+                st.link_button("🏷️ Gerar Etiquetas no GestãoClick", url_et, use_container_width=True)
+            if st.button("🗑️ Limpar lista", use_container_width=True, key="etiq_clear"):
+                st.session_state.beta_etiq = []
                 st.rerun()
+        else:
+            _empty_state("🏷️", "Lista de etiquetas vazia", "Busque um produto e adicione acima")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Financeiro
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# CLIENTES
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_financeiro(loja_id):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _clientes():
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("👥 Clientes", "Gerencie o cadastro de clientes")
 
-    _tab_r, _tab_p = st.tabs(["💰 A Receber", "💸 A Pagar"])
+    # ── Novo cliente ──
+    with st.expander("➕ Cadastrar novo cliente"):
+        nc1, nc2 = st.columns(2)
+        nc_nome  = nc1.text_input("Nome / Razão Social *", key="cli_new_nome")
+        nc_cpf   = nc2.text_input("CPF / CNPJ", key="cli_new_cpf")
+        nc3, nc4 = st.columns(2)
+        nc_tel   = nc3.text_input("Telefone", key="cli_new_tel")
+        nc_cel   = nc4.text_input("Celular / WhatsApp", key="cli_new_cel")
+        nc5, nc6 = st.columns(2)
+        nc_email = nc5.text_input("E-mail", key="cli_new_email")
+        nc_cid   = nc6.text_input("Cidade", key="cli_new_cid")
+        nc_obs   = st.text_area("Observações", key="cli_new_obs", height=70)
 
-    def _render_contas(tipo):
-        _f1, _f2, _f3 = st.columns([1, 1, 1])
-        _ini = _f1.date_input("De", value=date.today() - timedelta(days=30), key=f"beta_fin_{tipo}_ini")
-        _fim = _f2.date_input("Até", value=date.today() + timedelta(days=30), key=f"beta_fin_{tipo}_fim")
-        if _f3.button("🔄 Carregar", use_container_width=True, key=f"beta_fin_{tipo}_btn"):
-            st.session_state.pop(f"beta_fin_{tipo}_dados", None)
+        if st.button("✅ Salvar cliente", use_container_width=True,
+                     type="primary", key="cli_new_save"):
+            if not nc_nome.strip():
+                st.warning("Nome/Razão Social é obrigatório.")
+            else:
+                with st.spinner("Salvando…"):
+                    try:
+                        dados = {"nome": nc_nome.strip(), "cpf_cnpj": nc_cpf,
+                                 "telefone": nc_tel, "celular": nc_cel,
+                                 "email": nc_email, "cidade": nc_cid,
+                                 "observacoes": nc_obs}
+                        api.criar_cliente(dados)
+                        st.success(f"✅ Cliente '{nc_nome}' cadastrado!")
+                        st.session_state.pop("cli_results", None)
+                    except Exception as ex:
+                        st.error(f"Erro: {ex}")
 
-        if f"beta_fin_{tipo}_dados" not in st.session_state:
+    # ── Busca ──
+    _sec("Buscar clientes")
+    sc1, sc2 = st.columns([4, 1])
+    termo_c = sc1.text_input("🔍 Nome ou CPF/CNPJ", key="cli_termo",
+                              label_visibility="collapsed",
+                              placeholder="Nome ou CPF/CNPJ…")
+    if sc2.button("Buscar", use_container_width=True, key="cli_buscar"):
+        with st.spinner("Buscando…"):
+            try:
+                st.session_state["cli_results"] = api.buscar_clientes(termo_c, limite=30)
+            except Exception as ex:
+                st.error(f"Erro: {ex}")
+                st.session_state["cli_results"] = []
+
+    clientes = st.session_state.get("cli_results")
+    if clientes is None and not termo_c:
+        # Carrega primeiros por padrão
+        try:
+            clientes = api.buscar_clientes("", limite=20)
+            st.session_state["cli_results"] = clientes
+        except Exception:
+            clientes = []
+
+    clientes = clientes or []
+    if clientes:
+        st.caption(f"{len(clientes)} cliente(s) encontrado(s)")
+        for ci, c in enumerate(clientes):
+            nome_c = c.get("nome") or c.get("razao_social") or "—"
+            doc    = c.get("cpf") or c.get("cnpj") or ""
+            tel    = c.get("telefone") or c.get("celular") or ""
+            cidade = c.get("cidade") or ""
+            cid_html = (f" · {cidade}" if cidade else "")
+
+            with st.expander(f"👤 {nome_c}" + (f" — {doc}" if doc else "")):
+                d1, d2 = st.columns(2)
+                d1.write(f"**Nome:** {nome_c}")
+                d1.write(f"**Doc.:** {doc or '—'}")
+                d1.write(f"**Tel.:** {tel or '—'}")
+                d1.write(f"**E-mail:** {c.get('email','—')}")
+                d2.write(f"**Cidade:** {cidade or '—'}")
+                d2.write(f"**Estado:** {c.get('estado','—')}")
+                d2.write(f"**Obs.:** {c.get('observacoes','—')[:60]}")
+
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _sec("Editar dados")
+
+                e1, e2 = st.columns(2)
+                e_nome  = e1.text_input("Nome", value=nome_c, key=f"cli_e_nome_{ci}")
+                e_doc   = e2.text_input("CPF/CNPJ", value=doc, key=f"cli_e_doc_{ci}")
+                e3, e4  = st.columns(2)
+                e_tel   = e3.text_input("Telefone", value=tel, key=f"cli_e_tel_{ci}")
+                e_email = e4.text_input("E-mail", value=c.get("email",""), key=f"cli_e_email_{ci}")
+                e_obs   = st.text_area("Observações", value=c.get("observacoes",""),
+                                       key=f"cli_e_obs_{ci}", height=60)
+
+                col_save, col_del = st.columns(2)
+                if col_save.button("💾 Salvar edição", use_container_width=True,
+                                   key=f"cli_save_{ci}"):
+                    with st.spinner("Salvando…"):
+                        try:
+                            api.atualizar_cliente(c["id"], {
+                                "nome": e_nome, "cpf_cnpj": e_doc,
+                                "telefone": e_tel, "email": e_email,
+                                "observacoes": e_obs,
+                            })
+                            st.success("✅ Cliente atualizado!")
+                            st.session_state.pop("cli_results", None)
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Erro: {ex}")
+
+                if col_del.button("🗑️ Excluir", use_container_width=True,
+                                   key=f"cli_del_{ci}"):
+                    with st.spinner("Excluindo…"):
+                        try:
+                            api.excluir_cliente(c["id"])
+                            st.warning(f"Cliente '{nome_c}' excluído.")
+                            st.session_state.pop("cli_results", None)
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Erro: {ex}")
+    elif clientes is not None:
+        _empty_state("👥", "Nenhum cliente encontrado", "Use a busca acima ou cadastre um novo")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# FORNECEDORES
+# ══════════════════════════════════════════════════════════════════
+
+def _fornecedores():
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("🏭 Fornecedores", "Gerencie o cadastro de fornecedores")
+
+    # ── Novo fornecedor ──
+    with st.expander("➕ Cadastrar novo fornecedor"):
+        nf1, nf2 = st.columns(2)
+        nf_nome  = nf1.text_input("Razão Social *", key="forn_new_nome")
+        nf_cnpj  = nf2.text_input("CNPJ", key="forn_new_cnpj")
+        nf3, nf4 = st.columns(2)
+        nf_tel   = nf3.text_input("Telefone", key="forn_new_tel")
+        nf_email = nf4.text_input("E-mail", key="forn_new_email")
+        nf5, nf6 = st.columns(2)
+        nf_rep   = nf5.text_input("Representante / Contato", key="forn_new_rep")
+        nf_pz    = nf6.text_input("Prazo de entrega", key="forn_new_pz")
+        nf_obs   = st.text_area("Observações", key="forn_new_obs", height=70)
+
+        if st.button("✅ Salvar fornecedor", use_container_width=True,
+                     type="primary", key="forn_new_save"):
+            if not nf_nome.strip():
+                st.warning("Razão Social é obrigatório.")
+            else:
+                with st.spinner("Salvando…"):
+                    try:
+                        dados = {"razao_social": nf_nome.strip(), "cnpj": nf_cnpj,
+                                 "telefone": nf_tel, "email": nf_email,
+                                 "observacoes": nf_obs}
+                        api.criar_fornecedor(dados)
+                        st.success(f"✅ Fornecedor '{nf_nome}' cadastrado!")
+                        st.session_state.pop("forn_results", None)
+                    except Exception as ex:
+                        st.error(f"Erro: {ex}")
+
+    # ── Busca ──
+    _sec("Buscar fornecedores")
+    sf1, sf2 = st.columns([4, 1])
+    termo_f = sf1.text_input("🔍 Nome ou CNPJ", key="forn_termo",
+                              label_visibility="collapsed",
+                              placeholder="Nome ou CNPJ…")
+    if sf2.button("Buscar", use_container_width=True, key="forn_buscar"):
+        with st.spinner("Buscando…"):
+            try:
+                st.session_state["forn_results"] = api.buscar_fornecedores(termo_f, limite=30)
+            except Exception as ex:
+                st.error(f"Erro: {ex}")
+                st.session_state["forn_results"] = []
+
+    fornecedores = st.session_state.get("forn_results")
+    if fornecedores is None and not termo_f:
+        try:
+            fornecedores = api.buscar_fornecedores("", limite=20)
+            st.session_state["forn_results"] = fornecedores
+        except Exception:
+            fornecedores = []
+
+    fornecedores = fornecedores or []
+    if fornecedores:
+        st.caption(f"{len(fornecedores)} fornecedor(es) encontrado(s)")
+        for fi, f in enumerate(fornecedores):
+            nome_f = f.get("razao_social") or f.get("nome") or "—"
+            cnpj_f = f.get("cnpj") or ""
+            tel_f  = f.get("telefone") or ""
+
+            with st.expander(f"🏭 {nome_f}" + (f" — {cnpj_f}" if cnpj_f else "")):
+                d1, d2 = st.columns(2)
+                d1.write(f"**Razão Social:** {nome_f}")
+                d1.write(f"**CNPJ:** {cnpj_f or '—'}")
+                d1.write(f"**Tel.:** {tel_f or '—'}")
+                d2.write(f"**E-mail:** {f.get('email','—')}")
+                d2.write(f"**Obs.:** {(f.get('observacoes') or '')[:60]}")
+
+                _sec("Editar dados")
+                ef1, ef2 = st.columns(2)
+                ef_nome  = ef1.text_input("Razão Social", value=nome_f, key=f"forn_e_nome_{fi}")
+                ef_cnpj  = ef2.text_input("CNPJ", value=cnpj_f, key=f"forn_e_cnpj_{fi}")
+                ef3, ef4 = st.columns(2)
+                ef_tel   = ef3.text_input("Telefone", value=tel_f, key=f"forn_e_tel_{fi}")
+                ef_email = ef4.text_input("E-mail", value=f.get("email",""), key=f"forn_e_email_{fi}")
+                ef_obs   = st.text_area("Observações", value=f.get("observacoes",""),
+                                        key=f"forn_e_obs_{fi}", height=60)
+
+                cs, cd = st.columns(2)
+                if cs.button("💾 Salvar", use_container_width=True, key=f"forn_save_{fi}"):
+                    with st.spinner("Salvando…"):
+                        try:
+                            api.atualizar_fornecedor(f["id"], {
+                                "razao_social": ef_nome, "cnpj": ef_cnpj,
+                                "telefone": ef_tel, "email": ef_email,
+                                "observacoes": ef_obs,
+                            })
+                            st.success("✅ Fornecedor atualizado!")
+                            st.session_state.pop("forn_results", None)
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Erro: {ex}")
+                if cd.button("🗑️ Excluir", use_container_width=True, key=f"forn_del_{fi}"):
+                    with st.spinner("Excluindo…"):
+                        try:
+                            api.excluir_fornecedor(f["id"])
+                            st.warning(f"Fornecedor '{nome_f}' excluído.")
+                            st.session_state.pop("forn_results", None)
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"Erro: {ex}")
+    elif fornecedores is not None:
+        _empty_state("🏭", "Nenhum fornecedor encontrado", "Use a busca ou cadastre um novo")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# COMPRAS
+# ══════════════════════════════════════════════════════════════════
+
+def _compras(loja_id):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("🧾 Histórico de Compras", "Consulte e detalhe pedidos de compra")
+
+    c1, c2, c3 = st.columns([1, 1, 1])
+    d_ini = c1.date_input("De",  value=date.today() - timedelta(days=30), key="cmp_ini")
+    d_fim = c2.date_input("Até", value=date.today(), key="cmp_fim")
+    if c3.button("🔄 Carregar", use_container_width=True, type="primary", key="cmp_load"):
+        st.session_state.pop("cmp_data", None)
+
+    if "cmp_data" not in st.session_state:
+        with st.spinner("Carregando compras…"):
+            try:
+                res = api.buscar_compras(str(d_ini), str(d_fim), loja_id=loja_id, limite=100)
+                st.session_state["cmp_data"] = res if isinstance(res, list) else []
+            except Exception as ex:
+                st.error(f"Erro ao carregar compras: {ex}")
+                st.session_state["cmp_data"] = []
+
+    compras = st.session_state.get("cmp_data", [])
+
+    if compras:
+        total_val = sum(float(c.get("valor_total") or 0) for c in compras)
+        mk1, mk2, mk3 = st.columns(3)
+        with mk1: _kpi(len(compras), "Compras", "kpi-ind", "🧾")
+        with mk2: _kpi(f"R$ {total_val:,.0f}", "Total", "kpi-grn", "💰")
+        with mk3:
+            n_pend = sum(1 for c in compras
+                         if str(c.get("situacao_id","")) not in ("2","3","4"))
+            _kpi(n_pend, "Pendentes", "kpi-amb" if n_pend else "", "⏳")
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        for ci, cmp in enumerate(compras):
+            num    = cmp.get("codigo") or cmp.get("numero") or cmp.get("id","")
+            forn   = (cmp.get("fornecedor_nome") or cmp.get("fornecedor") or "—")[:30]
+            data_c = (cmp.get("data_emissao") or cmp.get("created_at",""))[:10]
+            val    = float(cmp.get("valor_total") or 0)
+            sit    = cmp.get("situacao") or cmp.get("status") or "—"
+            sit_id = str(cmp.get("situacao_id",""))
+            sit_cor = "grn" if sit_id in ("3","4") else ("yel" if sit_id == "2" else "gray")
+
+            with st.expander(
+                f"#{num} · {forn} · {data_c} · R$ {val:,.2f} "
+                + (f"[{sit}]" if sit != "—" else "")
+            ):
+                d1, d2 = st.columns(2)
+                d1.write(f"**Fornecedor:** {forn}")
+                d1.write(f"**Data emissão:** {data_c}")
+                d1.write(f"**Código:** {num}")
+                d2.write(f"**Valor total:** R$ {val:,.2f}")
+                d2.markdown(f"**Situação:** {_chip(sit, sit_cor)}", unsafe_allow_html=True)
+                obs_c = cmp.get("observacoes") or ""
+                if obs_c:
+                    d2.write(f"**Obs.:** {obs_c[:60]}")
+
+                if st.button("📋 Ver itens desta compra", key=f"cmp_det_{ci}"):
+                    with st.spinner("Carregando itens…"):
+                        try:
+                            det = api.buscar_compra(cmp["id"], loja_id)
+                            prods_det = det.get("produtos", det.get("itens", []))
+                            if prods_det:
+                                rows_d = [{
+                                    "Produto":   (p.get("nome_produto") or p.get("produto_nome",""))[:30],
+                                    "Variação":  p.get("variacao_nome",""),
+                                    "Qtd":       p.get("quantidade",""),
+                                    "Custo un.": f"R$ {float(p.get('valor_custo') or 0):,.2f}",
+                                } for p in prods_det]
+                                st.dataframe(pd.DataFrame(rows_d), use_container_width=True, hide_index=True)
+                            else:
+                                st.info("Nenhum item encontrado.")
+                        except Exception as ex:
+                            st.error(f"Erro: {ex}")
+    else:
+        _empty_state("🧾", "Nenhuma compra encontrada", "Ajuste o período e clique em Carregar")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# FINANCEIRO
+# ══════════════════════════════════════════════════════════════════
+
+def _financeiro():
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("💰 Financeiro", "Contas a receber e a pagar")
+
+    tab_r, tab_p = st.tabs(["💚 Contas a Receber", "❤️ Contas a Pagar"])
+
+    def _render_fin(tipo: str):
+        key_d = f"beta_fin2_{tipo}"
+        f1, f2, f3 = st.columns([1, 1, 1])
+        ini = f1.date_input("De",  value=date.today() - timedelta(days=30), key=f"{tipo}_ini")
+        fim = f2.date_input("Até", value=date.today() + timedelta(days=30), key=f"{tipo}_fim")
+        if f3.button("🔄 Carregar", use_container_width=True, key=f"{tipo}_btn"):
+            st.session_state.pop(key_d, None)
+
+        if key_d not in st.session_state:
             with st.spinner("Carregando…"):
                 try:
                     fn = api.buscar_contas_receber if tipo == "rec" else api.buscar_contas_pagar
-                    st.session_state[f"beta_fin_{tipo}_dados"] = fn(str(_ini), str(_fim), limite=300)
-                except Exception as _ex_fin:
-                    st.error(f"Erro: {_ex_fin}")
-                    st.session_state[f"beta_fin_{tipo}_dados"] = []
+                    dados = fn(str(ini), str(fim), limite=300)
+                    st.session_state[key_d] = dados if isinstance(dados, list) else []
+                except Exception as ex:
+                    st.error(f"Erro: {ex}")
+                    st.session_state[key_d] = []
 
-        contas = st.session_state.get(f"beta_fin_{tipo}_dados", [])
-        if not isinstance(contas, list): contas = []
+        contas = st.session_state.get(key_d, [])
+        if not isinstance(contas, list):
+            contas = []
 
-        _total  = sum(float(c.get("valor") or c.get("valor_total") or 0) for c in contas)
-        _pago   = sum(float(c.get("valor_pago") or 0) for c in contas)
-        _aberto = _total - _pago
+        total  = sum(float(c.get("valor") or c.get("valor_total") or 0) for c in contas)
+        pago   = sum(float(c.get("valor_pago") or 0) for c in contas)
+        aberto = total - pago
 
-        _k1, _k2, _k3 = st.columns(3)
-        with _k1: _kpi(f"R$ {_total:,.0f}", "Total", "bk-acc")
-        with _k2: _kpi(f"R$ {_pago:,.0f}", "Recebido/Pago", "bk-grn")
-        with _k3: _kpi(f"R$ {_aberto:,.0f}", "Em aberto", "bk-red")
+        k1, k2, k3 = st.columns(3)
+        cor_tot = "kpi-grn" if tipo == "rec" else "kpi-red"
+        with k1: _kpi(f"R$ {total:,.2f}",  "Total",          cor_tot, "💰")
+        with k2: _kpi(f"R$ {pago:,.2f}",   "Recebido/Pago",  "kpi-grn", "✅")
+        with k3: _kpi(f"R$ {aberto:,.2f}", "Em aberto",      "kpi-amb" if aberto else "", "⏳")
+
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
         if contas:
-            _rows_fin = []
-            for _c in contas:
-                _sit = "✅" if (str(_c.get("situacao_id",""))=="2" or str(_c.get("pago",""))=="1") else "⏳"
-                _rows_fin.append({
-                    "Sit.": _sit,
-                    "Descrição": (_c.get("descricao") or _c.get("historico",""))[:30],
-                    "Parte": (_c.get("cliente_nome") or _c.get("fornecedor_nome") or "")[:20],
-                    "Vencto": (_c.get("data_vencimento") or "")[:10],
-                    "Valor": f"R$ {float(_c.get('valor') or _c.get('valor_total') or 0):,.2f}",
-                })
-            st.dataframe(pd.DataFrame(_rows_fin), use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum lançamento no período.")
+            # Chart por vencimento
+            by_date: dict[str, float] = {}
+            for c in contas:
+                venc = (c.get("data_vencimento") or "")[:10]
+                v    = float(c.get("valor") or c.get("valor_total") or 0)
+                if venc:
+                    by_date[venc] = by_date.get(venc, 0) + v
+            if len(by_date) > 1:
+                df_chart = pd.DataFrame({"Valor": by_date}).sort_index()
+                st.bar_chart(df_chart)
 
-    with _tab_r: _render_contas("rec")
-    with _tab_p: _render_contas("pag")
+            rows = []
+            for c in contas:
+                pago_c = str(c.get("situacao_id","")) in ("2","3") or str(c.get("pago","")) == "1"
+                sit = "✅ Quitado" if pago_c else "⏳ Aberto"
+                parte = (c.get("cliente_nome") or c.get("fornecedor_nome") or "")[:22]
+                rows.append({
+                    "Status":    sit,
+                    "Descrição": (c.get("descricao") or c.get("historico",""))[:32],
+                    "Parte":     parte,
+                    "Vencto":    (c.get("data_vencimento") or "")[:10],
+                    "Valor":     f"R$ {float(c.get('valor') or c.get('valor_total') or 0):,.2f}",
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+            buf_fin = io.BytesIO()
+            with pd.ExcelWriter(buf_fin, engine="openpyxl") as wr:
+                pd.DataFrame(rows).to_excel(wr, index=False)
+            buf_fin.seek(0)
+            st.download_button(
+                "📄 Exportar Excel", buf_fin,
+                f"financeiro_{tipo}_{date.today()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key=f"fin_xls_{tipo}",
+            )
+        else:
+            _empty_state("💰", "Sem lançamentos no período", "Ajuste as datas e clique em Carregar")
+
+    with tab_r: _render_fin("rec")
+    with tab_p: _render_fin("pag")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Relatórios
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# RELATÓRIOS
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_relatorios(cache, loja_id):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _relatorios(cache, loja_id):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("📊 Relatórios", "Vendas, estoque e resultado financeiro")
 
-    _tab_v, _tab_e, _tab_f = st.tabs(["📈 Vendas", "📦 Estoque", "💰 Resultado"])
+    tab_v, tab_e, tab_f = st.tabs(["📈 Vendas", "📦 Estoque", "💰 Resultado"])
 
-    with _tab_v:
-        _rv1, _rv2, _rv3 = st.columns([1, 1, 1])
-        _d_v_ini = _rv1.date_input("De", value=date.today() - timedelta(days=30), key="beta_rv_ini")
-        _d_v_fim = _rv2.date_input("Até", value=date.today(), key="beta_rv_fim")
-        if _rv3.button("📊 Gerar", use_container_width=True, key="beta_rv_btn", type="primary"):
+    # ── Vendas ──
+    with tab_v:
+        rv1, rv2, rv3 = st.columns([1, 1, 1])
+        d_ini = rv1.date_input("De",  value=date.today() - timedelta(days=30), key="rv_ini")
+        d_fim = rv2.date_input("Até", value=date.today(), key="rv_fim")
+        if rv3.button("📊 Gerar", use_container_width=True, type="primary", key="rv_btn"):
             with st.spinner("Carregando vendas…"):
                 try:
-                    _vendas = api.buscar_vendas(str(_d_v_ini), str(_d_v_fim), loja_id=loja_id, limite=500)
-                    if not isinstance(_vendas, list): _vendas = []
-                    if _vendas:
-                        _total_v = sum(float(v.get("valor_total") or 0) for v in _vendas)
-                        _ka, _kb, _kc = st.columns(3)
-                        with _ka: _kpi(len(_vendas), "Pedidos", "bk-acc")
-                        with _kb: _kpi(f"R$ {_total_v:,.0f}", "Total", "bk-grn")
-                        with _kc: _kpi(f"R$ {(_total_v/len(_vendas)):.0f}", "Ticket médio")
+                    vendas = api.buscar_vendas(str(d_ini), str(d_fim), loja_id=loja_id, limite=500)
+                    if not isinstance(vendas, list): vendas = []
+                    if vendas:
+                        tv = sum(float(v.get("valor_total") or 0) for v in vendas)
+                        tm = tv / len(vendas)
+                        k1, k2, k3 = st.columns(3)
+                        with k1: _kpi(len(vendas), "Pedidos", "kpi-ind", "🛒")
+                        with k2: _kpi(f"R$ {tv:,.2f}", "Total", "kpi-grn", "💰")
+                        with k3: _kpi(f"R$ {tm:,.2f}", "Ticket médio", "", "📊")
 
-                        _rows_v = []
-                        for _v in _vendas:
-                            _rows_v.append({
-                                "Data":    (_v.get("data_emissao") or "")[:10],
-                                "Nº":      _v.get("numero",""),
-                                "Cliente": (_v.get("cliente_nome","") or "")[:25],
-                                "Valor":   float(_v.get("valor_total") or 0),
-                                "Status":  _v.get("status",""),
-                            })
-                        _df_v = pd.DataFrame(_rows_v)
-                        st.dataframe(_df_v, use_container_width=True, hide_index=True)
-
+                        rows_v = [{
+                            "Data":    (v.get("data_emissao", "") or "")[:10],
+                            "Nº":      v.get("numero", ""),
+                            "Cliente": (v.get("cliente_nome","") or "")[:22],
+                            "Valor":   float(v.get("valor_total") or 0),
+                            "Status":  v.get("status",""),
+                        } for v in vendas]
+                        df_v = pd.DataFrame(rows_v)
                         _sec("Vendas por dia")
-                        _df_chart = _df_v.groupby("Data")["Valor"].sum().reset_index()
-                        _df_chart = _df_chart.set_index("Data")
-                        st.bar_chart(_df_chart)
+                        st.bar_chart(df_v.groupby("Data")["Valor"].sum())
+                        st.dataframe(df_v, use_container_width=True, hide_index=True)
                     else:
-                        st.info("Nenhuma venda no período.")
-                except Exception as _ex_v:
-                    st.error(f"Erro: {_ex_v}")
+                        _empty_state("📈", "Nenhuma venda no período")
+                except Exception as ex:
+                    st.error(f"Erro: {ex}")
 
-    with _tab_e:
+    # ── Estoque ──
+    with tab_e:
         if not cache:
-            st.info("Sincronize os produtos para ver o relatório de estoque.")
+            _empty_state("📦", "Cache vazio", "Sincronize em Config")
         else:
-            _prods_r = cache.get("produtos", [])
-            _rows_e = []
-            for _p in _prods_r:
-                for _v in _p.get("variacoes", []):
-                    _vd = _v.get("variacao", _v)
-                    _est = int(_vd.get("estoque", 0) or 0)
-                    _rows_e.append({
-                        "Produto":  _p.get("nome",""),
-                        "Variação": _vd.get("nome",""),
-                        "Cód.":     _vd.get("codigo",""),
-                        "Estoque":  _est,
-                        "Status":   "🔴" if _est <= 3 else ("🟡" if _est <= 10 else "🟢"),
+            rows_e = []
+            for p in cache.get("produtos", []):
+                for v in p.get("variacoes", []):
+                    vd  = v.get("variacao", v)
+                    est = int(vd.get("estoque", 0) or 0)
+                    rows_e.append({
+                        "Status":   "🔴" if est <= 3 else ("🟡" if est <= 10 else "🟢"),
+                        "Produto":  p.get("nome", "")[:30],
+                        "Variação": vd.get("nome", "")[:25],
+                        "Cód.":     vd.get("codigo", ""),
+                        "Estoque":  est,
                     })
-            _df_e = pd.DataFrame(_rows_e).sort_values("Estoque")
-            _sec(f"{len(_df_e)} variações · {_df_e['Estoque'].sum()} unidades total")
-            _filtro_status = st.selectbox("Filtrar", ["Todos","🔴 Crítico (≤3)","🟡 Baixo (≤10)","🟢 Normal"],
-                                           key="beta_re_filtro")
-            if "Crítico" in _filtro_status:
-                _df_e = _df_e[_df_e["Estoque"] <= 3]
-            elif "Baixo" in _filtro_status:
-                _df_e = _df_e[_df_e["Estoque"] <= 10]
-            st.dataframe(_df_e, use_container_width=True, hide_index=True)
+            if rows_e:
+                df_e = pd.DataFrame(rows_e).sort_values("Estoque")
+                total_un = df_e["Estoque"].sum()
+                _sec(f"{len(df_e)} variações · {total_un:,} unidades totais")
+                filtro = st.selectbox("Filtrar por status",
+                                       ["Todos", "🔴 Crítico (≤3)", "🟡 Baixo (≤10)", "🟢 Saudável (>10)"],
+                                       key="rel_e_filtro")
+                if "Crítico" in filtro:
+                    df_e = df_e[df_e["Estoque"] <= 3]
+                elif "Baixo" in filtro:
+                    df_e = df_e[df_e["Estoque"] <= 10]
+                elif "Saudável" in filtro:
+                    df_e = df_e[df_e["Estoque"] > 10]
+                st.dataframe(df_e, use_container_width=True, hide_index=True)
 
-            _buf_e = io.BytesIO()
-            with pd.ExcelWriter(_buf_e, engine="openpyxl") as _wr_e:
-                _df_e.to_excel(_wr_e, index=False, sheet_name="Estoque")
-            _buf_e.seek(0)
-            st.download_button("📄 Exportar Excel", _buf_e, "estoque.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True)
+                buf_e = io.BytesIO()
+                with pd.ExcelWriter(buf_e, engine="openpyxl") as wr:
+                    df_e.to_excel(wr, index=False)
+                buf_e.seek(0)
+                st.download_button(
+                    "📄 Exportar Excel", buf_e, f"estoque_{date.today()}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
 
-    with _tab_f:
-        _rfi1, _rfi2, _rfi3 = st.columns([1, 1, 1])
-        _d_f_ini = _rfi1.date_input("De", value=date.today() - timedelta(days=30), key="beta_rf_ini")
-        _d_f_fim = _rfi2.date_input("Até", value=date.today(), key="beta_rf_fim")
-        if _rfi3.button("📊 Gerar", use_container_width=True, key="beta_rf_btn", type="primary"):
+    # ── Resultado ──
+    with tab_f:
+        rf1, rf2, rf3 = st.columns([1, 1, 1])
+        d_ri = rf1.date_input("De",  value=date.today() - timedelta(days=30), key="rf_ini")
+        d_rf = rf2.date_input("Até", value=date.today(), key="rf_fim")
+        if rf3.button("📊 Gerar", use_container_width=True, type="primary", key="rf_btn"):
             with st.spinner("Calculando…"):
                 try:
-                    _rec_f = api.buscar_contas_receber(str(_d_f_ini), str(_d_f_fim), limite=500)
-                    _pag_f = api.buscar_contas_pagar(str(_d_f_ini), str(_d_f_fim), limite=500)
-                    if not isinstance(_rec_f, list): _rec_f = []
-                    if not isinstance(_pag_f, list): _pag_f = []
-                    _tr_f = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in _rec_f)
-                    _tp_f = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in _pag_f)
-                    _res_f = _tr_f - _tp_f
-                    _fa, _fb, _fc = st.columns(3)
-                    with _fa: _kpi(f"R$ {_tr_f:,.0f}", "Total a receber", "bk-grn")
-                    with _fb: _kpi(f"R$ {_tp_f:,.0f}", "Total a pagar", "bk-red")
-                    with _fc: _kpi(f"R$ {_res_f:,.0f}", "Resultado",
-                                    "bk-grn" if _res_f >= 0 else "bk-red")
+                    rec_f = api.buscar_contas_receber(str(d_ri), str(d_rf), limite=500)
+                    pag_f = api.buscar_contas_pagar(str(d_ri), str(d_rf), limite=500)
+                    if not isinstance(rec_f, list): rec_f = []
+                    if not isinstance(pag_f, list): pag_f = []
+                    tr_f  = sum(float(r.get("valor") or r.get("valor_total") or 0) for r in rec_f)
+                    tp_f  = sum(float(p.get("valor") or p.get("valor_total") or 0) for p in pag_f)
+                    res_f = tr_f - tp_f
 
-                    # Chart comparativo
-                    _df_comp = pd.DataFrame({
-                        "Valor": [_tr_f, _tp_f, max(0, _res_f)],
-                        "Tipo":  ["Receber", "Pagar", "Resultado"]
-                    }).set_index("Tipo")
-                    st.bar_chart(_df_comp)
-                except Exception as _ex_f:
-                    st.error(f"Erro: {_ex_f}")
+                    ka, kb, kc = st.columns(3)
+                    with ka: _kpi(f"R$ {tr_f:,.2f}",  "Receitas",  "kpi-grn", "💚")
+                    with kb: _kpi(f"R$ {tp_f:,.2f}",  "Despesas",  "kpi-red", "❤️")
+                    with kc: _kpi(f"R$ {res_f:,.2f}", "Resultado",
+                                  "kpi-grn" if res_f >= 0 else "kpi-red", "⚡")
+
+                    df_res = pd.DataFrame(
+                        {"Valor": {"Receitas": tr_f, "Despesas": tp_f,
+                                   "Resultado": max(0, res_f)}}
+                    )
+                    st.bar_chart(df_res)
+
+                    # Lucro percentual
+                    if tr_f > 0:
+                        pct = res_f / tr_f * 100
+                        cor_pct = "kpi-grn" if pct >= 0 else "kpi-red"
+                        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                        _kpi(f"{pct:.1f}%", "Margem sobre receitas", cor_pct, "📊")
+                except Exception as ex:
+                    st.error(f"Erro: {ex}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# PÁGINA: Configurações
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# LISTAS
+# ══════════════════════════════════════════════════════════════════
 
-def _pg_config(cache, loja_id, is_admin):
-    st.markdown('<div class="bc">', unsafe_allow_html=True)
+def _listas():
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("📋 Listas Salvas", "Gerencie todas as listas do sistema")
 
-    _tab_sync, _tab_loja, _tab_ver = st.tabs(["🔄 Sync", "🏪 Loja", "🔀 Versão"])
+    tipos = [None, "pedido", "recebimento", "conferencia", "outro"]
+    tabs_l = st.tabs(["🗂️ Todas", "🛒 Pedido", "📥 Recebimento", "✅ Conferência", "📌 Outro"])
 
-    with _tab_sync:
-        _sec("Sincronizar produtos")
+    for tab_l, tipo in zip(tabs_l, tipos):
+        with tab_l:
+            listas = api.listar_listas_salvas(tipo)
+            if listas:
+                for lst in listas:
+                    arq  = lst.get("_arquivo", "")
+                    lnm  = lst.get("nome", arq)
+                    lqt  = len(lst.get("itens", []))
+                    ldt  = (lst.get("criado_em", "") or "")[:10]
+                    ltp  = lst.get("tipo", "—")
+
+                    with st.expander(f"📄 {lnm} · {lqt} itens · {ldt}"):
+                        st.markdown(f"**Tipo:** {ltp} · **Arquivo:** `{arq}`")
+                        itens_l = lst.get("itens", [])
+                        if itens_l:
+                            rows_l = [{
+                                "Produto":  it.get("produto_nome",""),
+                                "Variação": it.get("variacao_nome",""),
+                                "Qtd":      it.get("quantidade",""),
+                            } for it in itens_l[:50]]
+                            st.dataframe(pd.DataFrame(rows_l), use_container_width=True, hide_index=True)
+                            if len(itens_l) > 50:
+                                st.caption(f"… e mais {len(itens_l)-50} itens")
+
+                        xa, xb, xc = st.columns(3)
+                        # Copiar texto
+                        if xa.button("📋 Copiar", key=f"lista_copy_{arq}", use_container_width=True):
+                            linhas = [f"LISTA: {lnm}", "=" * 36]
+                            for it in itens_l:
+                                v = f" / {it['variacao_nome']}" if it.get("variacao_nome") else ""
+                                linhas.append(f"{it.get('produto_nome','')}{v} — {it.get('quantidade',0)} un")
+                            _copiar_html("\n".join(linhas))
+
+                        # Excel
+                        if itens_l:
+                            buf_l = io.BytesIO()
+                            with pd.ExcelWriter(buf_l, engine="openpyxl") as wr:
+                                pd.DataFrame([{
+                                    "Produto":  it.get("produto_nome",""),
+                                    "Variação": it.get("variacao_nome",""),
+                                    "Qtd":      it.get("quantidade",""),
+                                } for it in itens_l]).to_excel(wr, index=False)
+                            buf_l.seek(0)
+                            xb.download_button(
+                                "📄 Excel", buf_l, f"{arq}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True, key=f"lista_xls_{arq}",
+                            )
+
+                        if xc.button("🗑️ Excluir", key=f"lista_del_{arq}", use_container_width=True):
+                            try:
+                                api.excluir_lista(arq)
+                                st.warning(f"Lista '{lnm}' excluída.")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"Erro: {ex}")
+            else:
+                _empty_state("📋", "Nenhuma lista nesta categoria",
+                             "Crie listas na aba Pedidos")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# CONFIGURAÇÕES
+# ══════════════════════════════════════════════════════════════════
+
+def _config(cache, loja_id, is_adm):
+    st.markdown('<div class="pg">', unsafe_allow_html=True)
+    _pg_header("⚙️ Configurações", "Sincronização, lojas e usuários")
+
+    tabs_cfg = ["🔄 Sincronização", "🏪 Loja ativa", "🔀 Versão"]
+    if is_adm:
+        tabs_cfg.append("👥 Usuários")
+    tab_s, tab_l, tab_v, *tab_u_list = st.tabs(tabs_cfg)
+    tab_u = tab_u_list[0] if tab_u_list else None
+
+    # ── Sync ──
+    with tab_s:
         if cache:
-            _s_em = (cache.get("sincronizado_em","") or "")[:16].replace("T"," às ")
-            st.success(f"Cache atual: **{cache.get('total',0)}** produtos — sync {_s_em}")
+            sync = (cache.get("sincronizado_em", "") or "")[:16].replace("T", " às ")
+            _alerta(
+                f"Cache ativo: {cache.get('total',0):,} produtos",
+                f"Loja: {cache.get('loja_nome','—')} · Sync: {sync}",
+                tipo="grn",
+            )
         else:
-            st.warning("Nenhum cache para esta loja.")
+            _alerta("Nenhum cache para esta loja — sincronize para começar.", tipo="yel")
 
-        if st.button("🔄 Sincronizar Todas as Lojas", type="primary", use_container_width=True, key="beta_sync_all"):
-            _bar = st.progress(0)
-            _txt = st.empty()
-            _erros_s = []
-            for _idx, (_lid, _lnome) in enumerate(api.LOJAS.items()):
-                _txt.info(f"Sincronizando **{_lnome}**… ({_idx+1}/{len(api.LOJAS)})")
-                def _prog(pag, total, _n=_lnome, _i=_idx, _tot=len(api.LOJAS)):
-                    _bar.progress((_i + pag/max(total,1))/_tot, text=f"{_n}: {pag}/{total}")
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _sec("Sincronizar dados com GestãoClick")
+
+        if st.button("🔄 Sincronizar Todas as Lojas", type="primary",
+                      use_container_width=True, key="sync_all"):
+            bar  = st.progress(0, text="Iniciando…")
+            errs = []
+            for idx, (lid, lnm) in enumerate(api.LOJAS.items()):
+                def _prog(pag, tot, _n=lnm, _i=idx, _T=len(api.LOJAS)):
+                    bar.progress((_i + pag / max(tot, 1)) / _T, text=f"{_n}: pág {pag}/{tot}")
                 try:
-                    api.sincronizar_produtos(loja_id=_lid, progress_callback=_prog)
-                except Exception as _ex_s:
-                    _erros_s.append(f"{_lnome}: {_ex_s}")
-            if _erros_s:
-                for _e in _erros_s: st.error(_e)
+                    api.sincronizar_produtos(loja_id=lid, progress_callback=_prog)
+                except Exception as ex:
+                    errs.append(f"{lnm}: {ex}")
+            _alertas_estoque.clear()
+            if errs:
+                for e in errs: st.error(e)
             else:
                 st.success("✅ Todas as lojas sincronizadas!")
                 st.rerun()
 
-    with _tab_loja:
+    # ── Loja ──
+    with tab_l:
         _sec("Loja ativa")
-        _loja_opts = {v: k for k, v in api.LOJAS.items()}
-        _loja_atual_nome = api.LOJAS.get(str(loja_id), list(api.LOJAS.values())[0])
-        _loja_nova = st.selectbox("Selecionar loja", list(_loja_opts.keys()),
-                                   index=list(_loja_opts.keys()).index(_loja_atual_nome)
-                                   if _loja_atual_nome in _loja_opts else 0,
-                                   key="beta_loja_sel")
-        if st.button("✅ Aplicar", key="beta_loja_apply", use_container_width=True):
-            st.session_state["loja_ativa_id"] = _loja_opts[_loja_nova]
-            st.session_state["loja_ativa_nome"] = _loja_nova
+        opts = {v: k for k, v in api.LOJAS.items()}
+        atual = api.LOJAS.get(str(loja_id), list(api.LOJAS.values())[0])
+        nova  = st.selectbox("Selecione a loja", list(opts.keys()),
+                              index=list(opts.keys()).index(atual) if atual in opts else 0,
+                              key="cfg_loja")
+        if st.button("✅ Trocar loja", use_container_width=True, key="cfg_loja_ok"):
+            st.session_state["loja_ativa_id"]   = opts[nova]
+            st.session_state["loja_ativa_nome"] = nova
             st.rerun()
 
-    with _tab_ver:
-        _sec("Versão do sistema")
+        _sec("Lojas cadastradas")
+        for lid2, lnm2 in api.LOJAS.items():
+            c2 = api.carregar_cache(lid2)
+            tot = c2.get("total", 0) if c2 else 0
+            sync2 = (c2.get("sincronizado_em","") or "")[:10] if c2 else "—"
+            cor2  = "grn" if c2 else "red"
+            _alerta(f"**{lnm2}** — {tot:,} produtos", f"Sync: {sync2}", tipo=cor2)
+
+    # ── Versão ──
+    with tab_v:
         st.markdown("""
-        <div class="bcard">
-          <div style="font-size:.85rem;font-weight:600;margin-bottom:8px">🚀 Você está no Beta</div>
-          <div style="font-size:.75rem;color:#64748b">
-            Interface redesenhada, mobile-first, com alertas de estoque em tempo real.<br>
-            O Beta usa os mesmos dados e API do Classic.
+        <div class="card">
+          <div style="font-size:.9rem;font-weight:700;margin-bottom:10px">🚀 Você está no Beta</div>
+          <div style="font-size:.78rem;color:#64748b;line-height:1.7">
+            ✦ Interface redesenhada com mobile-first<br>
+            ✦ Dashboard com gráficos e alertas visuais<br>
+            ✦ Clientes e Fornecedores com CRUD completo<br>
+            ✦ Histórico de compras com detalhamento<br>
+            ✦ Gerenciador de listas aprimorado<br>
+            ✦ Usa os mesmos dados do Classic
           </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("← Voltar para o Classic", use_container_width=True, key="beta_switch_classic"):
+        if st.button("← Voltar para o Classic", use_container_width=True, key="cfg_classic"):
             st.session_state["version"] = "classic"
             st.query_params["v"] = "classic"
             st.rerun()
 
+    # ── Usuários ──
+    if tab_u:
+        with tab_u:
+            _sec("Usuários do sistema")
+            udb = api.carregar_usuarios()
+            for uname, udata in udb.items():
+                nome_u  = udata.get("nome", uname)
+                setor_u = udata.get("setor", "—")
+                st.markdown(
+                    f'<div class="li">'
+                    f'<div class="li-name">{nome_u} '
+                    + _chip(setor_u, "ind")
+                    + f'</div><div class="li-sub">{uname}</div></div>',
+                    unsafe_allow_html=True,
+                )
+            if st.button("⚙️ Gerenciar no Classic", use_container_width=True, key="cfg_usr_cls"):
+                st.session_state["version"] = "classic"
+                st.query_params["v"] = "classic"
+                st.rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 # ENTRY POINT
-# ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
 
 def run():
-    import json  # noqa — necessário no escopo local de algumas funções inline
-    st.markdown(_BETA_CSS, unsafe_allow_html=True)
+    st.markdown(_CSS, unsafe_allow_html=True)
 
     if not _check_auth():
-        _login_page()
+        _tela_login()
         st.stop()
         return
 
-    # Dados do usuário
-    _user    = st.session_state.usuario_logado
-    _udb     = api.carregar_usuarios()
-    _ud      = _udb.get(_user, {})
-    _setor   = _ud.get("setor", "vendas")
-    _setores = api.carregar_setores()
-    _setor_c = _setores.get(_setor, {"paginas": []})
-    _perm    = set(_setor_c.get("paginas", []))
-    _nome    = _ud.get("nome", _user)
-    _is_admin = _setor == "admin"
+    user    = st.session_state.usuario_logado
+    udb     = api.carregar_usuarios()
+    ud      = udb.get(user, {})
+    setor   = ud.get("setor", "vendas")
+    setores = api.carregar_setores()
+    setor_c = setores.get(setor, {"paginas": []})
+    perm    = set(setor_c.get("paginas", []))
+    nome    = ud.get("nome", user).title()
+    is_adm  = (setor == "admin")
 
-    # Loja
     if "loja_ativa_id" not in st.session_state:
         st.session_state["loja_ativa_id"] = list(api.LOJAS.keys())[0]
-    _loja_id   = st.session_state["loja_ativa_id"]
-    _loja_nome = api.LOJAS.get(str(_loja_id), "—")
+    loja_id   = st.session_state["loja_ativa_id"]
+    loja_nome = api.LOJAS.get(str(loja_id), "—")
+    cache     = api.carregar_cache(loja_id)
 
-    # Cache
-    _cache = api.carregar_cache(_loja_id)
+    _header(nome, loja_nome)
 
-    # Header
-    _render_header(_nome, _loja_nome)
+    # ── Montar tabs por permissão ──
+    _pgs: list[str] = []
+    _fns: list      = []
 
-    # Nav
-    _allowed = _allowed_beta_pages(_perm)
-    if not _allowed:
-        _allowed = ["dashboard"]
-    _pg = _get_beta_page(_allowed)
-    _render_nav(_pg, _nome, _allowed)
+    def _add(label, reqs, fn):
+        if is_adm or any(r in perm for r in reqs):
+            _pgs.append(label)
+            _fns.append(fn)
 
-    # Roteamento
-    if   _pg == "dashboard":  _pg_dashboard(_cache, _loja_id, _loja_nome)
-    elif _pg == "pedidos":    _pg_pedidos(_cache, _loja_id)
-    elif _pg == "estoque":    _pg_estoque(_cache, _loja_id)
-    elif _pg == "financeiro": _pg_financeiro(_loja_id)
-    elif _pg == "relatorios": _pg_relatorios(_cache, _loja_id)
-    elif _pg == "config":     _pg_config(_cache, _loja_id, _is_admin)
-    else:
-        _pg_dashboard(_cache, _loja_id, _loja_nome)
+    _add("🏠 Início",        ["dashboard"],
+         lambda: _dashboard(cache, loja_id, loja_nome, nome, is_adm))
+    _add("🛒 Pedidos",       ["pedido"],
+         lambda: _pedidos(cache, loja_id))
+    _add("📦 Estoque",       ["entrada", "acerto", "estoque_loja"],
+         lambda: _estoque(cache, loja_id))
+    _add("👥 Clientes",      ["clientes"],
+         lambda: _clientes())
+    _add("🏭 Fornecedores",  ["fornecedores"],
+         lambda: _fornecedores())
+    _add("🧾 Compras",       ["compras_hist"],
+         lambda: _compras(loja_id))
+    _add("💰 Financeiro",    ["financeiro"],
+         lambda: _financeiro())
+    _add("📊 Relatórios",    ["relatorios"],
+         lambda: _relatorios(cache, loja_id))
+    _add("📋 Listas",        ["listas"],
+         lambda: _listas())
+    _add("⚙️ Config",        ["sincronizacao", "usuarios"],
+         lambda: _config(cache, loja_id, is_adm))
+
+    if not _pgs:
+        st.error("Sem permissões. Contate o administrador.")
+        if st.button("Sair"):
+            api.revogar_sessao(st.session_state.get("_sessao_token", ""))
+            st.session_state.clear()
+            st.rerun()
+        return
+
+    tabs = st.tabs(_pgs)
+    for tab, fn in zip(tabs, _fns):
+        with tab:
+            fn()
