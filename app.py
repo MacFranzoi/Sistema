@@ -1828,6 +1828,11 @@ if _pg == "entrada":
                     st.session_state["ent_bc_notfound_arg"] = "frame"
                     st.rerun()
 
+        if st.session_state.itens_entrada:
+            if st.button("↩️ Desfazer último", key="ent_undo_scan"):
+                st.session_state.itens_entrada.pop()
+                st.rerun()
+
         if "ent_bc_pending" in st.session_state:
             _prod_p, _bc_p = st.session_state["ent_bc_pending"]
             st.info(f"**{_prod_p.get('nome','')}** — qual variação?")
@@ -1959,7 +1964,15 @@ if _pg == "entrada":
     st.subheader(f"📝 Lista de entrada ({len(st.session_state.itens_entrada)} itens)")
 
     if st.session_state.itens_entrada:
-        st.dataframe(df_lista_resumo(st.session_state.itens_entrada), use_container_width=True, hide_index=True)
+        _n_ent = len(st.session_state.itens_entrada)
+        for _i in range(_n_ent - 1, -1, -1):
+            _it = st.session_state.itens_entrada[_i]
+            _lc1, _lc2, _lc3 = st.columns([6, 1, 1])
+            _lc1.markdown(f"**{_it.get('produto_nome','')}** / {_it.get('variacao_nome','')}")
+            _lc2.markdown(f"x{_it.get('quantidade', 1)}")
+            if _lc3.button("🗑️", key=f"del_ent_{_i}", help="Excluir"):
+                st.session_state.itens_entrada.pop(_i)
+                st.rerun()
 
         painel_salvar(st.session_state.itens_entrada, "entrada", key_suffix="ent")
 

@@ -96,15 +96,45 @@ const status    = document.getElementById("status");
 
 let busy = false;
 
+function playBeep(ok) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (ok) {
+      // leitura ok: dois bipes curtos e suaves (sol + si)
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(784, ctx.currentTime);          // G5
+      osc.frequency.setValueAtTime(988, ctx.currentTime + 0.08);  // B5
+      gain.gain.setValueAtTime(0.22, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.18);
+    } else {
+      // não encontrado: bipe grave curto
+      osc.type = "sine";
+      osc.frequency.value = 330;  // E4
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    }
+  } catch(_) {}
+}
+
 // Recebe resposta do Python (nome do produto ou não encontrado)
 window.addEventListener("message", (e) => {
   if (!e.data || e.data.type !== "streamlit:render") return;
   const args = e.data.args || {};
   if (args.product_name) {
+    playBeep(true);
     status.className   = "found";
     status.textContent = "✅ " + args.product_name;
     setTimeout(resetStatus, 2500);
   } else if (args.not_found) {
+    if (args.not_found !== "frame") playBeep(false);
     status.className   = "notfound";
     status.textContent = args.not_found === "frame"
       ? "⚠️ Não detectado — ajuste e tente novamente"
