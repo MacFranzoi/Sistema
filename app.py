@@ -2077,6 +2077,49 @@ if _pg == "entrada":
             label_visibility="collapsed",
         )
 
+        # Mapa código → nome para o contador JS
+        import json as _json_lext
+        _lext_name_map = {
+            cod: f"{p.get('nome','')} / {v.get('nome','') if v else ''}"
+            for cod, (p, v) in _bc_map.items()
+        }
+        import streamlit.components.v1 as _cv1_lext
+        _cv1_lext.html(f"""
+<div style="font-family:sans-serif;font-size:0.82rem;color:#888;line-height:1.8;padding:2px 0">
+  <span id="lext-total" style="font-weight:600;color:#bbb">0 linha(s)</span>
+  <span style="margin:0 6px;opacity:.4">|</span>
+  <span id="lext-modelos" style="color:#bbb">0 modelo(s)</span>
+  <span style="margin:0 6px;opacity:.4">|</span>
+  <span id="lext-breakdown" style="color:#999"></span>
+</div>
+<script>
+(function(){{
+  var map={_json_lext.dumps(_lext_name_map)};
+  function upd(){{
+    var tas=window.parent.document.querySelectorAll('[data-testid="stTextArea"] textarea');
+    var ta=null;
+    for(var i=0;i<tas.length;i++){{if(tas[i].placeholder&&tas[i].placeholder.indexOf('bipar')>-1){{ta=tas[i];break;}}}}
+    if(!ta)return;
+    var lines=ta.value.split('\\n').filter(function(l){{return l.trim()!==''}});
+    var byModel={{}};
+    lines.forEach(function(c){{
+      c=c.trim();
+      var nm=map[c];
+      var key=nm?nm.split(' / ')[0]:'❓ '+c;
+      byModel[key]=(byModel[key]||0)+1;
+    }});
+    var n=Object.keys(byModel).length;
+    document.getElementById('lext-total').textContent=lines.length+' linha(s)';
+    document.getElementById('lext-modelos').textContent=n+' modelo(s)';
+    document.getElementById('lext-breakdown').textContent=
+      Object.entries(byModel).sort(function(a,b){{return a[0].localeCompare(b[0])}})
+        .map(function(e){{return e[0]+': '+e[1]}}).join('  ·  ');
+  }}
+  setInterval(upd,500);upd();
+}})();
+</script>
+""", height=36)
+
         _la1, _la2 = st.columns(2)
         _processar = _la1.button("➕ Adicionar tudo à lista", type="primary",
                                   use_container_width=True, key="leitor_area_add",
@@ -3696,6 +3739,20 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
         with st.expander("📡 Bipar códigos de barras para o pedido", expanded=False):
             st.caption("Clique na área abaixo e bipe todos os códigos em sequência. Cada bipe escreve um código por linha. Quando terminar, clique em **Gerar pedido**.")
 
+            # Monta mapa código → (produto, variação) — necessário para o contador JS
+            _bc_map_ped: dict = {}
+            if cache:
+                for _pp in cache.get("produtos", []):
+                    for _vobj in _pp.get("variacoes", []):
+                        _vv = _vobj.get("variacao", {})
+                        for _fld in ["ean", "codigo", "referencia"]:
+                            _cd = (_vv.get(_fld) or "").strip()
+                            if _cd:
+                                _bc_map_ped[_cd] = (_pp, _vv)
+                        _ci = (_pp.get("codigo_interno") or "").strip()
+                        if _ci:
+                            _bc_map_ped[_ci] = (_pp, None)
+
             _ped_bc_area = st.text_area(
                 "Códigos",
                 placeholder="Clique aqui e comece a bipar...\nCada código aparece em uma linha.",
@@ -3703,6 +3760,49 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 key="ped_bc_area_txt",
                 label_visibility="collapsed",
             )
+
+            # Contador em tempo real via JS
+            import json as _json_pbjs
+            _ped_name_map = {
+                cod: f"{p.get('nome','')} / {v.get('nome','') if v else ''}"
+                for cod, (p, v) in _bc_map_ped.items()
+            }
+            import streamlit.components.v1 as _cv1_pb
+            _cv1_pb.html(f"""
+<div style="font-family:sans-serif;font-size:0.82rem;color:#888;line-height:1.8;padding:2px 0">
+  <span id="pb-total" style="font-weight:600;color:#bbb">0 linha(s)</span>
+  <span style="margin:0 6px;opacity:.4">|</span>
+  <span id="pb-modelos" style="color:#bbb">0 modelo(s)</span>
+  <span style="margin:0 6px;opacity:.4">|</span>
+  <span id="pb-breakdown" style="color:#999"></span>
+</div>
+<script>
+(function(){{
+  var map={_json_pbjs.dumps(_ped_name_map)};
+  function upd(){{
+    var tas=window.parent.document.querySelectorAll('[data-testid="stTextArea"] textarea');
+    var ta=null;
+    for(var i=0;i<tas.length;i++){{if(tas[i].placeholder&&tas[i].placeholder.indexOf('bipar')>-1){{ta=tas[i];break;}}}}
+    if(!ta)return;
+    var lines=ta.value.split('\\n').filter(function(l){{return l.trim()!==''}});
+    var byModel={{}};
+    lines.forEach(function(c){{
+      c=c.trim();
+      var nm=map[c];
+      var key=nm?nm.split(' / ')[0]:'❓ '+c;
+      byModel[key]=(byModel[key]||0)+1;
+    }});
+    var n=Object.keys(byModel).length;
+    document.getElementById('pb-total').textContent=lines.length+' linha(s)';
+    document.getElementById('pb-modelos').textContent=n+' modelo(s)';
+    document.getElementById('pb-breakdown').textContent=
+      Object.entries(byModel).sort(function(a,b){{return a[0].localeCompare(b[0])}})
+        .map(function(e){{return e[0]+': '+e[1]}}).join('  ·  ');
+  }}
+  setInterval(upd,500);upd();
+}})();
+</script>
+""", height=36)
 
             _pba1, _pba2 = st.columns(2)
             _ped_gerar = _pba1.button("➕ Gerar pedido a partir dos códigos", type="primary",
@@ -3712,20 +3812,6 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                          on_click=lambda: st.session_state.update(ped_bc_area_txt=""))
 
             if _ped_gerar and _ped_bc_area.strip():
-                # Monta mapa código → (produto, variação) sob demanda
-                _bc_map_ped: dict = {}
-                if cache:
-                    for _pp in cache.get("produtos", []):
-                        for _vobj in _pp.get("variacoes", []):
-                            _vv = _vobj.get("variacao", {})
-                            for _fld in ["ean", "codigo", "referencia"]:
-                                _cd = (_vv.get(_fld) or "").strip()
-                                if _cd:
-                                    _bc_map_ped[_cd] = (_pp, _vv)
-                            _ci = (_pp.get("codigo_interno") or "").strip()
-                            if _ci:
-                                _bc_map_ped[_ci] = (_pp, None)
-
                 _pedido_snapshot()
                 _forn_pb = st.session_state.get("fornecedor_global", "") or "—"
                 _codigos_ped = [c.strip() for c in _ped_bc_area.splitlines() if c.strip()]
