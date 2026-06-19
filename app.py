@@ -3149,7 +3149,7 @@ POSTURA — REGRA ABSOLUTA:
 Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
 
 PREÇO EXPLÍCITO — quando o usuário citar um valor em reais junto ao kit (ex: "magsafe 129,99", "129,99 magsafe", "sl 99,99", "59,99 brilho"):
-→ extraia o preço no campo "preco" (string sem R$, ex: "129,99")
+→ extraia o preço no campo "preco" (string sem R$, SEMPRE com vírgula como separador decimal — padrão brasileiro, ex: "129,99" e nunca "129.99")
 → o preço será usado para buscar a variação correta no catálogo
 → sem preço → "preco": null
 
@@ -3386,7 +3386,11 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 continue
 
                             # Se o usuário citou um preço, substitui o preço no kit
-                            _preco_entry = (_entry.get("preco") or "").strip().replace("R$","").strip()
+                            _preco_raw = (_entry.get("preco") or "").strip().replace("R$","").strip()
+                            # Normaliza separador decimal: ponto → vírgula (padrão catálogo)
+                            import re as _re_preco_norm
+                            _preco_entry = _re_preco_norm.sub(r"(\d+)\.(\d{2})$",
+                                lambda m: m.group(1) + "," + m.group(2), _preco_raw)
                             _cores_kit_base = _WPP_KITS.get(_kit, [])
                             if _preco_entry and _cores_kit_base:
                                 # Troca qualquer token que pareça preço (ex: "119,99") pelo preço falado
