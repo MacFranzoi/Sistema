@@ -1279,19 +1279,41 @@ def transcrever_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     Requer OPENAI_API_KEY em os.environ ou .streamlit/secrets.toml.
     Retorna o texto transcrito.
     """
-    import requests as _req
+    import requests as _req, re as _re
     api_key = _get_openai_key()
     if not api_key or api_key.startswith("sk-..."):
         raise ValueError("OPENAI_API_KEY não configurado. Preencha .streamlit/secrets.toml.")
+
+    # Prompt de domínio reduz alucinações do Whisper
+    _prompt_dominio = (
+        "Samsung, iPhone, Motorola, Xiaomi, Poco, Redmi, Edge, Aveludada, Silicone, "
+        "Masculino, Feminino, Brilho, Diversos, MagSafe, Space 2, Preta, Branca, "
+        "Roxa, Amarela, Azul Marinho, Cinza Chumbo, Lilás, Marsala, Vinho, Nude, "
+        "Very Rio, Carteira, Película, Transparente, pacote, quantidade"
+    )
+
     resp = _req.post(
         "https://api.openai.com/v1/audio/transcriptions",
         headers={"Authorization": f"Bearer {api_key}"},
         files={"file": (filename, audio_bytes, "audio/webm")},
-        data={"model": "whisper-1", "language": "pt"},
+        data={"model": "whisper-1", "language": "pt", "prompt": _prompt_dominio},
         timeout=60,
     )
     resp.raise_for_status()
-    return resp.json().get("text", "")
+    texto = resp.json().get("text", "").strip()
+
+    # Detecta alucinações comuns do Whisper (silêncio / ruído)
+    _alucinacoes = [
+        r"intervoices", r"legendas", r"subtitle", r"subtitles",
+        r"www\.", r"http", r"\.com", r"transcri\w+ por",
+        r"amara\.org", r"dotsub", r"subsvip",
+    ]
+    if not texto or any(_re.search(p, texto, _re.I) for p in _alucinacoes):
+        raise ValueError(
+            "Whisper não detectou fala clara no áudio. "
+            "Verifique se o microfone está funcionando e tente novamente."
+        )
+    return texto
 
 
 # ──────────────────────────────────────────────
