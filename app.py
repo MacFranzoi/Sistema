@@ -1769,68 +1769,37 @@ if _pg == "entrada":
             "quantidade":    qtd,
         })
 
-    # ── 1. Scanner ao vivo — Claude Vision ───────────────────────────────
-    with st.expander("📷 Scanner ao vivo — Claude Vision", expanded=False):
+    # ── 1. Scanner ao vivo ────────────────────────────────────────────────
+    with st.expander("📷 Scanner ao vivo", expanded=False):
         st.markdown(
-            f"<p style='color:{TXT2}'>Toque na câmera para iniciar — depois é só apontar a etiqueta e aguardar.</p>",
+            f"<p style='color:{TXT2}'>Toque para iniciar — depois é só apontar o código de barras da etiqueta.</p>",
             unsafe_allow_html=True,
         )
 
         import streamlit.components.v1 as _stc
-        import os as _os_ent, base64 as _b64_ent
+        import os as _os_ent
         _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
         _barcode_scanner_comp = _stc.declare_component("barcode_scanner_live", path=_scanner_path)
+        _scanned = _barcode_scanner_comp(key="ent_live_bc")
 
-        _ent_processing = st.session_state.get("ent_cv_processing", False)
-        _ent_found_msg  = st.session_state.pop("ent_cv_found_msg", None)
-        _scanned = _barcode_scanner_comp(
-            processing=_ent_processing,
-            found=_ent_found_msg or "",
-            key="ent_live_bc",
-        )
+        if _scanned:
+            _bc_str = str(_scanned).strip()
+            _match  = _bc_map.get(_bc_str)
+            if _match:
+                _prod_m, _var_m = _match
+                if _var_m:
+                    _bc_add_item(_prod_m, _var_m)
+                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.rerun()
+                elif len(_prod_m.get("variacoes", [])) == 1:
+                    _var_m = _prod_m["variacoes"][0].get("variacao", {})
+                    _bc_add_item(_prod_m, _var_m)
+                    st.success(f"✅ {_prod_m.get('nome','')} / {_var_m.get('nome','')} adicionado!")
+                    st.rerun()
+                else:
+                    st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
+                    st.rerun()
 
-        if _scanned and isinstance(_scanned, dict) and "frame" in _scanned:
-            _frame_ts = _scanned.get("ts", 0)
-            if _frame_ts and _frame_ts != st.session_state.get("ent_last_frame_ts", 0):
-                st.session_state["ent_last_frame_ts"] = _frame_ts
-                st.session_state["ent_cv_processing"] = True
-                _raw_b64 = _scanned["frame"]
-                if "," in _raw_b64:
-                    _raw_b64 = _raw_b64.split(",", 1)[1]
-                _img_bytes_cv = _b64_ent.b64decode(_raw_b64)
-                with st.spinner("Claude analisando etiqueta..."):
-                    try:
-                        _cv_code = api.ler_codigo_barras_foto(_img_bytes_cv)
-                    except Exception as _cv_ex:
-                        _cv_code = None
-                        st.error(f"Erro: {_cv_ex}")
-                st.session_state["ent_cv_processing"] = False
-
-                if _cv_code:
-                    _bc_str = _cv_code.strip()
-                    _match  = _bc_map.get(_bc_str)
-                    if _match:
-                        _prod_m, _var_m = _match
-                        if _var_m:
-                            _bc_add_item(_prod_m, _var_m)
-                            _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                            st.session_state["ent_cv_found_msg"] = _label
-                            st.success(f"✅ {_label} adicionado!")
-                            st.rerun()
-                        elif len(_prod_m.get("variacoes", [])) == 1:
-                            _var_m = _prod_m["variacoes"][0].get("variacao", {})
-                            _bc_add_item(_prod_m, _var_m)
-                            _label = f"{_prod_m.get('nome','')} / {_var_m.get('nome','')}"
-                            st.session_state["ent_cv_found_msg"] = _label
-                            st.success(f"✅ {_label} adicionado!")
-                            st.rerun()
-                        else:
-                            st.session_state["ent_bc_pending"] = (_prod_m, _bc_str)
-                            st.rerun()
-                    else:
-                        st.rerun()  # código não no catálogo → continua escaneando
-
-        # Seleção de variação quando Claude identifica só o produto
         if "ent_bc_pending" in st.session_state:
             _prod_p, _bc_p = st.session_state["ent_bc_pending"]
             st.info(f"**{_prod_p.get('nome','')}** — selecione a variação:")
