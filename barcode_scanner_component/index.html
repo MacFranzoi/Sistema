@@ -31,6 +31,19 @@ canvas { display: none; }
   box-shadow: 0 0 0 1000px rgba(0,0,0,0.4);
   z-index: 10;
 }
+#btn-capture {
+  position: absolute; bottom: 14px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: rgba(255,255,255,0.18);
+  border: 2px solid rgba(255,255,255,0.55);
+  color: #fff; font-size: 14px; font-weight: 600;
+  padding: 8px 22px; border-radius: 24px;
+  backdrop-filter: blur(6px);
+  cursor: pointer; user-select: none;
+  transition: background 0.15s;
+}
+#btn-capture:active { background: rgba(255,255,255,0.35); }
 
 #status {
   padding: 12px 16px; text-align: center; font-size: 15px;
@@ -57,6 +70,7 @@ canvas { display: none; }
     <video id="video" muted playsinline webkit-playsinline autoplay></video>
     <canvas id="canvas"></canvas>
     <div id="crosshair"></div>
+    <button id="btn-capture">Ler agora</button>
   </div>
   <div id="status" class="scanning">📷 Aponte o código de barras para a câmera...</div>
 </div>
@@ -102,6 +116,11 @@ function resetStatus() {
   status.className   = "scanning";
   status.textContent = "📷 Aponte o código de barras para a câmera...";
 }
+
+document.getElementById("btn-capture").addEventListener("click", () => {
+  busy = false;   // força captura mesmo que ainda esteja no cooldown
+  capture();
+});
 
 function startCamera() {
   navigator.mediaDevices.getUserMedia({
