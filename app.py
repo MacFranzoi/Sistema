@@ -694,6 +694,54 @@ with _c4:
         st.query_params.clear()
         st.rerun()
 
+# ── Notificações ──
+_notif_count = api.contar_nao_lidas(_user)
+if _notif_count > 0:
+    _nc1, _nc2 = st.columns([8, 2])
+    _nc1.markdown(
+        f'<div style="background:#2d1a4a;border:1px solid #7c3aed;border-radius:6px;padding:6px 12px;font-size:13px;color:#c4b5fd">🔔 Você tem <b>{_notif_count}</b> notificação(ões) não lida(s)</div>',
+        unsafe_allow_html=True
+    )
+    if _nc2.button("Ver todas", key="btn_ver_notif", use_container_width=True):
+        st.session_state["_show_notif"] = True
+        st.rerun()
+
+if st.session_state.get("_show_notif"):
+    with st.expander("🔔 Notificações", expanded=True):
+        _todas_notif = api.listar_notificacoes(_user)
+        if not _todas_notif:
+            st.info("Sem notificações.")
+        for _nn in _todas_notif[:20]:
+            _nn_lida = _nn.get("lida", False)
+            _nn_estilo = "" if _nn_lida else "font-weight:600"
+            _nn_cor = "#555" if _nn_lida else "#c4b5fd"
+            _nn_ts = _nn.get("criada_em","")[:16].replace("T"," ")
+            _nna, _nnb = st.columns([8, 2])
+            _nna.markdown(
+                f'<div style="{_nn_estilo};color:{_nn_cor}">{"" if _nn_lida else "🔵 "}<b>{_nn["titulo"]}</b><br>'
+                f'<span style="font-size:12px;color:#888">{_nn["corpo"]}</span><br>'
+                f'<span style="font-size:11px;color:#555">{_nn_ts}</span></div>',
+                unsafe_allow_html=True
+            )
+            if not _nn_lida:
+                if _nnb.button("✓", key=f"lida_{_nn['id']}", use_container_width=True):
+                    api.marcar_notificacao_lida(_nn["id"], _user)
+                    st.rerun()
+            _pg_notif = _nn.get("pagina","")
+            if _pg_notif and _pg_notif in _todas_pids:
+                if _nnb.button("Ir →", key=f"ir_{_nn['id']}", use_container_width=True):
+                    api.marcar_notificacao_lida(_nn["id"], _user)
+                    st.session_state.pagina = _pg_notif
+                    st.session_state["_show_notif"] = False
+                    st.rerun()
+        if st.button("✓ Marcar todas como lidas", key="marcar_todas_lidas"):
+            api.marcar_todas_lidas(_user)
+            st.session_state["_show_notif"] = False
+            st.rerun()
+        if st.button("Fechar", key="fechar_notif"):
+            st.session_state["_show_notif"] = False
+            st.rerun()
+
 # ── Scroll restore: salva posição e restaura após rerun ──
 st.markdown("""<script>
 (function(){
@@ -1061,6 +1109,27 @@ aba_aprovacoes = _guard("aprovacoes")
 # DASHBOARD
 # ══════════════════════════════════════════════
 if _pg == "dashboard":
+    # ── Primeiro acesso: forçar troca de senha ──
+    if _user_data.get("primeiro_acesso"):
+        st.warning("⚠️ **Bem-vindo!** Por segurança, defina uma nova senha antes de continuar.")
+        with st.form("form_primeiro_acesso"):
+            _pa_nova  = st.text_input("Nova senha", type="password")
+            _pa_conf  = st.text_input("Confirmar senha", type="password")
+            _pa_salvar = st.form_submit_button("Salvar e continuar", use_container_width=True)
+        if _pa_salvar:
+            if not _pa_nova or len(_pa_nova) < 4:
+                st.error("A senha deve ter pelo menos 4 caracteres.")
+            elif _pa_nova != _pa_conf:
+                st.error("As senhas não coincidem.")
+            else:
+                _udb_pa = api.carregar_usuarios()
+                _udb_pa[_user]["senha"] = _pa_nova
+                _udb_pa[_user].pop("primeiro_acesso", None)
+                api.salvar_usuarios(_udb_pa)
+                st.success("Senha atualizada! Bem-vindo ao Plug ERP.")
+                st.rerun()
+        st.stop()
+
     total_cache = cache.get("total", 0) if cache else 0
     sync_em = cache.get("sincronizado_em", "")[:10] if cache else "—"
     hora_nm = _nome_usr.split()[0] if _nome_usr else "você"
@@ -1777,12 +1846,18 @@ if _pg == "entrada":
                 _bc_map[_vc] = (_p, _vd)
 
     def _bc_add_item(prod, var, qtd=1):
-        """Adiciona item a itens_entrada a partir de produto+variação."""
+        """Adiciona item; soma quantidade se variação já está na lista."""
+        _vid = var.get("id","") if var else ""
+        if _vid:
+            for _ex in st.session_state.itens_entrada:
+                if _ex.get("variacao_id") == _vid:
+                    _ex["quantidade"] = _ex.get("quantidade", 1) + qtd
+                    return
         st.session_state.itens_entrada.append({
             "produto_id":    prod.get("id",""),
             "produto_nome":  prod.get("nome",""),
             "cod_interno":   prod.get("codigo_interno",""),
-            "variacao_id":   var.get("id","") if var else "",
+            "variacao_id":   _vid,
             "variacao_cod":  var.get("codigo","") if var else "",
             "variacao_nome": var.get("nome","") if var else "",
             "quantidade":    qtd,
@@ -2023,8 +2098,8 @@ if _pg == "entrada":
                         st.error(f"Erro na IA: {_we}")
 
     # ── Importar ───────────────────────────────────────────────────────────
-    with st.expander("📥 Importar", expanded=False):
-        _imp_tab1, _imp_tab2 = st.tabs(["📊 Excel", "📄 Nota Fiscal (XML)"])
+    with st.expander("📥 Importar / 📤 Exportar", expanded=False):
+        _imp_tab1, _imp_tab2, _imp_tab3 = st.tabs(["📊 Excel", "📄 Nota Fiscal (XML)", "📤 Exportar"])
         with _imp_tab1:
             _tpl_ent = api.gerar_template_excel("entrada")
             st.download_button("⬇️ Baixar planilha-modelo", _tpl_ent,
@@ -2067,18 +2142,18 @@ if _pg == "entrada":
                             st.caption(f"• {_nm['_nfe_desc']} x{_nm['quantidade']}")
                 except Exception as _nfee:
                     st.error(f"Erro ao ler NF-e: {_nfee}")
-
-    # ── Exportar lista atual ────────────────────────────────────────────────
-    if st.session_state.itens_entrada:
-        import io as _io_exp, pandas as _pd_exp
-        _df_exp = api.df_lista_resumo(st.session_state.itens_entrada) if hasattr(api,"df_lista_resumo") else _pd_exp.DataFrame(st.session_state.itens_entrada)
-        _buf_exp = _io_exp.BytesIO()
-        _pd_exp.DataFrame(st.session_state.itens_entrada).to_excel(_buf_exp, index=False)
-        _buf_exp.seek(0)
-        st.download_button("📤 Exportar lista atual (Excel)", _buf_exp,
-                           file_name=f"entrada_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True, key="ent_export_xlsx")
+        with _imp_tab3:
+            if st.session_state.itens_entrada:
+                import io as _io_exp3, pandas as _pd_exp3
+                _buf_exp3 = _io_exp3.BytesIO()
+                _pd_exp3.DataFrame(st.session_state.itens_entrada).to_excel(_buf_exp3, index=False)
+                _buf_exp3.seek(0)
+                st.download_button("📤 Exportar lista atual (Excel)", _buf_exp3,
+                                   file_name=f"entrada_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True, key="ent_export_xlsx")
+            else:
+                st.info("Adicione itens à lista para exportar.")
 
     # Busca e adição
     produto_sel, edited = busca_produto_ui("ent", cache, col_qtd="Qtd Entrada")
@@ -2092,15 +2167,24 @@ if _pg == "entrada":
                 st.warning("Preencha a quantidade em pelo menos uma variação.")
             else:
                 for _, row in selecionadas.iterrows():
-                    st.session_state.itens_entrada.append({
-                        "produto_id": produto_sel["id"],
-                        "produto_nome": produto_sel["nome"],
-                        "cod_interno": produto_sel.get("codigo_interno", ""),
-                        "variacao_id": row["_variacao_id"],
-                        "variacao_cod": row["Código Var."],
-                        "variacao_nome": row["Variação"],
-                        "quantidade": int(row["Qtd Entrada"])
-                    })
+                    _vid_m = row["_variacao_id"]
+                    _found_m = False
+                    if _vid_m:
+                        for _ex_m in st.session_state.itens_entrada:
+                            if _ex_m.get("variacao_id") == _vid_m:
+                                _ex_m["quantidade"] = _ex_m.get("quantidade", 1) + int(row["Qtd Entrada"])
+                                _found_m = True
+                                break
+                    if not _found_m:
+                        st.session_state.itens_entrada.append({
+                            "produto_id": produto_sel["id"],
+                            "produto_nome": produto_sel["nome"],
+                            "cod_interno": produto_sel.get("codigo_interno", ""),
+                            "variacao_id": _vid_m,
+                            "variacao_cod": row["Código Var."],
+                            "variacao_nome": row["Variação"],
+                            "quantidade": int(row["Qtd Entrada"])
+                        })
                 st.success(f"{len(selecionadas)} adicionada(s)!")
 
     # Lista acumulada
@@ -2109,11 +2193,15 @@ if _pg == "entrada":
 
     if st.session_state.itens_entrada:
         _n_ent = len(st.session_state.itens_entrada)
+        _CORES_ENT = ["#1a2030", "#1e2540"]
         for _i in range(_n_ent - 1, -1, -1):
             _it = st.session_state.itens_entrada[_i]
+            _cor_ent = _CORES_ENT[_i % 2]
             _lc1, _lc2 = st.columns([9, 1])
             _lc1.markdown(
-                f"**{_it.get('produto_nome','')}** / {_it.get('variacao_nome','')} &nbsp;·&nbsp; x{_it.get('quantidade', 1)}",
+                f'<div style="background:{_cor_ent};padding:5px 10px;border-radius:6px;margin:2px 0">'
+                f'<b>{_it.get("produto_nome","")}</b> / {_it.get("variacao_nome","")} &nbsp;·&nbsp; x{_it.get("quantidade", 1)}'
+                f'</div>',
                 unsafe_allow_html=True,
             )
             if _lc2.button("🗑️", key=f"del_ent_{_i}"):
@@ -2165,6 +2253,17 @@ if _pg == "entrada":
                         loja_id=str(loja_id),
                         loja_nome=loja_sel_nome,
                     )
+                    _aprovadores = api.usuarios_com_permissao("aprovacoes", api.carregar_usuarios(), api.carregar_setores())
+                    _aprovadores = [u for u in _aprovadores if u != _user]
+                    if _aprovadores:
+                        api.criar_notificacao(
+                            para_usuarios=_aprovadores,
+                            tipo="aprovacao_solicitada",
+                            titulo="Nova lista aguarda aprovação",
+                            corpo=f"{_user_data.get('nome', _user)} enviou {len(st.session_state.itens_entrada)} item(ns) para aprovação — loja {loja_sel_nome}",
+                            pagina="aprovacoes",
+                            de_usuario=_user,
+                        )
                     st.session_state.itens_entrada = []
                     st.success(f"✅ Entrada enviada para aprovação! ID: `{_ap_id}`")
                     st.rerun()
@@ -2237,11 +2336,27 @@ if _pg == "aprovacoes":
                                     barra_ap = st.progress(0)
                                     def _prog_ap(a, t): barra_ap.progress(a/t, text=f"{a}/{t}...")
                                     api.atualizar_estoque_lote(_res_ap["itens"], loja_id=_loja_ap, modo="soma", progress_callback=_prog_ap)
+                                    api.criar_notificacao(
+                                        para_usuarios=[_res_ap.get("criado_por", "")],
+                                        tipo="aprovacao_resultado",
+                                        titulo="Sua lista foi aprovada ✅",
+                                        corpo=f"{_user_data.get('nome', _user)} aprovou sua entrada de {len(_res_ap.get('itens',[]))} item(ns) — loja {_res_ap.get('loja_nome','')}",
+                                        pagina="entrada",
+                                        de_usuario=_user,
+                                    )
                                     st.success(f"✅ Entrada aprovada e estoque atualizado!")
                                     st.rerun()
                     with _cr:
                         if st.button("❌ Rejeitar", key=f"rejeitar_{_ap['id']}", use_container_width=True):
-                            api.aprovar_entrada_pendente(_ap["id"], _user, _user_data.get("nome",_user), False, _obs_ap or "")
+                            _rej_d = api.aprovar_entrada_pendente(_ap["id"], _user, _user_data.get("nome",_user), False, _obs_ap or "")
+                            api.criar_notificacao(
+                                para_usuarios=[_ap.get("criado_por", "")],
+                                tipo="aprovacao_resultado",
+                                titulo="Sua lista foi rejeitada ❌",
+                                corpo=f"{_user_data.get('nome', _user)} rejeitou sua entrada de {len(_ap.get('itens',[]))} item(ns). Obs: {_obs_ap or '—'}",
+                                pagina="entrada",
+                                de_usuario=_user,
+                            )
                             st.warning("Entrada rejeitada.")
                             st.rerun()
                 else:
@@ -4800,6 +4915,25 @@ if _pg == "usuarios":
     _usuarios_db = api.carregar_usuarios()
     _setores_vivos = api.carregar_setores()
     setores_opcoes = {v["label"]: k for k, v in _setores_vivos.items()}
+
+    # ── Importar funcionários do GestaoClick ──
+    with st.expander("📋 Importar funcionários do GestaoClick", expanded=False):
+        st.caption("Cria contas para funcionários cadastrados no GestaoClick com senha padrão: primeiro_nome+123. Eles podem alterar a senha no primeiro login.")
+        if st.button("🔄 Buscar e criar contas", key="btn_import_funcs", use_container_width=True):
+            with st.spinner("Buscando funcionários..."):
+                _resultado_imp = api.criar_usuarios_funcionarios(_usuarios_db)
+                api.salvar_usuarios(_usuarios_db)
+            if _resultado_imp["criados"]:
+                st.success(f"✅ {len(_resultado_imp['criados'])} conta(s) criada(s):")
+                for _fc in _resultado_imp["criados"]:
+                    st.caption(f"• **{_fc['login']}** ({_fc['nome']}) — senha inicial: `{_fc['senha']}`")
+            if _resultado_imp["ja_existem"]:
+                st.info(f"ℹ️ {len(_resultado_imp['ja_existem'])} usuário(s) já existiam: {', '.join(_resultado_imp['ja_existem'])}")
+            if not _resultado_imp["criados"] and not _resultado_imp["ja_existem"]:
+                st.warning("Nenhum funcionário encontrado no GestaoClick.")
+            if _resultado_imp["criados"]:
+                st.rerun()
+    st.divider()
 
     # ── Tabela de usuários existentes ──────────
     st.markdown("### Usuários cadastrados")

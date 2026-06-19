@@ -1832,3 +1832,117 @@ Retorne APENAS JSON válido:
     if m:
         return _j.loads(m.group())
     return _j.loads(raw)
+
+
+# ──────────────────────────────────────────────
+# Sistema de Notificações
+# ──────────────────────────────────────────────
+
+NOTIFICACOES_FILE = os.path.join(DIR, "notificacoes.json")
+
+def _notif_load() -> list:
+    if not os.path.exists(NOTIFICACOES_FILE):
+        _gh_baixar_arquivo("notificacoes.json", NOTIFICACOES_FILE)
+    if not os.path.exists(NOTIFICACOES_FILE):
+        return []
+    with open(NOTIFICACOES_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+def _notif_save(dados: list):
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    with open(NOTIFICACOES_FILE, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _gh_push_arquivo("notificacoes.json", conteudo, "Atualiza notificações")
+
+def criar_notificacao(para_usuarios: list, tipo: str, titulo: str, corpo: str,
+                       pagina: str = "", de_usuario: str = "sistema") -> list:
+    import uuid as _uuid_notif
+    dados = _notif_load()
+    ids = []
+    for u in para_usuarios:
+        nid = f"notif_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{_uuid_notif.uuid4().hex[:4]}"
+        dados.append({
+            "id": nid,
+            "para": u,
+            "de": de_usuario,
+            "tipo": tipo,
+            "titulo": titulo,
+            "corpo": corpo,
+            "pagina": pagina,
+            "lida": False,
+            "criada_em": datetime.now().isoformat(),
+        })
+        ids.append(nid)
+    _notif_save(dados)
+    return ids
+
+def listar_notificacoes(usuario: str) -> list:
+    dados = _notif_load()
+    return sorted(
+        [d for d in dados if d.get("para") == usuario],
+        key=lambda x: x.get("criada_em", ""), reverse=True
+    )
+
+def marcar_notificacao_lida(notif_id: str, usuario: str):
+    dados = _notif_load()
+    for d in dados:
+        if d["id"] == notif_id and d.get("para") == usuario:
+            d["lida"] = True
+            break
+    _notif_save(dados)
+
+def marcar_todas_lidas(usuario: str):
+    dados = _notif_load()
+    for d in dados:
+        if d.get("para") == usuario:
+            d["lida"] = True
+    _notif_save(dados)
+
+def contar_nao_lidas(usuario: str) -> int:
+    dados = _notif_load()
+    return sum(1 for d in dados if d.get("para") == usuario and not d.get("lida"))
+
+def usuarios_com_permissao(permissao: str, usuarios_db: dict, setores_db: dict) -> list:
+    result = []
+    for login, ud in usuarios_db.items():
+        setor = ud.get("setor", "vendas")
+        if setor == "admin":
+            result.append(login)
+            continue
+        setor_cfg = setores_db.get(setor, {})
+        if permissao in setor_cfg.get("paginas", []):
+            result.append(login)
+    return result
+
+
+# ──────────────────────────────────────────────
+# Importar funcionários como usuários
+# ──────────────────────────────────────────────
+
+def _normalizar_login(nome: str) -> str:
+    import unicodedata as _ud
+    nome_norm = _ud.normalize("NFD", nome).encode("ascii", "ignore").decode()
+    return nome_norm.strip().lower().split()[0] if nome_norm.strip() else "usuario"
+
+def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:
+    funcs = buscar_funcionarios(limite=200)
+    criados = []
+    ja_existem = []
+    for f in funcs:
+        nome = f.get("nome") or f.get("fantasia") or ""
+        if not nome:
+            continue
+        login = _normalizar_login(nome)
+        primeiro_nome = nome.strip().split()[0]
+        senha = _normalizar_login(primeiro_nome) + "123"
+        if login in usuarios_db:
+            ja_existem.append(login)
+        else:
+            usuarios_db[login] = {
+                "nome": nome,
+                "senha": senha,
+                "setor": "vendas",
+                "primeiro_acesso": True,
+            }
+            criados.append({"login": login, "nome": nome, "senha": senha})
+    return {"criados": criados, "ja_existem": ja_existem}
