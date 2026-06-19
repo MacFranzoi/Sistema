@@ -2067,70 +2067,60 @@ if _pg == "entrada":
 
     # ── Leitor externo (USB / Bluetooth) ─────────────────────────────────
     elif _ent_modo == "📡 Leitor externo":
-        st.caption("Conecte o leitor USB ou Bluetooth e aponte para o código. Ele digita e confirma automaticamente.")
-        _leitor_rapido = st.checkbox("🚀 Modo rápido — bipar tudo sem parar (soma quantidade automaticamente)",
-                                     key="leitor_modo_rapido")
+        st.caption("Bipe os códigos — eles ficam numa fila. Quando terminar, clique em **Adicionar tudo** para confirmar.")
 
-        # Confirmação de duplicata (só no modo normal)
-        if "ent_bc_confirm" in st.session_state and not _leitor_rapido:
-            _conf_l = st.session_state["ent_bc_confirm"]
-            st.warning(f"⚠️ **{_conf_l['nome']}** já está na lista (qtd atual: {_conf_l['qtd_atual']}). Adicionar mais 1?")
-            _cla, _clb = st.columns(2)
-            if _cla.button("✅ Sim, adicionar", key="leitor_conf_sim", type="primary", use_container_width=True):
-                _bc_add_item(_conf_l["prod"], _conf_l["var"])
-                del st.session_state["ent_bc_confirm"]
-                st.rerun()
-            if _clb.button("❌ Não", key="leitor_conf_nao", use_container_width=True):
-                del st.session_state["ent_bc_confirm"]
-                st.rerun()
-        else:
-            if _leitor_rapido and "ent_bc_confirm" in st.session_state:
-                del st.session_state["ent_bc_confirm"]
-            # Form limpa e re-foca automaticamente após cada leitura
-            with st.form("leitor_ext_form", clear_on_submit=True):
-                _leitor_cod = st.text_input(
-                    "Leitor",
-                    placeholder="Aponte o leitor para o código de barras...",
-                    key="leitor_ext_input",
-                    label_visibility="collapsed",
-                )
-                _leitor_ok = st.form_submit_button("➕ Adicionar", use_container_width=True)
-            # Auto-foco no campo após cada rerun
-            import streamlit.components.v1 as _stc_l
-            _stc_l.html("""<script>
-            setTimeout(function(){
-              var inp = window.parent.document.querySelector('[data-testid="stTextInput"] input');
-              if(inp) inp.focus();
-            }, 120);
-            </script>""", height=0)
-            if _leitor_ok and _leitor_cod.strip():
-                _bc_str_l = _leitor_cod.strip()
-                _match_l  = _bc_map.get(_bc_str_l)
-                if _match_l:
-                    _prod_l, _var_l = _match_l
-                    if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
-                        _var_l = _prod_l["variacoes"][0].get("variacao", {})
-                    if _var_l:
-                        _vid_l  = str(_var_l.get("id", ""))
-                        _nome_l = f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}"
-                        _ja_l   = any(it.get("variacao_id") == _vid_l for it in st.session_state.itens_entrada)
-                        if _ja_l and not _leitor_rapido:
-                            _qtd_l = next((it.get("quantidade",1) for it in st.session_state.itens_entrada if it.get("variacao_id") == _vid_l), 1)
-                            st.session_state["ent_bc_confirm"] = {"prod": _prod_l, "var": _var_l, "nome": _nome_l, "qtd_atual": _qtd_l}
-                        else:
-                            _bc_add_item(_prod_l, _var_l)
-                            st.session_state["leitor_ultimo"] = _nome_l
-                        st.rerun()
-                    else:
-                        st.session_state["ent_bc_pending"] = (_prod_l, _bc_str_l)
-                        st.rerun()
-                else:
-                    st.session_state["leitor_nao_encontrado"] = _bc_str_l
+        if "leitor_fila" not in st.session_state:
+            st.session_state.leitor_fila = []
+
+        def _fila_add(prod, var, qtd=1):
+            _vid = str(var.get("id", "")) if var else ""
+            for _fx in st.session_state.leitor_fila:
+                if _fx.get("variacao_id") == _vid:
+                    _fx["quantidade"] = _fx.get("quantidade", 1) + qtd
+                    return
+            st.session_state.leitor_fila.append({
+                "variacao_id": _vid,
+                "produto_nome": prod.get("nome", ""),
+                "variacao_nome": var.get("nome", "") if var else "",
+                "quantidade": qtd,
+                "_prod": prod,
+                "_var": var,
+            })
+
+        # Form auto-limpante + auto-foco
+        with st.form("leitor_ext_form", clear_on_submit=True):
+            _leitor_cod = st.text_input(
+                "Leitor",
+                placeholder="Aponte o leitor para o código de barras...",
+                key="leitor_ext_input",
+                label_visibility="collapsed",
+            )
+            _leitor_ok = st.form_submit_button("Bipar", use_container_width=True)
+        import streamlit.components.v1 as _stc_l
+        _stc_l.html("""<script>
+        setTimeout(function(){
+          var inp = window.parent.document.querySelector('[data-testid="stTextInput"] input');
+          if(inp) inp.focus();
+        }, 120);
+        </script>""", height=0)
+
+        if _leitor_ok and _leitor_cod.strip():
+            _bc_str_l = _leitor_cod.strip()
+            _match_l  = _bc_map.get(_bc_str_l)
+            if _match_l:
+                _prod_l, _var_l = _match_l
+                if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
+                    _var_l = _prod_l["variacoes"][0].get("variacao", {})
+                if _var_l:
+                    _fila_add(_prod_l, _var_l)
                     st.rerun()
+                else:
+                    st.session_state["ent_bc_pending"] = (_prod_l, _bc_str_l)
+                    st.rerun()
+            else:
+                st.session_state["leitor_nao_encontrado"] = _bc_str_l
+                st.rerun()
 
-        _ult = st.session_state.pop("leitor_ultimo", None)
-        if _ult:
-            st.success(f"✅ {_ult} adicionado!")
         _nf = st.session_state.pop("leitor_nao_encontrado", None)
         if _nf:
             st.warning(f"⚠️ Código `{_nf}` não encontrado no catálogo.")
@@ -2142,9 +2132,38 @@ if _pg == "entrada":
             _cols_lp = st.columns(min(len(_var_lp_list), 3))
             for _lpi, _lpv in enumerate(_var_lp_list):
                 if _cols_lp[_lpi % 3].button(_lpv.get("nome", "?"), key=f"ent_var_lp_{_lpi}", use_container_width=True):
-                    _bc_add_item(_prod_lp, _lpv)
+                    _fila_add(_prod_lp, _lpv)
                     del st.session_state["ent_bc_pending"]
                     st.rerun()
+
+        # Fila de itens bipados
+        _fila = st.session_state.leitor_fila
+        if _fila:
+            st.markdown(f"**🗂️ Fila ({len(_fila)} item(s) — {sum(f['quantidade'] for f in _fila)} unidades):**")
+            for _fi, _fx in enumerate(_fila):
+                _fc1, _fc2 = st.columns([9, 1])
+                _fc1.markdown(
+                    f'<div style="background:#0e1829;padding:4px 10px;border-radius:5px;margin:2px 0;'
+                    f'border-left:3px solid #2a7a4a;font-size:0.9rem">'
+                    f'<b>{_fx["produto_nome"]}</b> / {_fx["variacao_nome"]} &nbsp;·&nbsp; '
+                    f'<span style="color:#7ef7a0">x{_fx["quantidade"]}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                if _fc2.button("🗑️", key=f"del_fila_{_fi}"):
+                    st.session_state.leitor_fila.pop(_fi)
+                    st.rerun()
+            st.markdown("")
+            _fa1, _fa2 = st.columns(2)
+            if _fa1.button("➕ Adicionar tudo à lista", type="primary", use_container_width=True, key="fila_add_all"):
+                for _fx in st.session_state.leitor_fila:
+                    _bc_add_item(_fx["_prod"], _fx["_var"], _fx["quantidade"])
+                st.session_state.leitor_fila = []
+                st.rerun()
+            if _fa2.button("🗑️ Limpar fila", use_container_width=True, key="fila_limpar"):
+                st.session_state.leitor_fila = []
+                st.rerun()
+        else:
+            st.caption("Nenhum código na fila ainda. Bipe os produtos e depois clique em Adicionar tudo.")
 
     # ── Código manual ─────────────────────────────────────────────────────
     else:
@@ -2356,20 +2375,38 @@ if _pg == "entrada":
 
     if st.session_state.itens_entrada:
         _n_ent = len(st.session_state.itens_entrada)
-        _CORES_ENT = ["#1a2030", "#1e2540"]
+        _CORES_ENT = ["#0e1829", "#162240"]
         for _i in range(_n_ent - 1, -1, -1):
             _it = st.session_state.itens_entrada[_i]
             _cor_ent = _CORES_ENT[_i % 2]
             _lc1, _lc2 = st.columns([9, 1])
             _lc1.markdown(
-                f'<div style="background:{_cor_ent};padding:5px 10px;border-radius:6px;margin:2px 0">'
-                f'<b>{_it.get("produto_nome","")}</b> / {_it.get("variacao_nome","")} &nbsp;·&nbsp; x{_it.get("quantidade", 1)}'
+                f'<div style="background:{_cor_ent};padding:5px 10px;border-radius:6px;margin:2px 0;'
+                f'border-left:3px solid #2a4a8a">'
+                f'<b>{_it.get("produto_nome","")}</b> / {_it.get("variacao_nome","")} &nbsp;·&nbsp; '
+                f'<span style="color:#7eb8f7">x{_it.get("quantidade", 1)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
             if _lc2.button("🗑️", key=f"del_ent_{_i}"):
                 st.session_state.itens_entrada.pop(_i)
                 st.rerun()
+
+        # Somatória por modelo
+        _mod_totais: dict[str, int] = {}
+        for _it_s in st.session_state.itens_entrada:
+            _nm_s = _it_s.get("produto_nome", "—")
+            _mod_totais[_nm_s] = _mod_totais.get(_nm_s, 0) + _it_s.get("quantidade", 1)
+        if len(_mod_totais) > 1:
+            _linhas_mod = " &nbsp;|&nbsp; ".join(
+                f"<b>{_nm}</b>: {_qt}" for _nm, _qt in sorted(_mod_totais.items())
+            )
+            st.markdown(
+                f'<div style="background:#0a1020;border:1px solid #2a4a8a;border-radius:6px;'
+                f'padding:6px 12px;margin:6px 0;font-size:0.85rem;color:#a8c8f0">'
+                f'📊 Total por modelo — {_linhas_mod}</div>',
+                unsafe_allow_html=True,
+            )
 
         painel_salvar(st.session_state.itens_entrada, "entrada", key_suffix="ent")
 
@@ -3575,7 +3612,23 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
         st.warning("Sincronize os produtos primeiro.")
     else:
         if "pedido_itens" not in st.session_state:
-            st.session_state.pedido_itens = []
+            _rasc_ped = api.carregar_rascunho_pedido(_user)
+            if _rasc_ped and (_rasc_ped.get("itens") or _rasc_ped.get("avulsos")):
+                st.session_state.pedido_itens   = _rasc_ped.get("itens", [])
+                st.session_state.pedido_avulsos = _rasc_ped.get("avulsos", [])
+                if _rasc_ped.get("fornecedor"):
+                    st.session_state["fornecedor_global"] = _rasc_ped["fornecedor"]
+                if _rasc_ped.get("obs"):
+                    st.session_state["obs_pedido"] = _rasc_ped["obs"]
+                if _rasc_ped.get("data"):
+                    try:
+                        from datetime import date as _d_rasc
+                        st.session_state["data_pedido"] = _d_rasc.fromisoformat(_rasc_ped["data"])
+                    except Exception:
+                        pass
+                st.toast("📋 Pedido anterior restaurado automaticamente.", icon="📋")
+            else:
+                st.session_state.pedido_itens = []
         if "pedido_undo" not in st.session_state:
             st.session_state.pedido_undo = []
 
@@ -4225,6 +4278,8 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                     _pedido_snapshot()
                     st.session_state.pedido_itens = []
                     st.session_state.pedido_avulsos = []
+                    st.session_state.pop("_ped_hash_saved", None)
+                    api.limpar_rascunho_pedido(_user)
                     st.rerun()
             with col_e:
                 n_undo = len(st.session_state.get("pedido_undo", []))
@@ -4341,6 +4396,23 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 )
         else:
             st.info("Adicione produtos ao pedido acima.")
+
+    # Auto-save rascunho quando itens mudam
+    _ped_todos_rasc = st.session_state.get("pedido_itens", []) + st.session_state.get("pedido_avulsos", [])
+    if _ped_todos_rasc:
+        import hashlib as _hs_ped, json as _json_ped
+        _ped_hash_now = _hs_ped.md5(
+            _json_ped.dumps(_ped_todos_rasc, sort_keys=True, default=str).encode()
+        ).hexdigest()
+        if _ped_hash_now != st.session_state.get("_ped_hash_saved", ""):
+            api.salvar_rascunho_pedido(_user, {
+                "itens":      st.session_state.get("pedido_itens", []),
+                "avulsos":    st.session_state.get("pedido_avulsos", []),
+                "fornecedor": st.session_state.get("fornecedor_global", ""),
+                "obs":        st.session_state.get("obs_pedido", ""),
+                "data":       str(st.session_state.get("data_pedido", date.today())),
+            })
+            st.session_state["_ped_hash_saved"] = _ped_hash_now
 
 
 # ══════════════════════════════════════════════

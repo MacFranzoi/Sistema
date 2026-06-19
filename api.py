@@ -2055,6 +2055,44 @@ def _normalizar_login(nome: str) -> str:
     nome_norm = _ud.normalize("NFD", nome).encode("ascii", "ignore").decode()
     return nome_norm.strip().lower().split()[0] if nome_norm.strip() else "usuario"
 
+# ──────────────────────────────────────────────
+# Rascunho de Pedido (persiste entre sessões)
+# ──────────────────────────────────────────────
+
+def _rascunho_ped_path(user: str) -> str:
+    return os.path.join(DIR, f"pedido_rascunho_{user}.json")
+
+def salvar_rascunho_pedido(user: str, dados: dict):
+    import threading
+    path = _rascunho_ped_path(user)
+    payload = {"user": user, "salvo_em": datetime.now().isoformat(), **dados}
+    conteudo = json.dumps(payload, ensure_ascii=False, default=str)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    def _push():
+        _gh_push_arquivo(f"pedido_rascunho_{user}.json", conteudo, f"Rascunho pedido {user}")
+    threading.Thread(target=_push, daemon=True).start()
+
+def carregar_rascunho_pedido(user: str) -> dict | None:
+    path = _rascunho_ped_path(user)
+    if not os.path.exists(path):
+        _gh_baixar_arquivo(f"pedido_rascunho_{user}.json", path)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def limpar_rascunho_pedido(user: str):
+    import threading
+    path = _rascunho_ped_path(user)
+    if os.path.exists(path):
+        os.remove(path)
+    threading.Thread(target=lambda: _gh_delete_arquivo(f"pedido_rascunho_{user}.json"), daemon=True).start()
+
+
 def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:
     funcs = buscar_funcionarios(limite=200)
     criados = []
