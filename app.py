@@ -568,6 +568,7 @@ _MENU_FULL = [
     ("estoque_loja",    "🏪", "Por Loja",             "ESTOQUE",      4,     False),
     ("disponibilidade", "🔘", "Disponibilidade",      "ESTOQUE",      5,     False),
     ("etiquetas",       "🏷️", "Etiquetas",            "ESTOQUE",      2,     False),
+    ("aprovacoes",      "✅", "Aprovações de Entrada","ESTOQUE",      None,  False),
     # COMPRAS
     ("pedido",          "🛒", "Pedido de Compra",     "COMPRAS",      3,     False),
     ("compras_hist",    "📦", "Histórico de Compras", "COMPRAS",      None,  False),
@@ -1054,6 +1055,7 @@ aba7          = _guard("precos")
 aba8          = _guard("novo_modelo")
 aba9          = _guard("clonar_modelo")
 aba_usuarios  = _guard("usuarios")
+aba_aprovacoes = _guard("aprovacoes")
 
 # ══════════════════════════════════════════════
 # DASHBOARD
@@ -1742,6 +1744,19 @@ if _pg == "entrada":
         st.session_state.itens_entrada = itens_carregados
         st.rerun()
 
+    # ── Verificar API ──────────────────────────────────────────────────────
+    with st.expander("🔌 Status da API", expanded=False):
+        if st.button("🔌 Verificar conexão com GestaoClick", key="ent_api_check"):
+            with st.spinner("Testando…"):
+                _api_status = api.verificar_api_gestaoclick()
+            if _api_status["ok"]:
+                st.success(f"✅ {_api_status['msg']}")
+            else:
+                st.error(f"❌ API com problema: {_api_status['msg']}")
+
+    # ── Toggle scanner ao vivo ────────────────────────────────────────────
+    _scanner_off = st.checkbox("🚫 Desativar scanner ao vivo", value=False, key="ent_scanner_off")
+
     # ── Mapa de códigos de barras do catálogo ──────────────────────────
     _prods_all_ent = cache.get("produtos", [])
     _bc_map = {}   # barcode → (produto, variacao_ou_None)
@@ -1781,7 +1796,9 @@ if _pg == "entrada":
     )
 
     # ── Scanner ao vivo ───────────────────────────────────────────────────
-    if _ent_modo == "📷 Scanner ao vivo":
+    if _ent_modo == "📷 Scanner ao vivo" and _scanner_off:
+        st.info("Scanner desativado. Desmarque a opção acima para reativar.")
+    elif _ent_modo == "📷 Scanner ao vivo":
         import streamlit.components.v1 as _stc
         import os as _os_ent, base64 as _b64e
         _scanner_path = _os_ent.path.join(_os_ent.path.dirname(_os_ent.path.abspath(__file__)), "barcode_scanner_component")
@@ -1955,6 +1972,114 @@ if _pg == "entrada":
                                 st.caption(f"• {_ih.get('produto','')} / {_ih.get('variacao','')}")
                 st.divider()
 
+    # ── WhatsApp IA ────────────────────────────────────────────────────────
+    with st.expander("🤖 Importar entrada via WhatsApp (IA)", expanded=False):
+        st.caption("Cole o texto descrevendo os produtos que chegaram. A IA identifica produtos e quantidades.")
+        _ent_wpp_txt = st.text_area("Texto", placeholder="Chegaram 5 POCO X3 aveludada preta, 3 iPhone 14 silicone azul...",
+                                    height=120, key="ent_wpp_input", label_visibility="collapsed")
+        if st.button("✨ Identificar com IA", type="primary", key="ent_wpp_gerar", disabled=not _ent_wpp_txt.strip()):
+            if not cache:
+                st.warning("Sincronize os produtos primeiro.")
+            else:
+                with st.spinner("Analisando com IA…"):
+                    try:
+                        _cat_resumo = "\n".join(
+                            f"{p.get('codigo_interno','')} | {p.get('nome','')}"
+                            for p in cache.get("produtos",[])[:300]
+                        )
+                        _wpp_result = api.parse_entrada_whatsapp(_ent_wpp_txt, _cat_resumo)
+                        _ci_map_wpp = {p.get("codigo_interno","").lower(): p for p in cache.get("produtos",[])}
+                        _adicionados = 0
+                        _nao_encontrados = []
+                        for _wi in _wpp_result:
+                            _wcod = (_wi.get("cod_interno") or "").lower()
+                            _wprod = _ci_map_wpp.get(_wcod)
+                            if _wprod:
+                                _wvar_nome = (_wi.get("variacao_nome") or "").lower()
+                                _wvar = None
+                                for _wv in _wprod.get("variacoes",[]):
+                                    _wvd = _wv["variacao"]
+                                    if _wvar_nome in (_wvd.get("nome","") or "").lower():
+                                        _wvar = _wvd
+                                        break
+                                if not _wvar and _wprod.get("variacoes"):
+                                    _wvar = _wprod["variacoes"][0]["variacao"]
+                                if _wvar:
+                                    _bc_add_item(_wprod, _wvar, _wi.get("quantidade",1))
+                                    _adicionados += 1
+                                else:
+                                    _nao_encontrados.append(_wi)
+                            else:
+                                _nao_encontrados.append(_wi)
+                        if _adicionados:
+                            st.success(f"✅ {_adicionados} item(ns) adicionado(s)!")
+                        if _nao_encontrados:
+                            st.warning(f"⚠️ {len(_nao_encontrados)} não encontrado(s) no catálogo:")
+                            for _ni in _nao_encontrados:
+                                st.caption(f"• {_ni.get('cod_interno','')} / {_ni.get('variacao_nome','')} x{_ni.get('quantidade',1)}")
+                        if _adicionados:
+                            st.rerun()
+                    except Exception as _we:
+                        st.error(f"Erro na IA: {_we}")
+
+    # ── Importar ───────────────────────────────────────────────────────────
+    with st.expander("📥 Importar", expanded=False):
+        _imp_tab1, _imp_tab2 = st.tabs(["📊 Excel", "📄 Nota Fiscal (XML)"])
+        with _imp_tab1:
+            _tpl_ent = api.gerar_template_excel("entrada")
+            st.download_button("⬇️ Baixar planilha-modelo", _tpl_ent,
+                               file_name="modelo_entrada.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True, key="dl_tpl_ent")
+            _arq_imp = st.file_uploader("Carregar planilha preenchida", type=["xlsx","xls"],
+                                        key="ent_imp_xlsx", label_visibility="collapsed")
+            if _arq_imp:
+                try:
+                    _ok_imp, _sem_match = api.importar_excel_itens(_arq_imp.read(), "entrada", cache)
+                    if _ok_imp:
+                        st.session_state.itens_entrada.extend(_ok_imp)
+                        st.success(f"✅ {len(_ok_imp)} item(ns) importado(s)!")
+                    if _sem_match:
+                        st.warning(f"⚠️ {len(_sem_match)} linha(s) sem correspondência no catálogo.")
+                    if _ok_imp:
+                        st.rerun()
+                except Exception as _ie:
+                    st.error(f"Erro ao importar: {_ie}")
+        with _imp_tab2:
+            st.caption("Importe o XML da NF-e para preencher a lista automaticamente.")
+            _nfe_file = st.file_uploader("Selecionar XML da NF-e", type=["xml"],
+                                         key="ent_nfe_xml", label_visibility="collapsed")
+            if _nfe_file:
+                try:
+                    _nfe_itens = api.importar_nfe_xml(_nfe_file.read(), cache)
+                    _nfe_match  = [i for i in _nfe_itens if i.get("_matched")]
+                    _nfe_nmatch = [i for i in _nfe_itens if not i.get("_matched")]
+                    if _nfe_match:
+                        st.success(f"✅ {len(_nfe_match)} produto(s) identificado(s) na NF-e.")
+                        if st.button(f"➕ Adicionar {len(_nfe_match)} à lista", key="ent_nfe_add", use_container_width=True):
+                            for _ni in _nfe_match:
+                                _ni_clean = {k:v for k,v in _ni.items() if not k.startswith("_")}
+                                st.session_state.itens_entrada.append(_ni_clean)
+                            st.rerun()
+                    if _nfe_nmatch:
+                        st.warning(f"⚠️ {len(_nfe_nmatch)} item(ns) da NF-e sem correspondência no catálogo:")
+                        for _nm in _nfe_nmatch:
+                            st.caption(f"• {_nm['_nfe_desc']} x{_nm['quantidade']}")
+                except Exception as _nfee:
+                    st.error(f"Erro ao ler NF-e: {_nfee}")
+
+    # ── Exportar lista atual ────────────────────────────────────────────────
+    if st.session_state.itens_entrada:
+        import io as _io_exp, pandas as _pd_exp
+        _df_exp = api.df_lista_resumo(st.session_state.itens_entrada) if hasattr(api,"df_lista_resumo") else _pd_exp.DataFrame(st.session_state.itens_entrada)
+        _buf_exp = _io_exp.BytesIO()
+        _pd_exp.DataFrame(st.session_state.itens_entrada).to_excel(_buf_exp, index=False)
+        _buf_exp.seek(0)
+        st.download_button("📤 Exportar lista atual (Excel)", _buf_exp,
+                           file_name=f"entrada_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, key="ent_export_xlsx")
+
     # Busca e adição
     produto_sel, edited = busca_produto_ui("ent", cache, col_qtd="Qtd Entrada")
 
@@ -1997,35 +2122,54 @@ if _pg == "entrada":
 
         painel_salvar(st.session_state.itens_entrada, "entrada", key_suffix="ent")
 
-        col_x, col_y, col_z = st.columns(3)
+        _user_setor_ent = _user_data.get("setor", "vendas")
+        _pode_confirmar = _user_setor_ent == "admin" or "aprovacoes" in api.SETORES.get(_user_setor_ent, {}).get("paginas", [])
+
+        col_x, col_y, col_z, col_w = st.columns(4)
         with col_x:
             if st.button("🗑️ Limpar lista", use_container_width=True):
                 st.session_state.itens_entrada = []
                 st.rerun()
         with col_y:
-            if st.button("📊 Confirmar entrada no sistema", type="primary", use_container_width=True):
-                if not loja_id:
-                    st.error("Selecione uma loja antes de confirmar.")
-                else:
-                    barra = st.progress(0)
-                    def prog_ent(atual, total):
-                        barra.progress(atual / total, text=f"{atual}/{total}...")
-                    resultados = api.atualizar_estoque_lote(
-                        st.session_state.itens_entrada, loja_id=loja_id, modo="soma",
-                        progress_callback=prog_ent
-                    )
-                    ok = [r for r in resultados if r["ok"]]
-                    erros = [r for r in resultados if not r["ok"]]
-                    if ok:
-                        st.success(f"✅ {len(ok)} variação(ões) com estoque somado em **{loja_sel_nome}**!")
-                        st.session_state.itens_entrada_ok = [r for r in resultados if r["ok"]]
-                    for e in erros:
-                        st.error(f"❌ {e['produto_nome']} / {e['variacao_nome']}: {e['erro']}")
-                    if not erros:
-                        st.session_state.itens_entrada = []
+            if _pode_confirmar:
+                if st.button("📊 Confirmar diretamente", type="primary", use_container_width=True):
+                    if not loja_id:
+                        st.error("Selecione uma loja antes de confirmar.")
+                    else:
+                        barra = st.progress(0)
+                        def prog_ent(atual, total):
+                            barra.progress(atual / total, text=f"{atual}/{total}...")
+                        resultados = api.atualizar_estoque_lote(
+                            st.session_state.itens_entrada, loja_id=loja_id, modo="soma",
+                            progress_callback=prog_ent
+                        )
+                        ok = [r for r in resultados if r["ok"]]
+                        erros = [r for r in resultados if not r["ok"]]
+                        if ok:
+                            st.success(f"✅ {len(ok)} variação(ões) com estoque somado em **{loja_sel_nome}**!")
+                            st.session_state.itens_entrada_ok = [r for r in resultados if r["ok"]]
+                        for e in erros:
+                            st.error(f"❌ {e['produto_nome']} / {e['variacao_nome']}: {e['erro']}")
+                        if not erros:
+                            st.session_state.itens_entrada = []
         with col_z:
-            # Transferir para acerto
-            if st.button("↗️ Enviar para Acerto de Estoque", use_container_width=True):
+            if st.button("📤 Enviar para Aprovação", use_container_width=True,
+                         type="primary" if not _pode_confirmar else "secondary"):
+                if not loja_id:
+                    st.error("Selecione uma loja antes de enviar.")
+                else:
+                    _ap_id = api.salvar_entrada_para_aprovacao(
+                        itens=list(st.session_state.itens_entrada),
+                        usuario=_user,
+                        nome_usuario=_user_data.get("nome", _user),
+                        loja_id=str(loja_id),
+                        loja_nome=loja_sel_nome,
+                    )
+                    st.session_state.itens_entrada = []
+                    st.success(f"✅ Entrada enviada para aprovação! ID: `{_ap_id}`")
+                    st.rerun()
+        with col_w:
+            if st.button("↗️ Para Acerto", use_container_width=True):
                 st.session_state.clipboard = {
                     "tipo": "acerto",
                     "origem": "Entrada de Mercadoria",
@@ -2041,6 +2185,89 @@ if _pg == "entrada":
                 st.rerun()
     else:
         st.info("Adicione produtos à lista acima.")
+
+
+# ══════════════════════════════════════════════
+# ABA — APROVAÇÕES DE ENTRADA
+# ══════════════════════════════════════════════
+if _pg == "aprovacoes":
+    st.subheader("✅ Aprovações de Entrada")
+
+    _user_setor_ap = _user_data.get("setor", "vendas")
+    _pode_ap = _user_setor_ap == "admin" or "aprovacoes" in api.SETORES.get(_user_setor_ap, {}).get("paginas", [])
+
+    _tab_pend, _tab_hist = st.tabs(["⏳ Aguardando aprovação", "📋 Histórico"])
+
+    with _tab_pend:
+        _pendentes = api.listar_entradas_aprovacao(status="aguardando")
+        if not _pendentes:
+            st.info("Nenhuma entrada aguardando aprovação.")
+        for _ap in _pendentes:
+            _ap_ts = _ap.get("criado_em","")[:16].replace("T"," ")
+            _ap_loja = _ap.get("loja_nome","")
+            _ap_criador = _ap.get("nome_criador", _ap.get("criado_por",""))
+            _ap_itens = _ap.get("itens", [])
+            _lidos = [l if isinstance(l, str) else l.get("usuario","") for l in (_ap.get("lido_por") or [])]
+            _lido_eu = _user in _lidos
+            _label_ap = f"{'📖' if _lido_eu else '🔔'} {_ap_ts} — {_ap_criador} — {_ap_loja} ({len(_ap_itens)} itens)"
+            with st.expander(_label_ap, expanded=not _lido_eu):
+                if not _lido_eu:
+                    api.marcar_entrada_lida(_ap["id"], _user)
+                st.caption(f"ID: `{_ap['id']}` · Criado por: **{_ap_criador}** · Loja: **{_ap_loja}** · {_ap_ts}")
+                if _ap.get("obs_envio"):
+                    st.info(_ap["obs_envio"])
+                _df_ap = pd.DataFrame([
+                    {"Produto": i.get("produto_nome",""), "Variação": i.get("variacao_nome",""), "Qtd": i.get("quantidade",1)}
+                    for i in _ap_itens
+                ])
+                st.dataframe(_df_ap, use_container_width=True, hide_index=True)
+                if _lidos:
+                    st.caption(f"👁️ Lido por: {', '.join(_lidos)}")
+                if _pode_ap:
+                    _obs_ap = st.text_input("Observação (opcional)", key=f"obs_{_ap['id']}", label_visibility="collapsed", placeholder="Observação para o aprovador...")
+                    _ca, _cr = st.columns(2)
+                    with _ca:
+                        if st.button("✅ Aprovar e aplicar estoque", key=f"aprovar_{_ap['id']}", type="primary", use_container_width=True):
+                            if not loja_id:
+                                st.error("Selecione uma loja na barra lateral.")
+                            else:
+                                _res_ap = api.aprovar_entrada_pendente(_ap["id"], _user, _user_data.get("nome",_user), True, _obs_ap or "")
+                                if _res_ap:
+                                    _loja_ap = _res_ap.get("loja_id") or str(loja_id)
+                                    barra_ap = st.progress(0)
+                                    def _prog_ap(a, t): barra_ap.progress(a/t, text=f"{a}/{t}...")
+                                    api.atualizar_estoque_lote(_res_ap["itens"], loja_id=_loja_ap, modo="soma", progress_callback=_prog_ap)
+                                    st.success(f"✅ Entrada aprovada e estoque atualizado!")
+                                    st.rerun()
+                    with _cr:
+                        if st.button("❌ Rejeitar", key=f"rejeitar_{_ap['id']}", use_container_width=True):
+                            api.aprovar_entrada_pendente(_ap["id"], _user, _user_data.get("nome",_user), False, _obs_ap or "")
+                            st.warning("Entrada rejeitada.")
+                            st.rerun()
+                else:
+                    st.info("Aguardando aprovação de um administrador.")
+
+    with _tab_hist:
+        _todos_ap = api.listar_entradas_aprovacao()
+        _hist_ap = [a for a in _todos_ap if a.get("status") != "aguardando"]
+        if not _hist_ap:
+            st.info("Nenhum registro no histórico ainda.")
+        else:
+            _rows_hist = []
+            for _ha in _hist_ap:
+                _lidos_h = [l if isinstance(l, str) else l.get("usuario","") for l in (_ha.get("lido_por") or [])]
+                _rows_hist.append({
+                    "Status":       "✅ Aprovado" if _ha.get("status")=="aprovado" else "❌ Rejeitado",
+                    "Data envio":   _ha.get("criado_em","")[:16].replace("T"," "),
+                    "Enviado por":  _ha.get("nome_criador", _ha.get("criado_por","")),
+                    "Loja":         _ha.get("loja_nome",""),
+                    "Itens":        len(_ha.get("itens",[])),
+                    "Aprovado por": _ha.get("nome_aprovador","—") or "—",
+                    "Data aprovação":_ha.get("aprovado_em","")[:16].replace("T"," ") if _ha.get("aprovado_em") else "—",
+                    "Obs":          _ha.get("obs_aprovacao","") or "",
+                    "Lido por":     ", ".join(_lidos_h) if _lidos_h else "—",
+                })
+            st.dataframe(pd.DataFrame(_rows_hist), use_container_width=True, hide_index=True)
 
 
 # ══════════════════════════════════════════════

@@ -38,7 +38,7 @@ _SETORES_PADRAO = {
             "dashboard","clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
-            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios",
             "sincronizacao","usuarios",
@@ -50,7 +50,7 @@ _SETORES_PADRAO = {
             "dashboard","clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
-            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios",
         ],
@@ -1659,3 +1659,176 @@ def registrar_compra_gestaoclick(itens, fornecedor_id, data_emissao, situacao_id
     }
 
     return _post("pedidoscompras", body, loja_id=loja_id)
+
+
+# ──────────────────────────────────────────────
+# Aprovação de entradas
+# ──────────────────────────────────────────────
+APROVACOES_FILE = os.path.join(DIR, "entradas_aprovacao.json")
+
+def _aprovacoes_load() -> list:
+    if not os.path.exists(APROVACOES_FILE):
+        _gh_baixar_arquivo("entradas_aprovacao.json", APROVACOES_FILE)
+    if not os.path.exists(APROVACOES_FILE):
+        return []
+    with open(APROVACOES_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+def _aprovacoes_save(dados: list):
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    with open(APROVACOES_FILE, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _gh_push_arquivo("entradas_aprovacao.json", conteudo, "Atualiza aprovações de entrada")
+
+def salvar_entrada_para_aprovacao(itens: list, usuario: str, nome_usuario: str,
+                                   loja_id: str, loja_nome: str, obs: str = "") -> str:
+    import uuid as _uuid
+    entrada_id = f"ent_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{_uuid.uuid4().hex[:6]}"
+    dados = _aprovacoes_load()
+    dados.append({
+        "id": entrada_id,
+        "criado_em": datetime.now().isoformat(),
+        "criado_por": usuario,
+        "nome_criador": nome_usuario,
+        "loja_id": loja_id,
+        "loja_nome": loja_nome,
+        "itens": itens,
+        "status": "aguardando",
+        "obs_envio": obs,
+        "aprovado_por": None,
+        "nome_aprovador": None,
+        "aprovado_em": None,
+        "obs_aprovacao": "",
+        "lido_por": [],
+    })
+    _aprovacoes_save(dados)
+    return entrada_id
+
+def listar_entradas_aprovacao(status: str = None) -> list:
+    dados = _aprovacoes_load()
+    if status:
+        return [d for d in dados if d.get("status") == status]
+    return sorted(dados, key=lambda x: x.get("criado_em",""), reverse=True)
+
+def marcar_entrada_lida(entrada_id: str, usuario: str):
+    dados = _aprovacoes_load()
+    for d in dados:
+        if d["id"] == entrada_id:
+            lidos = d.get("lido_por") or []
+            if usuario not in lidos:
+                lidos.append({"usuario": usuario, "em": datetime.now().isoformat()})
+                d["lido_por"] = lidos
+            break
+    _aprovacoes_save(dados)
+
+def aprovar_entrada_pendente(entrada_id: str, aprovador: str, nome_aprovador: str,
+                              aprovado: bool, obs: str = "") -> dict:
+    dados = _aprovacoes_load()
+    for d in dados:
+        if d["id"] == entrada_id:
+            d["status"]         = "aprovado" if aprovado else "rejeitado"
+            d["aprovado_por"]   = aprovador
+            d["nome_aprovador"] = nome_aprovador
+            d["aprovado_em"]    = datetime.now().isoformat()
+            d["obs_aprovacao"]  = obs
+            _aprovacoes_save(dados)
+            return d
+    return {}
+
+def verificar_api_gestaoclick() -> dict:
+    try:
+        import time as _t
+        t0 = _t.time()
+        _get("produtos", params={"limite": 1, "pagina": 1})
+        ms = int((_t.time() - t0) * 1000)
+        return {"ok": True, "ms": ms, "msg": f"API respondeu em {ms}ms"}
+    except Exception as ex:
+        return {"ok": False, "ms": None, "msg": str(ex)}
+
+def importar_nfe_xml(xml_bytes: bytes, cache: dict) -> list:
+    import xml.etree.ElementTree as _ET
+    import re as _re
+    try:
+        root = _ET.fromstring(xml_bytes)
+    except Exception as ex:
+        raise ValueError(f"XML inválido: {ex}")
+    _NS = "http://www.portalfiscal.inf.br/nfe"
+    def _txt(el, tag):
+        v = el.find(f"{{{_NS}}}{tag}")
+        return v.text.strip() if v is not None and v.text else ""
+    produtos_cache = cache.get("produtos", [])
+    def _buscar(desc):
+        desc_l = desc.lower()
+        tokens = [t for t in _re.split(r'\s+', desc_l) if len(t) > 2]
+        melhor, melhor_score, melhor_var = None, 0, None
+        for p in produtos_cache:
+            p_nome_l = (p.get("nome") or "").lower()
+            score = sum(t in p_nome_l for t in tokens)
+            if score > melhor_score:
+                melhor_score = score
+                melhor = p
+                melhor_var = None
+                for v in p.get("variacoes", []):
+                    vd = v["variacao"]
+                    if sum(t in (vd.get("nome","")).lower() for t in tokens) > 0:
+                        melhor_var = vd
+                        break
+        return (melhor, melhor_var) if melhor_score >= 2 else (None, None)
+    itens = []
+    for det in root.iter(f"{{{_NS}}}det"):
+        prod_el = det.find(f"{{{_NS}}}prod")
+        if prod_el is None:
+            continue
+        desc = _txt(prod_el, "xProd")
+        try:
+            qtd = int(float(_txt(prod_el, "qCom").replace(",",".")))
+        except ValueError:
+            qtd = 1
+        try:
+            vunit = float(_txt(prod_el, "vUnCom").replace(",","."))
+        except ValueError:
+            vunit = 0.0
+        prod, var = _buscar(desc)
+        itens.append({
+            "produto_id":    prod["id"] if prod else "",
+            "produto_nome":  prod["nome"] if prod else desc,
+            "cod_interno":   prod.get("codigo_interno","") if prod else "",
+            "variacao_id":   var["id"] if var else "",
+            "variacao_cod":  var.get("codigo","") if var else "",
+            "variacao_nome": var.get("nome","") if var else "",
+            "quantidade":    qtd,
+            "valor_custo":   f"{vunit:.2f}",
+            "_nfe_desc":     desc,
+            "_matched":      prod is not None,
+        })
+    return itens
+
+def parse_entrada_whatsapp(texto: str, catalogo_resumo: str) -> list:
+    import anthropic as _ant
+    client = _ant.Anthropic(api_key=_get_anthropic_key())
+    prompt = f"""Você é assistente de estoque de uma loja de capinhas para celular no Brasil.
+O usuário descreve produtos que CHEGARAM (entrada de mercadoria).
+Para cada produto/variação identificado, retorne o código do catálogo, variação e quantidade.
+
+Catálogo (cod_interno | nome):
+{catalogo_resumo}
+
+Mensagem recebida:
+{texto}
+
+Retorne APENAS JSON válido:
+[{{"cod_interno":"G54","variacao_nome":"Aveludada Preta","quantidade":3,"confianca":"alta"}}]
+- quantidade padrão = 1
+- se não encontrar no catálogo, use cod_interno null
+- retorne só o JSON, sem explicações"""
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        messages=[{"role":"user","content":prompt}]
+    )
+    import json as _j, re as _re
+    raw = msg.content[0].text
+    m = _re.search(r'\[.*\]', raw, _re.DOTALL)
+    if m:
+        return _j.loads(m.group())
+    return _j.loads(raw)
