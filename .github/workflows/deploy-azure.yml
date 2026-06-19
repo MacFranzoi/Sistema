@@ -1,9 +1,7 @@
 name: Deploy para Azure
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:  # permite rodar manualmente pelo GitHub
+  workflow_dispatch:  # somente manual — app hospedado no Streamlit Cloud
 
 jobs:
   build-and-deploy:
