@@ -2069,11 +2069,12 @@ if _pg == "entrada":
     elif _ent_modo == "📡 Leitor externo":
         st.caption("Clique na área abaixo, bipe todos os códigos em sequência e depois clique em **Adicionar tudo**. O leitor escreve um código por linha automaticamente.")
 
+        _leitor_ver = st.session_state.get("leitor_area_ver", 0)
         _leitor_area = st.text_area(
             "Códigos bipados",
             placeholder="Clique aqui e comece a bipar...\nCada código aparece em uma linha.",
             height=220,
-            key="leitor_area_txt",
+            key=f"leitor_area_txt_{_leitor_ver}",
             label_visibility="collapsed",
         )
 
@@ -2124,8 +2125,9 @@ if _pg == "entrada":
         _processar = _la1.button("➕ Adicionar tudo à lista", type="primary",
                                   use_container_width=True, key="leitor_area_add",
                                   disabled=not (_leitor_area or "").strip())
-        _la2.button("🗑️ Limpar", use_container_width=True, key="leitor_area_clear",
-                    on_click=lambda: st.session_state.update(leitor_area_txt=""))
+        if _la2.button("🗑️ Limpar", use_container_width=True, key="leitor_area_clear"):
+            st.session_state["leitor_area_ver"] = _leitor_ver + 1
+            st.rerun()
 
         if _processar and _leitor_area.strip():
             _codigos_l = [c.strip() for c in _leitor_area.splitlines() if c.strip()]
@@ -2150,7 +2152,7 @@ if _pg == "entrada":
             if _sem_var_l:
                 st.info(f"ℹ️ {len(_sem_var_l)} produto(s) com múltiplas variações — adicione manualmente: {', '.join(_sem_var_l[:5])}")
             if _ok_l:
-                st.session_state["leitor_area_txt"] = ""
+                st.session_state["leitor_area_ver"] = _leitor_ver + 1
                 st.rerun()
 
     # ── Código manual ─────────────────────────────────────────────────────
@@ -2817,7 +2819,7 @@ if _pg == "pedido":
                                (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
                                (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
         # ── MagSafe ── mesmo que o botão MagSafe ×3 da página
-        "magsafe":           [(["119,99", "magsafe"], 3)],
+        "magsafe":           [(["129,99", "magsafe"], 3)],
         # ── Diversos ── mesmos que os botões Diversos da página
         "brilho":            [(["59,99", "diversos"], 3)],   # ✨ Diversos Brilho ×3
         "diversos masculino":[(["39,99", "diversos"], 3)],   # 💪 Diversos Masculino ×3
@@ -3132,8 +3134,13 @@ POSTURA — REGRA ABSOLUTA:
 
 Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
 
+PREÇO EXPLÍCITO — quando o usuário citar um valor em reais junto ao kit (ex: "magsafe 129,99", "129,99 magsafe", "sl 99,99", "59,99 brilho"):
+→ extraia o preço no campo "preco" (string sem R$, ex: "129,99")
+→ o preço será usado para buscar a variação correta no catálogo
+→ sem preço → "preco": null
+
 Retorne SOMENTE JSON válido, sem markdown:
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"preco":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
 
 O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nome da cor (ex: "preta", "verde militar", "lilás"). Para outros kits, deixe null."""
 
@@ -3350,7 +3357,21 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                     })
                                 continue
 
-                            _cores_kit = _WPP_KITS.get(_kit, [])
+                            # Se o usuário citou um preço, substitui o preço no kit
+                            _preco_entry = (_entry.get("preco") or "").strip().replace("R$","").strip()
+                            _cores_kit_base = _WPP_KITS.get(_kit, [])
+                            if _preco_entry and _cores_kit_base:
+                                # Troca qualquer token que pareça preço (ex: "119,99") pelo preço falado
+                                import re as _re_preco
+                                _cores_kit = []
+                                for _termos_orig, _q in _cores_kit_base:
+                                    _termos_new = [
+                                        _preco_entry if _re_preco.match(r"^\d+[.,]\d{2}$", t) else t
+                                        for t in (_termos_orig if isinstance(_termos_orig, list) else [_termos_orig])
+                                    ]
+                                    _cores_kit.append((_termos_new, _q))
+                            else:
+                                _cores_kit = _cores_kit_base
                             _prod_obj  = _achar_produto(_cod, _nome)
                             if not _prod_obj:
                                 # Modelo não encontrado → avulso automático
@@ -3754,11 +3775,12 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                         if _ci:
                             _bc_map_ped[_ci] = (_pp, None)
 
+            _ped_bc_ver = st.session_state.get("ped_bc_area_ver", 0)
             _ped_bc_area = st.text_area(
                 "Códigos",
                 placeholder="Clique aqui e comece a bipar...\nCada código aparece em uma linha.",
                 height=220,
-                key="ped_bc_area_txt",
+                key=f"ped_bc_area_txt_{_ped_bc_ver}",
                 label_visibility="collapsed",
             )
 
@@ -3809,8 +3831,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
             _ped_gerar = _pba1.button("➕ Gerar pedido a partir dos códigos", type="primary",
                                        use_container_width=True, key="ped_bc_gerar",
                                        disabled=not (_ped_bc_area or "").strip())
-            _pba2.button("🗑️ Limpar", use_container_width=True, key="ped_bc_limpar2",
-                         on_click=lambda: st.session_state.update(ped_bc_area_txt=""))
+            if _pba2.button("🗑️ Limpar", use_container_width=True, key="ped_bc_limpar2"):
+                st.session_state["ped_bc_area_ver"] = _ped_bc_ver + 1
+                st.rerun()
 
             if _ped_gerar and _ped_bc_area.strip():
                 _pedido_snapshot()
@@ -3856,7 +3879,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 if _sem_var_ped:
                     st.info(f"ℹ️ {len(_sem_var_ped)} produto(s) com múltiplas variações — adicione manualmente.")
                 if _ok_ped:
-                    st.session_state["ped_bc_area_txt"] = ""
+                    st.session_state["ped_bc_area_ver"] = _ped_bc_ver + 1
                     st.rerun()
 
         # ── Custos por tipo ──
@@ -4013,7 +4036,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                             cancelado_ms = st.form_submit_button("Cancelar", use_container_width=True)
                     if submitted_ms:
                         obs = f"MagSafe {tipo_ms}".strip() if tipo_ms else "MagSafe"
-                        _adicionar_kit([(["119,99", "magsafe"], 3)], "MagSafe", observacao=obs)
+                        _adicionar_kit([(["129,99", "magsafe"], 3)], "MagSafe", observacao=obs)
                         st.rerun()
                     if cancelado_ms:
                         st.rerun()
@@ -4246,11 +4269,11 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                 def _tipo_variacao(nome_var):
                     """Classifica a variação em tipo (para filtro de exportação)."""
                     v = (nome_var or "").lower()
-                    if "very rio" in v or ("silicone" in v and "magsafe" not in v and "119" not in v):
+                    if "very rio" in v or ("silicone" in v and "magsafe" not in v and "119" not in v and "129" not in v):
                         return "Very Rio / Silicone"
                     if "aveludada" in v:
                         return "Aveludada"
-                    if "magsafe" in v or "119" in v:
+                    if "magsafe" in v or "119" in v or "129" in v:
                         return "MagSafe"
                     if "brilho" in v or ("diversos" in v and "59" in v):
                         return "Brilho / Diversos"
