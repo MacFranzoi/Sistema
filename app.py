@@ -3386,12 +3386,31 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 if _prod_inv:
                                     _var_inv = None
                                     _nl_inv = _nome.lower()
-                                    for _v in _prod_inv.get("variacoes", []):
+                                    _vars_inv = _prod_inv.get("variacoes", [])
+                                    # 1) Exato
+                                    for _v in _vars_inv:
                                         _vd = _v.get("variacao", {})
-                                        _vn = _vd.get("nome", "").lower()
-                                        if _nl_inv in _vn or _vn in _nl_inv:
+                                        if _vd.get("nome", "").lower() == _nl_inv:
                                             _var_inv = _vd
                                             break
+                                    # 2) Variação contém o nome buscado (mais específica)
+                                    if not _var_inv:
+                                        for _v in _vars_inv:
+                                            _vd = _v.get("variacao", {})
+                                            if _nl_inv in _vd.get("nome", "").lower():
+                                                _var_inv = _vd
+                                                break
+                                    # 3) Nome buscado contém a variação: pega a MAIS LONGA (ex: evita
+                                    #    "iPhone 15" ganhar de "iPhone 15 Pro Max")
+                                    if not _var_inv:
+                                        _melhor_inv = None
+                                        for _v in _vars_inv:
+                                            _vd = _v.get("variacao", {})
+                                            _vn = _vd.get("nome", "").lower()
+                                            if _vn in _nl_inv:
+                                                if _melhor_inv is None or len(_vn) > len(_melhor_inv.get("nome","").lower()):
+                                                    _melhor_inv = _vd
+                                        _var_inv = _melhor_inv
                                     _ok_inv = _var_inv is not None
                                     _linhas_expandidas.append({
                                         "✓": _ok_inv,
