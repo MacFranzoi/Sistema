@@ -3092,6 +3092,10 @@ ABREVIAÇÕES DE KITS — mapeie para o nome exato:
     Ex: "59,99 diversas" → descricao_avulso="R$59,99 / Diversos"
   "space 2 [cor]" / "[cor] space 2" → kit="avulso cor", descricao_avulso="[cor] / Space 2"
     Ex: "space 2 preta" → descricao_avulso="preta / Space 2" | "marsala space 2" → descricao_avulso="marsala / Space 2"
+  "space" / "spaces" (sem cor, seguido de modelo) → kit="space", nome_produto=modelo_do_aparelho
+    Ex: "essas são space - iphone 15 pro max 5" → kit="space" | nome_produto="iPhone 15 Pro Max" | quantidade_fixa=5
+    Ex: "space iphone 14 três" → kit="space" | nome_produto="iPhone 14" | quantidade_fixa=3
+    NOTA: para "space" o nome_produto é o APARELHO (no catálogo, a variação do produto Space é o modelo)
   "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (avulso)
   "película/pelicula/peliculas/pel" → "película"  (avulso)
   "couro/leather" → "couro"  (avulso)
@@ -3353,6 +3357,50 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                         "Variação": f"⚠ {_cod or _nome} não encontrado",
                                         "Qtd": _qtd_ac, "Status": "⚠",
                                         "_desc_avulso": f"{_cod or _nome}",
+                                    })
+                                continue
+
+                            # Produtos onde o MODELO é a variação (ex: Space — variações = modelos)
+                            if _kit.startswith("space") and _kit != "avulso cor":
+                                _nome_prod_inv = _kit.title()  # "space" → "Space"
+                                _prod_inv = _achar_produto("", _nome_prod_inv)
+                                _qtd_inv = int(_qtd_fixa) if _qtd_fixa else 1
+                                if _prod_inv:
+                                    _var_inv = None
+                                    _nl_inv = _nome.lower()
+                                    for _v in _prod_inv.get("variacoes", []):
+                                        _vd = _v.get("variacao", {})
+                                        _vn = _vd.get("nome", "").lower()
+                                        if _nl_inv in _vn or _vn in _nl_inv:
+                                            _var_inv = _vd
+                                            break
+                                    _ok_inv = _var_inv is not None
+                                    _linhas_expandidas.append({
+                                        "✓": _ok_inv,
+                                        "_cod": _prod_inv.get("codigo_interno",""),
+                                        "_nome": _prod_inv.get("nome",""),
+                                        "_kit": _kit, "_conf": _conf,
+                                        "_achado": _ok_inv, "_avulso_auto": not _ok_inv, "_obs": "",
+                                        "_var_id": _var_inv.get("id","") if _var_inv else "",
+                                        "_var_cod": _var_inv.get("codigo","") if _var_inv else "",
+                                        "_prod_id": _prod_inv.get("id",""),
+                                        "_custo": float(_prod_inv.get("valor_custo") or 0),
+                                        "Aparelho": _prod_inv.get("nome",""),
+                                        "Kit": _nome_prod_inv,
+                                        "Variação": _var_inv.get("nome","—") if _var_inv else f"⚠ {_nome} não encontrado",
+                                        "Qtd": _qtd_inv, "Status": "✓" if _ok_inv else "⚠",
+                                        "_desc_avulso": f"{_nome_prod_inv} / {_nome}" if not _ok_inv else "",
+                                    })
+                                else:
+                                    _linhas_expandidas.append({
+                                        "✓": False, "_cod": "", "_nome": _nome_prod_inv,
+                                        "_kit": _kit, "_conf": "baixa", "_achado": False,
+                                        "_avulso_auto": True, "_obs": "",
+                                        "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                                        "Aparelho": _nome_prod_inv, "Kit": _nome_prod_inv,
+                                        "Variação": f"⚠ Produto '{_nome_prod_inv}' não encontrado no catálogo",
+                                        "Qtd": _qtd_inv, "Status": "⚠",
+                                        "_desc_avulso": f"{_nome_prod_inv} / {_nome}",
                                     })
                                 continue
 
