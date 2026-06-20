@@ -1742,30 +1742,52 @@ if _pg == "sincronizacao":
         sincronizado = cache.get("sincronizado_em", "")[:16].replace("T", " às ")
         st.success(f"Cache atual: **{cache['total']}** produtos — {cache.get('loja_nome','—')} — sync {sincronizado}")
     else:
-        st.warning("Nenhum cache para esta loja.")
+        st.warning("Nenhum cache para esta loja. Sincronize abaixo.")
 
-    if st.button("🔄 Sincronizar Todas as Lojas", type="primary"):
-        lojas_list = list(api.LOJAS.items())
-        barra = st.progress(0)
-        status_txt = st.empty()
-        erros_sync = []
-        for idx, (lid, lnome) in enumerate(lojas_list):
-            status_txt.info(f"Sincronizando **{lnome}**… ({idx+1}/{len(lojas_list)})")
-            def prog(pag, total, _lnome=lnome, _idx=idx, _n=len(lojas_list)):
-                frac = (_idx + pag / max(total, 1)) / _n
-                barra.progress(frac, text=f"{_lnome}: página {pag}/{total}")
+    # ── Sincronizar loja selecionada (rápido) ──────────────────────────
+    _btn_sync_loja, _btn_sync_todas = st.columns(2)
+
+    with _btn_sync_loja:
+        _label_sync = f"⚡ Sincronizar {loja_sel_nome}" if loja_id else "⚡ Sincronizar (selecione uma loja)"
+        if st.button(_label_sync, type="primary", use_container_width=True, disabled=not loja_id):
+            _barra_s = st.progress(0)
+            _txt_s   = st.empty()
+            _txt_s.info(f"Sincronizando **{loja_sel_nome}**…")
+            def _prog_s(pag, total):
+                _barra_s.progress(pag / max(total, 1), text=f"Página {pag}/{total}")
             try:
-                resultado = api.sincronizar_produtos(loja_id=lid, progress_callback=prog)
-                if lid == loja_id:
-                    cache = resultado
-            except Exception as e:
-                erros_sync.append(f"{lnome}: {e}")
-        barra.progress(1.0)
-        if erros_sync:
-            status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
-        else:
-            status_txt.success(f"✅ {len(lojas_list)} lojas sincronizadas!")
-        st.rerun()
+                _res_s = api.sincronizar_produtos(loja_id=loja_id, progress_callback=_prog_s)
+                _barra_s.progress(1.0)
+                _txt_s.success(f"✅ {loja_sel_nome}: **{_res_s['total']} produtos** salvos — {_res_s['sincronizado_em'][:16].replace('T',' às ')}")
+            except Exception as _e_s:
+                _txt_s.error(f"❌ Erro ao sincronizar {loja_sel_nome}: {_e_s}")
+            st.rerun()
+
+    with _btn_sync_todas:
+        if st.button("🔄 Sincronizar Todas as Lojas", use_container_width=True):
+            lojas_list = list(api.LOJAS.items())
+            barra = st.progress(0)
+            status_txt = st.empty()
+            erros_sync = []
+            totais_sync = []
+            for idx, (lid, lnome) in enumerate(lojas_list):
+                status_txt.info(f"Sincronizando **{lnome}**… ({idx+1}/{len(lojas_list)})")
+                def prog(pag, total, _lnome=lnome, _idx=idx, _n=len(lojas_list)):
+                    frac = (_idx + pag / max(total, 1)) / _n
+                    barra.progress(frac, text=f"{_lnome}: página {pag}/{total}")
+                try:
+                    resultado = api.sincronizar_produtos(loja_id=lid, progress_callback=prog)
+                    totais_sync.append(f"{lnome}: {resultado['total']} produtos")
+                    if lid == loja_id:
+                        cache = resultado
+                except Exception as e:
+                    erros_sync.append(f"{lnome}: {e}")
+            barra.progress(1.0)
+            if erros_sync:
+                status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
+            else:
+                status_txt.success("✅ Sincronizadas — " + " | ".join(totais_sync))
+            st.rerun()
 
     st.markdown('<div class="erp-card">', unsafe_allow_html=True)
     st.markdown("**Status por loja**")

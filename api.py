@@ -221,7 +221,7 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
         p["loja_id"] = loja_id
     for i in range(tentativas):
         try:
-            time.sleep(0.4)
+            time.sleep(0.15)
             r = requests.request(method, url, headers=HEADERS, params=p or None, json=body, timeout=45)
             r.raise_for_status()
             return r.json()
