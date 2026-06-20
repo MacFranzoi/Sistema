@@ -3026,10 +3026,12 @@ if _pg == "pedido":
                     _texto_proc = "\n".join(_linhas_ia)
 
                     _prods_all = cache.get("produtos", [])
-                    _catalogo_txt = "\n".join(
-                        f"{_p.get('codigo_interno','')} | {_p.get('nome','')}"
-                        for _p in _prods_all if _p.get("codigo_interno") and _p.get("nome")
-                    )[:12000]
+                    # Deduplica por nome e ordena: evita cortar modelos por limite de caracteres
+                    _nomes_cat = sorted({
+                        _p.get("nome", "").strip()
+                        for _p in _prods_all if _p.get("nome", "").strip()
+                    })
+                    _catalogo_txt = "\n".join(_nomes_cat)[:20000]
 
                     _kits_disponiveis = list(_WPP_KITS.keys())
 
