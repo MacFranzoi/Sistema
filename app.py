@@ -3097,18 +3097,19 @@ TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuaç�
    Nunca deixe um item sem modelo — use sempre o último modelo mencionado.
 3. nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max"). NUNCA inclua kit, variação, preço, "SL", "MG", "magsafe", "silicone", "masculino", "feminino" ou qualquer outro dado no nome do produto. Se tiver dúvida entre modelo e kit, o nome do modelo termina no número/geração (ex: "Pro Max", "S24+") e todo o resto é kit.
 4. ORDEM DOS TOKENS FLEXÍVEL — dentro de uma entrada, quantidade, kit e preço podem aparecer em qualquer ordem. Identifique cada token pelo tipo:
-   • número inteiro (ex: 8) → quantidade_fixa
-   • valor com vírgula/ponto (ex: 129,99 / R$129,99) → preco
+   • número inteiro OU por extenso (ex: 8, "oito", "seis", "três") → quantidade_fixa
+   • valor com vírgula ou ponto decimal (ex: 129,99 / R$129,99 / 129.99) → preco
    • palavra-chave de kit → kit
-   "8, MagSafe, 129,99" = "MagSafe, 129,99, 8" = "129,99, 8, MagSafe" → todos resultam em kit="magsafe", preco="129,99", quantidade_fixa=8
+   Exemplos equivalentes: "8, MagSafe, 129,99" = "MagSafe, 129,99, 8" = "129,99, 8, MagSafe" = "MagSafe 129,99 oito" = "seis MagSafe 129,99"
+   → todos resultam em kit="magsafe", preco="129,99", quantidade_fixa=6ou8
 5. SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
 6. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
    "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
-7. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
+7. [número ou extenso] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
    Normalize apenas plural: pretas→"preta", brancos→"branco", roxas→"roxa", amarelas→"amarela", lilases→"lilás"
    NÃO converta gênero (roxa≠roxo para o prompt; o sistema faz a normalização automaticamente)
-8. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
-9. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
+8. [número ou extenso] + [kit] → kit=nome mapeado, quantidade_fixa=número
+9. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=null (o sistema usa a quantidade padrão do kit)
 10. Uma entrada JSON por par modelo+cor ou modelo+kit
 
 Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
@@ -3131,6 +3132,11 @@ Exemplo C — herança de modelo com preços: "iPhone 15 Pro Max, Diversos, R$99
 → iPhone 15 Pro Max | kit="magsafe" | preco="129,99" | qtd=8
 → iPhone 15 Pro Max | kit="magsafe" | preco="159,99" | qtd=3   ← herda o modelo, NÃO fica solto
 
+Exemplo D — variação única com quantidade por extenso, qualquer ordem:
+"iPhone 14 MagSafe 129,99 seis" = "seis iPhone 14 129,99 MagSafe" = "iPhone 14 seis 129,99 MagSafe"
+→ iPhone 14 | kit="magsafe" | preco="129,99" | quantidade_fixa=6
+Regra: "seis" é quantidade (regra 6), "129,99" é preço, "MagSafe" é kit. O sistema vai buscar a variação com "129,99" e "magsafe" no nome e adicionar 6 unidades.
+
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
 
@@ -3146,7 +3152,7 @@ POSTURA — REGRA ABSOLUTA:
 - Kit ambíguo (texto que pode ser kit mas não é claramente uma cor) → prefira "masculino". Cores NUNCA são kits.
 - Nunca escreva justificativas — apenas processe.
 
-Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
+QUANTIDADE EXPLÍCITA: sempre que o usuário citar um número (dígito ou por extenso) junto ao item, preencha quantidade_fixa com esse número — vale para todos os kits (magsafe, masculino, brilho, etc.) e variações. Sem número explícito → quantidade_fixa=null (o sistema usa o padrão do kit).
 
 PREÇO EXPLÍCITO — quando o usuário citar um valor em reais junto ao kit (ex: "magsafe 129,99", "129,99 magsafe", "sl 99,99", "59,99 brilho"):
 → extraia o preço no campo "preco" (string sem R$, SEMPRE com vírgula como separador decimal — padrão brasileiro, ex: "129,99" e nunca "129.99")
