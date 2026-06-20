@@ -3218,16 +3218,29 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 p = _prods_map_ci.get(cod.lower())
                                 if p:
                                     return p
-                            # fallback: nome exato
-                            if nome_ai:
-                                p = _prods_map_nome.get(nome_ai.lower().strip())
-                                if p:
-                                    return p
-                                # fallback: nome contém
-                                _nl = nome_ai.lower().strip()
-                                for _k, _p in _prods_map_nome.items():
-                                    if _nl in _k or _k in _nl:
-                                        return _p
+                            if not nome_ai:
+                                return None
+                            _nl = nome_ai.lower().strip()
+                            # 1) Exato
+                            p = _prods_map_nome.get(_nl)
+                            if p:
+                                return p
+                            # 2) Produto mais específico contido na busca (ex: "iphone 14 pro max sl" → "iphone 14 pro max")
+                            _match_curto = None
+                            for _k, _p in _prods_map_nome.items():
+                                if _k in _nl:
+                                    if _match_curto is None or len(_k) > len(_match_curto[0]):
+                                        _match_curto = (_k, _p)
+                            if _match_curto:
+                                return _match_curto[1]
+                            # 3) Busca contida no produto: prefere o nome mais curto para evitar
+                            #    "iphone 14" → "iphone 14 sl mg" quando existe "iphone 14 plus"
+                            _candidatos = sorted(
+                                [(_k, _p) for _k, _p in _prods_map_nome.items() if _nl in _k],
+                                key=lambda x: len(x[0])
+                            )
+                            if _candidatos:
+                                return _candidatos[0][1]
                             return None
 
                         # Remove contaminações de kit do nome do produto.
@@ -3247,13 +3260,19 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                             n = nome.strip()
                             for _pat in _KIT_CONTAMINANTES_EXATOS:
                                 n = _re_n.sub(_pat, "", n, flags=_re_n.IGNORECASE).strip(" ,/-")
-                            return n.strip() or nome.strip()
+                            return n.strip()  # retorna "" se tudo era contaminação (sem fallback)
 
                         _nao_compreendidos = []
+                        _ultimo_modelo = ""  # herança de modelo no Python (backup da regra da IA)
                         for _entry in _parsed:
                             _cod  = _entry.get("cod_interno") or ""
                             _nome_raw = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
                             _nome = _limpar_nome_produto(_nome_raw)
+                            # Se a IA não herdou o modelo, usa o último visto
+                            if not _nome and _ultimo_modelo:
+                                _nome = _ultimo_modelo
+                            elif _nome:
+                                _ultimo_modelo = _nome
                             _kit  = (_entry.get("kit") or "").lower()
                             _conf = _entry.get("confianca", "baixa")
                             _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
