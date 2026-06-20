@@ -2715,7 +2715,7 @@ if _pg == "pedido":
                                (["vinho",  "silicone"], 1), (["roxo",   "silicone"], 1),
                                (["marrom", "silicone"], 1), (["nude",   "silicone"], 1)],
         # ── MagSafe ── mesmo que o botão MagSafe ×3 da página
-        "magsafe":           [(["119,99", "magsafe"], 3)],
+        "magsafe":           [(["129,99", "magsafe"], 3)],
         # ── Diversos ── mesmos que os botões Diversos da página
         "brilho":            [(["59,99", "diversos"], 3)],   # ✨ Diversos Brilho ×3
         "diversos masculino":[(["39,99", "diversos"], 3)],   # 💪 Diversos Masculino ×3
@@ -3021,6 +3021,22 @@ CASOS ESPECIAIS:
 - "preta apenas" / "só preta" / "somente preta" JUNTO de um kit (ex: "A54 masculino só preta") → use kit="masculino" com excluir_cores=["marrom","azul marinho","cinza chumbo"]. ATENÇÃO: "duas pretas" ou "uma preta" em ditado NÃO é isso — é avulso cor.
 - Linha que fala de AUSÊNCIA mas não pede nada (ex: "Edge 60 estoque zerado") → processe normalmente com os 4 kits
 
+HERANÇA DE MODELO — REGRA CRÍTICA:
+Uma vez que um modelo é mencionado, TODOS os itens seguintes pertencem a ele até que um NOVO modelo seja explicitamente nomeado.
+Ex: "iPhone 15 Pro Max, 5 MagSafe, 3 SL masculino, 2 brilho" → os 3 itens são do iPhone 15 Pro Max.
+NUNCA crie uma entrada com nome_produto="SL", "MG", "MagSafe", "masculino" ou qualquer kit/variação — o nome é SEMPRE o aparelho.
+Quando um novo kit ou quantidade aparecer sem novo modelo, use o modelo anterior como nome_produto.
+
+NOME DO PRODUTO — REGRA ABSOLUTA:
+nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max", "Samsung A54"). NUNCA inclua "SL", "MG", "magsafe", "silicone", "masculino", "feminino", preço ou qualquer outro dado no nome. O nome do modelo termina no número/geração (ex: "Pro Max", "S24+") e tudo mais é kit.
+
+ORDEM DOS TOKENS — FLEXÍVEL:
+A ordem entre modelo, kit, quantidade e preço pode variar. "8, MagSafe, 129,99" = "MagSafe, 129,99, 8" = "129,99, 8, MagSafe". Interprete independentemente da ordem.
+
+SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
+
+PREÇO EXPLÍCITO → extraia no campo "preco" (ex: "129,99" ou "R$129,99" → preco="129,99"). SEMPRE use vírgula, nunca ponto. Para kits sem preço explícito, deixe preco=null.
+
 POSTURA — REGRA ABSOLUTA:
 - Se o modelo existir no catálogo com nome parecido, use-o com confianca "baixa".
 - Se o modelo NÃO existir de jeito nenhum no catálogo (nenhum nome próximo), marque cod_interno: null e nao_compreendido: false — o sistema vai criar como item avulso automaticamente.
@@ -3030,8 +3046,14 @@ POSTURA — REGRA ABSOLUTA:
 
 Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
 
+Exemplo C — herança de modelo com preços diferentes:
+"iPhone 15 Pro Max, Diversos, R$99,99, 10, MagSafe, R$129,99, 8, MagSafe, R$159,99, 3"
+→ iPhone 15 Pro Max | kit="avulso cor" descricao_avulso="R$99,99 / Diversos" | qtd=10
+→ iPhone 15 Pro Max | kit="magsafe" | qtd=8 | preco="129,99"
+→ iPhone 15 Pro Max | kit="magsafe" | qtd=3 | preco="159,99"
+
 Retorne SOMENTE JSON válido, sem markdown:
-[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"preco":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
 
 O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nome da cor (ex: "preta", "verde militar", "lilás"). Para outros kits, deixe null."""
 
@@ -3095,29 +3117,68 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                 p = _prods_map_ci.get(cod.lower())
                                 if p:
                                     return p
-                            # fallback: nome exato
-                            if nome_ai:
-                                p = _prods_map_nome.get(nome_ai.lower().strip())
-                                if p:
-                                    return p
-                                # fallback: nome contém
-                                _nl = nome_ai.lower().strip()
-                                for _k, _p in _prods_map_nome.items():
-                                    if _nl in _k or _k in _nl:
-                                        return _p
+                            if not nome_ai:
+                                return None
+                            _nl = nome_ai.lower().strip()
+                            # 1) Exato
+                            p = _prods_map_nome.get(_nl)
+                            if p:
+                                return p
+                            # 2) Produto mais curto contido na busca (ex: busca "iphone 14 pro max sl" → produto "iphone 14 pro max")
+                            _match_curto = None
+                            for _k, _p in _prods_map_nome.items():
+                                if _k in _nl:
+                                    if _match_curto is None or len(_k) > len(_match_curto[0]):
+                                        _match_curto = (_k, _p)  # maior contido = mais específico
+                            if _match_curto:
+                                return _match_curto[1]
+                            # 3) Busca contida no produto: prefere o produto de nome MAIS CURTO para evitar
+                            #    "iphone 14" → "iphone 14 sl mg" quando existe "iphone 14 plus"
+                            _candidatos = sorted(
+                                [(_k, _p) for _k, _p in _prods_map_nome.items() if _nl in _k],
+                                key=lambda x: len(x[0])
+                            )
+                            if _candidatos:
+                                return _candidatos[0][1]
                             return None
 
+                        # Remove contaminações de kit do nome do produto.
+                        # NUNCA remova "sl" ou "mg" isolados — podem estar em modelos legítimos.
+                        # Se toda a string for contaminação, retorna "" (sem fallback ao original).
+                        _KIT_CONTAMINANTES_EXATOS = [
+                            r"\bsl\s+mg\b",            # "SL MG"
+                            r"\bmagsafe\b",             # "MagSafe"
+                            r"\bsilicone\s+l[ií]quido\b",
+                            r"\baveludad[ao]\b",
+                            r"\bvery\s+rio\b",
+                            r"\bmasculino\b",
+                            r"\bfeminino\b",
+                        ]
+                        def _limpar_nome_produto(nome: str) -> str:
+                            import re as _re_n
+                            n = nome.strip()
+                            for _pat in _KIT_CONTAMINANTES_EXATOS:
+                                n = _re_n.sub(_pat, "", n, flags=_re_n.IGNORECASE).strip(" ,/-")
+                            return n.strip()  # retorna "" se tudo era contaminação
+
                         _nao_compreendidos = []
+                        _ultimo_modelo = ""  # herança de modelo no Python
                         for _entry in _parsed:
                             _cod  = _entry.get("cod_interno") or ""
-                            _nome = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                            _nome_raw = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+                            _nome = _limpar_nome_produto(_nome_raw)
+                            # Herança de modelo: se IA não herdou, usa o último modelo válido
+                            if not _nome and _ultimo_modelo:
+                                _nome = _ultimo_modelo
+                            elif _nome:
+                                _ultimo_modelo = _nome
                             _kit  = (_entry.get("kit") or "").lower()
                             _conf = _entry.get("confianca", "baixa")
                             _excluir   = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
                             _qtd_fixa  = _entry.get("quantidade_fixa")
                             _nao_comp  = _entry.get("nao_compreendido", False)
                             _motivo    = _entry.get("motivo", "")
-                            _nome_lower = (_entry.get("nome_produto") or _entry.get("modelo_digitado","")).lower()
+                            _nome_lower = _nome.lower()
 
                             # Aplica regras personalizadas: ex "sl iphone = vr"
                             for _r_kit, _r_palavra, _r_sub in _regras_kit:
@@ -3248,7 +3309,21 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                                     })
                                 continue
 
-                            _cores_kit = _WPP_KITS.get(_kit, [])
+                            _cores_kit_base = _WPP_KITS.get(_kit, [])
+                            # Normaliza preço da IA (ponto→vírgula) e substitui nos termos do kit
+                            _preco_raw = (_entry.get("preco") or "").strip().replace("R$", "").strip()
+                            import re as _re_prn
+                            _preco_entry = _re_prn.sub(r"(\d+)\.(\d{2})$",
+                                lambda m: m.group(1) + "," + m.group(2), _preco_raw)
+                            if _preco_entry and _cores_kit_base:
+                                _cores_kit = []
+                                for _t_orig, _q_k in _cores_kit_base:
+                                    _t_list = _t_orig if isinstance(_t_orig, list) else [_t_orig]
+                                    _t_new = [_preco_entry if _re_prn.match(r"^\d+[.,]\d{2}$", t) else t
+                                              for t in _t_list]
+                                    _cores_kit.append((_t_new, _q_k))
+                            else:
+                                _cores_kit = _cores_kit_base
                             _prod_obj  = _achar_produto(_cod, _nome)
                             if not _prod_obj:
                                 # Modelo não encontrado → avulso automático
@@ -3772,7 +3847,7 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                             cancelado_ms = st.form_submit_button("Cancelar", use_container_width=True)
                     if submitted_ms:
                         obs = f"MagSafe {tipo_ms}".strip() if tipo_ms else "MagSafe"
-                        _adicionar_kit([(["119,99", "magsafe"], 3)], "MagSafe", observacao=obs)
+                        _adicionar_kit([(["129,99", "magsafe"], 3)], "MagSafe", observacao=obs)
                         st.rerun()
                     if cancelado_ms:
                         st.rerun()
