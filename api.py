@@ -411,6 +411,45 @@ def acerto_estoque_lote(entradas, loja_id=None, progress_callback=None):
     return resultados
 
 
+def listar_fornecedores():
+    data = _get("fornecedores", {"limite": 100})
+    return data.get("data", [])
+
+
+def listar_situacoes_compras():
+    data = _get("situacoes_compras")
+    return data.get("data", [])
+
+
+def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
+    """Cria uma Compra para lançar estoque (acerto).
+    itens: lista de dicts com produto_id, variacao_id, produto_nome,
+           possui_variacao, quantidade, valor_custo.
+    """
+    from datetime import date as _date
+    hoje = _date.today().strftime("%Y-%m-%d")
+    produtos = []
+    for it in itens:
+        produtos.append({
+            "produto": {
+                "produto_id":     str(it["produto_id"]),
+                "variacao_id":    str(it.get("variacao_id") or ""),
+                "nome_produto":   it.get("produto_nome", ""),
+                "possui_variacao": 1 if it.get("variacao_id") else 0,
+                "quantidade":     str(it["quantidade"]),
+                "valor_custo":    str(it.get("valor_custo") or "0.00"),
+            }
+        })
+    body = {
+        "fornecedor_id": str(fornecedor_id),
+        "data_emissao":  hoje,
+        "situacao_id":   str(situacao_id),
+        "observacoes":   f"Acerto de estoque — {hoje}",
+        "produtos":      produtos,
+    }
+    return _post("compras", body, loja_id=loja_id)
+
+
 def estoque_produto_por_loja(produto_id):
     resultado = {}
     for loja_id, loja_nome in LOJAS.items():

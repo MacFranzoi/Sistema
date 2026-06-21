@@ -2603,7 +2603,7 @@ if _pg == "aprovacoes":
 # ══════════════════════════════════════════════
 if _pg == "acerto":
     st.subheader("Acerto de Estoque")
-    st.caption("Define o valor absoluto do estoque (substitui o atual). Use para inventário ou correção.")
+    st.caption("Registra entrada de estoque via Compra (somente estoque, sem financeiro).")
 
     if loja_id:
         st.info(f"🏪 Loja: **{loja_sel_nome}**")
@@ -2617,7 +2617,54 @@ if _pg == "acerto":
     if "itens_acerto" not in st.session_state:
         st.session_state.itens_acerto = []
 
-    # Importar da transferência
+    # ── Configuração: Fornecedor + Situação de Compra ──────────────────────
+    with st.expander("⚙️ Configuração da Compra", expanded=not st.session_state.get("_ac_cfg_ok")):
+        if "ac_fornecedores" not in st.session_state:
+            try:
+                st.session_state.ac_fornecedores = api.listar_fornecedores()
+            except Exception as _e_forn:
+                st.session_state.ac_fornecedores = []
+                st.error(f"Erro ao carregar fornecedores: {_e_forn}")
+
+        if "ac_situacoes" not in st.session_state:
+            try:
+                _sits_raw = api.listar_situacoes_compras()
+                # Prioriza situações que movimentam estoque (tipo 1 ou 2)
+                st.session_state.ac_situacoes = [
+                    s for s in _sits_raw if s.get("tipo_lancamento") in ("1", "2")
+                ] or _sits_raw
+            except Exception as _e_sit:
+                st.session_state.ac_situacoes = []
+                st.error(f"Erro ao carregar situações: {_e_sit}")
+
+        _forn_lista = st.session_state.ac_fornecedores
+        _sit_lista  = st.session_state.ac_situacoes
+
+        if not _forn_lista:
+            st.warning("Nenhum fornecedor encontrado. Cadastre um no gestaoclick.")
+        if not _sit_lista:
+            st.warning("Nenhuma situação de compra encontrada.")
+
+        _forn_opts = {f"{f.get('nome_fantasia') or f.get('nome','')} ({f['id']})": f["id"] for f in _forn_lista}
+        _sit_opts  = {f"{s.get('nome','')} (tipo {s.get('tipo_lancamento','?')})": s["id"] for s in _sit_lista}
+
+        _forn_sel_label = st.selectbox("Fornecedor", list(_forn_opts.keys()) or ["—"], key="ac_forn_label")
+        _sit_sel_label  = st.selectbox("Situação da Compra", list(_sit_opts.keys()) or ["—"], key="ac_sit_label",
+                                        help="tipo 1 = lança estoque + financeiro | tipo 2 = somente estoque")
+
+        _ac_forn_id = _forn_opts.get(_forn_sel_label)
+        _ac_sit_id  = _sit_opts.get(_sit_sel_label)
+
+        if _ac_forn_id and _ac_sit_id:
+            st.session_state["_ac_cfg_ok"] = True
+            st.session_state["_ac_forn_id"] = _ac_forn_id
+            st.session_state["_ac_sit_id"]  = _ac_sit_id
+            if st.button("🔄 Recarregar fornecedores/situações", key="ac_reload_cfg"):
+                for k in ("ac_fornecedores", "ac_situacoes"):
+                    st.session_state.pop(k, None)
+                st.rerun()
+
+    # ── Importar da transferência ──────────────────────────────────────────
     clip = st.session_state.get("clipboard")
     if clip and clip.get("tipo") == "acerto":
         st.info(f"📋 Transferência: **{len(clip['itens'])} itens** de '{clip.get('origem','—')}'")
@@ -2643,13 +2690,15 @@ if _pg == "acerto":
             else:
                 for _, row in selecionadas_ac.iterrows():
                     st.session_state.itens_acerto.append({
-                        "produto_id": produto_ac["id"],
-                        "produto_nome": produto_ac["nome"],
-                        "cod_interno": produto_ac.get("codigo_interno", ""),
-                        "variacao_id": row["_variacao_id"],
-                        "variacao_cod": row["Código Var."],
-                        "variacao_nome": row["Variação"],
-                        "quantidade": int(row["Qtd Correta"])
+                        "produto_id":      produto_ac["id"],
+                        "produto_nome":    produto_ac["nome"],
+                        "cod_interno":     produto_ac.get("codigo_interno", ""),
+                        "possui_variacao": produto_ac.get("possui_variacao", "1"),
+                        "variacao_id":     row["_variacao_id"],
+                        "variacao_cod":    row["Código Var."],
+                        "variacao_nome":   row["Variação"],
+                        "quantidade":      int(row["Qtd Correta"]),
+                        "valor_custo":     produto_ac.get("valor_custo", "0.00"),
                     })
                 st.success(f"{len(selecionadas_ac)} adicionada(s)!")
 
@@ -2667,28 +2716,26 @@ if _pg == "acerto":
                 st.session_state.itens_acerto = []
                 st.rerun()
         with col_y:
-            if st.button("📊 Confirmar acerto no sistema", type="primary", use_container_width=True):
-                if not loja_id:
-                    st.error("Selecione uma loja.")
-                else:
-                    _produtos_ac = len({e["produto_id"] for e in st.session_state.itens_acerto})
-                    barra = st.progress(0)
-                    def prog_ac(atual, total):
-                        barra.progress(atual / total, text=f"Produto {atual}/{total}…")
-                    resultados = api.acerto_estoque_lote(
-                        st.session_state.itens_acerto, loja_id=loja_id,
-                        progress_callback=prog_ac
-                    )
-                    ok = [r for r in resultados if r["ok"]]
-                    erros = [r for r in resultados if not r["ok"]]
-                    if ok:
-                        _nomes_ok = ", ".join(sorted({r["produto_nome"] for r in ok}))
-                        st.success(f"✅ Estoque substituído em **{loja_sel_nome}**: {_nomes_ok}")
-                        st.session_state.itens_acerto_ok = ok
-                    for e in erros:
-                        st.error(f"❌ {e['produto_nome']}: {e['erro']}")
-                    if not erros:
+            _ac_forn_id = st.session_state.get("_ac_forn_id")
+            _ac_sit_id  = st.session_state.get("_ac_sit_id")
+            _ac_btn_dis = not (loja_id and _ac_forn_id and _ac_sit_id)
+            _ac_btn_tip = "Configure fornecedor e situação acima." if _ac_btn_dis else ""
+            if st.button("📊 Confirmar acerto no sistema", type="primary",
+                         use_container_width=True, disabled=_ac_btn_dis, help=_ac_btn_tip):
+                with st.spinner("Criando compra de acerto…"):
+                    try:
+                        _res_ac = api.criar_compra_acerto(
+                            st.session_state.itens_acerto,
+                            fornecedor_id=_ac_forn_id,
+                            situacao_id=_ac_sit_id,
+                            loja_id=loja_id,
+                        )
+                        _compra_id = (_res_ac.get("data") or {}).get("id", "?")
+                        st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — estoque lançado!")
+                        st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
                         st.session_state.itens_acerto = []
+                    except Exception as _e_ac:
+                        st.error(f"❌ Erro: {_e_ac}")
         with col_z:
             if st.button("↗️ Enviar para Entrada", use_container_width=True, key="ac_para_entrada"):
                 st.session_state.clipboard = {
