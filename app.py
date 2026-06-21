@@ -2671,20 +2671,22 @@ if _pg == "acerto":
                 if not loja_id:
                     st.error("Selecione uma loja.")
                 else:
+                    _produtos_ac = len({e["produto_id"] for e in st.session_state.itens_acerto})
                     barra = st.progress(0)
                     def prog_ac(atual, total):
-                        barra.progress(atual / total, text=f"{atual}/{total}...")
-                    resultados = api.atualizar_estoque_lote(
-                        st.session_state.itens_acerto, loja_id=loja_id, modo="set",
+                        barra.progress(atual / total, text=f"Produto {atual}/{total}…")
+                    resultados = api.acerto_estoque_lote(
+                        st.session_state.itens_acerto, loja_id=loja_id,
                         progress_callback=prog_ac
                     )
                     ok = [r for r in resultados if r["ok"]]
                     erros = [r for r in resultados if not r["ok"]]
                     if ok:
-                        st.success(f"✅ {len(ok)} estoque(s) definido(s) em **{loja_sel_nome}**!")
-                        st.session_state.itens_acerto_ok = [r for r in resultados if r["ok"]]
+                        _nomes_ok = ", ".join(sorted({r["produto_nome"] for r in ok}))
+                        st.success(f"✅ Estoque substituído em **{loja_sel_nome}**: {_nomes_ok}")
+                        st.session_state.itens_acerto_ok = ok
                     for e in erros:
-                        st.error(f"❌ {e['produto_nome']} / {e['variacao_nome']}: {e['erro']}")
+                        st.error(f"❌ {e['produto_nome']}: {e['erro']}")
                     if not erros:
                         st.session_state.itens_acerto = []
         with col_z:

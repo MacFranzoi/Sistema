@@ -359,6 +359,58 @@ def atualizar_estoque_lote(entradas, loja_id=None, modo="set", progress_callback
     return resultados
 
 
+def acerto_estoque_produto(produto_id, variacoes_novas: dict, loja_id=None):
+    """Substitui TODO o estoque do produto em um único PUT.
+    variacoes_novas: {variacao_id: quantidade}
+    Variações não listadas ficam com estoque=0.
+    """
+    produto = _get(f"produtos/{produto_id}", loja_id=loja_id)
+    dados = produto.get("data", produto)
+    novas_variacoes = []
+    for v in dados.get("variacoes", []):
+        vd = v["variacao"]
+        novo_estoque = variacoes_novas.get(vd["id"], 0)
+        novas_variacoes.append({
+            "variacao": {
+                "id": vd["id"],
+                "nome": vd["nome"],
+                "codigo": vd["codigo"],
+                "estoque": str(novo_estoque)
+            }
+        })
+    body = {
+        "nome": dados["nome"],
+        "codigo_interno": dados["codigo_interno"],
+        "valor_custo": dados.get("valor_custo", "0.00"),
+        "variacoes": novas_variacoes
+    }
+    return _put(f"produtos/{produto_id}", body, loja_id=loja_id)
+
+
+def acerto_estoque_lote(entradas, loja_id=None, progress_callback=None):
+    """Acerto completo por produto: zera todas as variações não listadas,
+    define as listadas com a quantidade especificada. Um PUT por produto."""
+    from collections import defaultdict
+    por_produto = defaultdict(dict)  # produto_id → {variacao_id: quantidade}
+    for e in entradas:
+        por_produto[e["produto_id"]][e["variacao_id"]] = e["quantidade"]
+    produtos = list(por_produto.keys())
+    resultados = []
+    for i, pid in enumerate(produtos):
+        try:
+            acerto_estoque_produto(pid, por_produto[pid], loja_id=loja_id)
+            for e in entradas:
+                if e["produto_id"] == pid:
+                    resultados.append({"ok": True, **e})
+        except Exception as ex:
+            for e in entradas:
+                if e["produto_id"] == pid:
+                    resultados.append({"ok": False, "erro": str(ex), **e})
+        if progress_callback:
+            progress_callback(i + 1, len(produtos))
+    return resultados
+
+
 def estoque_produto_por_loja(produto_id):
     resultado = {}
     for loja_id, loja_nome in LOJAS.items():
