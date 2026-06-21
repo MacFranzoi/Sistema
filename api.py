@@ -224,6 +224,8 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
             time.sleep(0.15)
             r = requests.request(method, url, headers=HEADERS, params=p or None, json=body, timeout=45)
             r.raise_for_status()
+            if not r.content or not r.text.strip():
+                return {"code": r.status_code, "data": {}}
             return r.json()
         except requests.exceptions.Timeout:
             if i == tentativas - 1:
@@ -231,6 +233,8 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
             time.sleep(2 ** i)
         except requests.exceptions.HTTPError:
             raise Exception(f"Erro HTTP {r.status_code}: {r.text[:300]}")
+        except ValueError:
+            raise Exception(f"Resposta inválida da API ({r.status_code}): {r.text[:300]}")
 
 
 def _get(endpoint, params=None, loja_id=None):
@@ -443,6 +447,7 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
     body = {
         "fornecedor_id": str(fornecedor_id),
         "data_emissao":  hoje,
+        "data":          hoje,
         "situacao_id":   str(situacao_id),
         "observacoes":   f"Acerto de estoque — {hoje}",
         "produtos":      produtos,
