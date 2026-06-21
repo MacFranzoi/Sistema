@@ -2629,7 +2629,6 @@ if _pg == "acerto":
         if "ac_situacoes" not in st.session_state:
             try:
                 _sits_raw = api.listar_situacoes_compras()
-                # Prioriza situações que movimentam estoque (tipo 1 ou 2)
                 st.session_state.ac_situacoes = [
                     s for s in _sits_raw if s.get("tipo_lancamento") in ("1", "2")
                 ] or _sits_raw
@@ -2637,30 +2636,43 @@ if _pg == "acerto":
                 st.session_state.ac_situacoes = []
                 st.error(f"Erro ao carregar situações: {_e_sit}")
 
+        if "ac_formas_pgto" not in st.session_state:
+            try:
+                st.session_state.ac_formas_pgto = api.listar_formas_pagamentos()
+            except Exception as _e_fp:
+                st.session_state.ac_formas_pgto = []
+                st.error(f"Erro ao carregar formas de pagamento: {_e_fp}")
+
         _forn_lista = st.session_state.ac_fornecedores
         _sit_lista  = st.session_state.ac_situacoes
+        _fp_lista   = st.session_state.ac_formas_pgto
 
         if not _forn_lista:
-            st.warning("Nenhum fornecedor encontrado. Cadastre um no gestaoclick.")
+            st.warning("Nenhum fornecedor encontrado.")
         if not _sit_lista:
             st.warning("Nenhuma situação de compra encontrada.")
 
         _forn_opts = {f"{f.get('nome_fantasia') or f.get('nome','')} ({f['id']})": f["id"] for f in _forn_lista}
-        _sit_opts  = {f"{s.get('nome','')} (tipo {s.get('tipo_lancamento','?')})": s["id"] for s in _sit_lista}
+        _sit_opts  = {f"{s.get('nome','')}": s["id"] for s in _sit_lista}
+        _fp_opts   = {f"{f.get('nome','')}": f["id"] for f in _fp_lista}
 
         _forn_sel_label = st.selectbox("Fornecedor", list(_forn_opts.keys()) or ["—"], key="ac_forn_label")
         _sit_sel_label  = st.selectbox("Situação da Compra", list(_sit_opts.keys()) or ["—"], key="ac_sit_label",
-                                        help="tipo 1 = lança estoque + financeiro | tipo 2 = somente estoque")
+                                        help="Escolha a situação que lança estoque (ex: Confirmada)")
+        _fp_sel_label   = st.selectbox("Forma de Pagamento", list(_fp_opts.keys()) or ["—"], key="ac_fp_label",
+                                        help="Necessário para registrar a compra (use 'A Combinar' para acerto)")
 
         _ac_forn_id = _forn_opts.get(_forn_sel_label)
         _ac_sit_id  = _sit_opts.get(_sit_sel_label)
+        _ac_fp_id   = _fp_opts.get(_fp_sel_label)
 
         if _ac_forn_id and _ac_sit_id:
-            st.session_state["_ac_cfg_ok"] = True
-            st.session_state["_ac_forn_id"] = _ac_forn_id
-            st.session_state["_ac_sit_id"]  = _ac_sit_id
-            if st.button("🔄 Recarregar fornecedores/situações", key="ac_reload_cfg"):
-                for k in ("ac_fornecedores", "ac_situacoes"):
+            st.session_state["_ac_cfg_ok"]    = True
+            st.session_state["_ac_forn_id"]   = _ac_forn_id
+            st.session_state["_ac_sit_id"]    = _ac_sit_id
+            st.session_state["_ac_fp_id"]     = _ac_fp_id
+            if st.button("🔄 Recarregar", key="ac_reload_cfg"):
+                for k in ("ac_fornecedores", "ac_situacoes", "ac_formas_pgto"):
                     st.session_state.pop(k, None)
                 st.rerun()
 
@@ -2718,6 +2730,7 @@ if _pg == "acerto":
         with col_y:
             _ac_forn_id = st.session_state.get("_ac_forn_id")
             _ac_sit_id  = st.session_state.get("_ac_sit_id")
+            _ac_fp_id   = st.session_state.get("_ac_fp_id")
             _ac_btn_dis = not (loja_id and _ac_forn_id and _ac_sit_id)
             _ac_btn_tip = "Configure fornecedor e situação acima." if _ac_btn_dis else ""
             if st.button("📊 Confirmar acerto no sistema", type="primary",
@@ -2728,6 +2741,7 @@ if _pg == "acerto":
                             st.session_state.itens_acerto,
                             fornecedor_id=_ac_forn_id,
                             situacao_id=_ac_sit_id,
+                            forma_pagamento_id=_ac_fp_id,
                             loja_id=loja_id,
                         )
                         _compra_id = (_res_ac.get("data") or {}).get("id", "?")

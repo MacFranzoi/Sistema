@@ -427,12 +427,17 @@ def listar_fornecedores():
     return data.get("data", [])
 
 
+def listar_formas_pagamentos():
+    data = _get("formas_pagamentos")
+    return data.get("data", [])
+
+
 def listar_situacoes_compras():
     data = _get("situacoes_compras")
     return data.get("data", [])
 
 
-def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
+def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=None, loja_id=None):
     """Cria uma Compra para lançar estoque (acerto).
     itens: lista de dicts com produto_id, variacao_id, produto_nome,
            possui_variacao, quantidade, valor_custo.
@@ -459,15 +464,18 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
             }
         })
     body = {
-        "fornecedor_id":  str(fornecedor_id),
-        "data_emissao":   hoje,
-        "data":           hoje,
-        "situacao_id":    str(situacao_id),
-        "observacoes":    f"Acerto de estoque — {hoje}",
-        "valor_frete":    "0.00",
-        "pagamentos":     [],
-        "produtos":       produtos,
+        "fornecedor_id":    str(fornecedor_id),
+        "data_emissao":     hoje,
+        "data":             hoje,
+        "situacao_id":      str(situacao_id),
+        "observacoes":      f"Acerto de estoque — {hoje}",
+        "valor_frete":      "0.00",
+        "numero_parcelas":  "1",
+        "pagamentos":       [],
+        "produtos":         produtos,
     }
+    if forma_pagamento_id:
+        body["forma_pagamento_id"] = str(forma_pagamento_id)
     return _post("compras", body, loja_id=loja_id)
 
 
