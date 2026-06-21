@@ -460,12 +460,14 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
             }
         })
     body = {
-        "fornecedor_id": str(fornecedor_id),
-        "data_emissao":  hoje,
-        "data":          hoje,
-        "situacao_id":   str(situacao_id),
-        "observacoes":   f"Acerto de estoque — {hoje}",
-        "produtos":      produtos,
+        "fornecedor_id":  str(fornecedor_id),
+        "data_emissao":   hoje,
+        "data":           hoje,
+        "situacao_id":    str(situacao_id),
+        "observacoes":    f"Acerto de estoque — {hoje}",
+        "valor_frete":    "0.00",
+        "pagamentos":     [],
+        "produtos":       produtos,
     }
     return _post("compras", body, loja_id=loja_id)
 
