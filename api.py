@@ -234,7 +234,7 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
         except requests.exceptions.HTTPError:
             raise Exception(f"Erro HTTP {r.status_code}: {r.text[:300]}")
         except ValueError:
-            raise Exception(f"Resposta inválida da API ({r.status_code}): {r.text[:300]}")
+            raise Exception(f"Resposta inválida da API ({r.status_code}): {r.text[:2000]}")
 
 
 def _get(endpoint, params=None, loja_id=None):
