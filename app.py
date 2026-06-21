@@ -2654,7 +2654,7 @@ if _pg == "acerto":
 
         _forn_opts = {f"{f.get('nome_fantasia') or f.get('nome','')} ({f['id']})": f["id"] for f in _forn_lista}
         _sit_opts  = {f"{s.get('nome','')}": s["id"] for s in _sit_lista}
-        _fp_opts   = {f"{f.get('nome','')}": f["id"] for f in _fp_lista}
+        _fp_opts   = {f"{f.get('nome','')}": f.get("id","") for f in _fp_lista if f.get("id")}
 
         _forn_sel_label = st.selectbox("Fornecedor", list(_forn_opts.keys()) or ["—"], key="ac_forn_label")
         _sit_sel_label  = st.selectbox("Situação da Compra", list(_sit_opts.keys()) or ["—"], key="ac_sit_label",
