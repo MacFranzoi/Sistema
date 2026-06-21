@@ -234,6 +234,14 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
         except requests.exceptions.HTTPError:
             raise Exception(f"Erro HTTP {r.status_code}: {r.text[:300]}")
         except ValueError:
+            # CakePHP pode misturar PHP notices com JSON — tenta extrair o JSON
+            import re as _re
+            _m = _re.search(r'\{.*\}', r.text, _re.DOTALL)
+            if _m:
+                try:
+                    return json.loads(_m.group())
+                except Exception:
+                    pass
             raise Exception(f"Resposta inválida da API ({r.status_code}): {r.text[:2000]}")
 
 
