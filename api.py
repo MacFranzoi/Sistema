@@ -434,14 +434,21 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, loja_id=None):
     hoje = _date.today().strftime("%Y-%m-%d")
     produtos = []
     for it in itens:
+        _qtd = str(it["quantidade"])
+        _vid = it.get("variacao_id") or ""
         produtos.append({
             "produto": {
-                "produto_id":     str(it["produto_id"]),
-                "variacao_id":    str(it.get("variacao_id") or ""),
-                "nome_produto":   it.get("produto_nome", ""),
-                "possui_variacao": 1 if it.get("variacao_id") else 0,
-                "quantidade":     str(it["quantidade"]),
-                "valor_custo":    str(it.get("valor_custo") or "0.00"),
+                "produto_id":      str(it["produto_id"]),
+                "variacao_id":     str(_vid),
+                "nome_produto":    it.get("produto_nome", ""),
+                "possui_variacao": 1 if _vid else 0,
+                "quantidade":      _qtd,
+                "quantidade_saida": _qtd,
+                "valor_custo":     str(it.get("valor_custo") or "0.00"),
+                "detalhes":        "",
+                "unidade":         "UND",
+                "largura":         0,
+                "altura":          0,
             }
         })
     body = {
