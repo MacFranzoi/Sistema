@@ -238,7 +238,10 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
             _idx = r.text.find('{"code"')
             if _idx >= 0:
                 try:
-                    return json.loads(r.text[_idx:])
+                    _parsed = json.loads(r.text[_idx:])
+                    # Só aceita se tem status success (não é JSON de contexto de erro)
+                    if _parsed.get("status") == "success":
+                        return _parsed
                 except Exception:
                     pass
             raise Exception(f"Resposta inválida da API ({r.status_code}): {r.text[:2000]}")
@@ -464,15 +467,14 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
             }
         })
     body = {
-        "fornecedor_id":    str(fornecedor_id),
-        "data_emissao":     hoje,
-        "data":             hoje,
-        "situacao_id":      str(situacao_id),
-        "observacoes":      f"Acerto de estoque — {hoje}",
-        "valor_frete":      "0.00",
-        "numero_parcelas":  "1",
-        "pagamentos":       [],
-        "produtos":         produtos,
+        "fornecedor_id":   str(fornecedor_id),
+        "data_emissao":    hoje,
+        "data":            hoje,
+        "situacao_id":     str(situacao_id),
+        "observacoes":     f"Acerto de estoque — {hoje}",
+        "valor_frete":     "0.00",
+        "numero_parcelas": "1",
+        "produtos":        produtos,
     }
     if forma_pagamento_id:
         body["forma_pagamento_id"] = str(forma_pagamento_id)
