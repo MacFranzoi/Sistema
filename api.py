@@ -1913,6 +1913,11 @@ def buscar_compra(compra_id, loja_id=None):
     return r.get("data", r) if isinstance(r, dict) else r
 
 
+def get_compra(compra_id, loja_id=None):
+    """GET /compras/{id} — retorna a resposta crua da API (para conferência)."""
+    return _get(f"compras/{compra_id}", loja_id=loja_id)
+
+
 # ──────────────────────────────────────────────
 # Registrar compra no GestãoClick
 # ──────────────────────────────────────────────

@@ -2993,6 +2993,7 @@ if _pg == "acerto":
                                     if _conf["ID Variação"].nunique() < len(_conf):
                                         st.warning("⚠️ Há IDs de variação repetidos — verifique a lista.")
                             st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
+                            st.session_state["_ac_ultima_compra"] = {"id": _compra_id, "loja_id": loja_id}
                             st.session_state.itens_acerto = []
                     except Exception as _e_ac:
                         st.error(f"❌ Erro: {_e_ac}")
@@ -3012,6 +3013,20 @@ if _pg == "acerto":
                 st.rerun()
     else:
         st.info("Adicione produtos à lista acima.")
+
+    # ── Conferência: ver o JSON da última compra criada (GET /compras/{id}) ──
+    _ult = st.session_state.get("_ac_ultima_compra")
+    if _ult and _ult.get("id") not in (None, "?", ""):
+        st.divider()
+        st.caption("🔧 Conferência da última compra criada")
+        if st.button(f"📄 Ver JSON da compra #{_ult['id']} (GET /compras)", key="ac_ver_json"):
+            with st.spinner("Buscando compra na API…"):
+                try:
+                    _json_compra = api.get_compra(_ult["id"], loja_id=_ult.get("loja_id"))
+                    st.json(_json_compra)
+                    st.caption("👆 Copie esse JSON e me envie para conferir as variações gravadas.")
+                except Exception as _e_get:
+                    st.error(f"Erro ao buscar compra: {_e_get}")
 
 
 # ══════════════════════════════════════════════
