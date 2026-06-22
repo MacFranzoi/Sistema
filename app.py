@@ -1776,31 +1776,51 @@ if _pg == "rel_estoque":
         return df.sort_values(["Produto","Variação"]).reset_index(drop=True)
 
     with tab_loja:
-        fl1, fl2, fl3 = st.columns([2, 1, 1])
+        fl1, fl2 = st.columns([2, 2])
         loja_rel = fl1.selectbox("Loja", list(api.LOJAS.values()), key="re_loja")
         loja_id_rel = next((lid for lid, ln in api.LOJAS.items() if ln == loja_rel), None)
         filtro_status_re = fl2.selectbox("Mostrar", ["Todos","Com estoque","Sem estoque (≤ 0)","Negativos","Zerados"], key="re_status")
-        busca_re = fl3.text_input("Buscar produto", key="re_busca", placeholder="Nome ou cód...")
 
-        # Puxa o estoque AO VIVO só quando clicar no botão (evita ficar
-        # recarregando a cada rerun). A busca/status filtram o resultado.
-        if st.button("🔎 Buscar estoque ao vivo", type="primary", key="re_buscar_btn", use_container_width=True):
-            with st.spinner(f"Puxando estoque ao vivo de {loja_rel}…"):
+        bc1, bc2 = st.columns([3, 1])
+        busca_re = bc1.text_input("Buscar produto (nome ou código)", key="re_busca", placeholder="ex: A01, Aveludada, Samsung...")
+        bc2.write("")
+        bc2.write("")
+        _buscar = bc2.button("🔎 Buscar", type="primary", key="re_buscar_btn", use_container_width=True)
+
+        if _buscar:
+            with st.spinner(f"Buscando em {loja_rel}…"):
                 try:
-                    st.session_state["re_live_data"] = api.buscar_estoque_ao_vivo(loja_id=loja_id_rel)
+                    _termo = busca_re.strip()
+                    # Passa o termo direto pra API: ela filtra no servidor
+                    # (retorna 1 página em vez de baixar tudo).
+                    _params = {}
+                    if _termo:
+                        # tenta como código primeiro; se não achar a API retorna vazio,
+                        # aí usamos nome (gestaoclick aceita busca parcial por nome)
+                        if _termo.replace("-","").replace(" ","").isalnum() and len(_termo) <= 20:
+                            _params["codigo"] = _termo
+                        else:
+                            _params["nome"] = _termo
+                    st.session_state["re_live_data"] = api.buscar_estoque_ao_vivo(
+                        loja_id=loja_id_rel, **_params
+                    )
                     st.session_state["re_live_loja"] = loja_rel
+                    st.session_state["re_live_termo"] = _termo
                 except Exception as _e_live:
                     st.session_state["re_live_data"] = None
-                    st.error(f"Erro ao puxar estoque: {_e_live}")
+                    st.error(f"Erro: {_e_live}")
+
         c_rel = st.session_state.get("re_live_data")
 
         if c_rel is None:
-            st.info("Selecione a loja e o filtro, depois clique em **🔎 Buscar estoque ao vivo**.")
+            st.info("Selecione a loja, digite o produto e clique **🔎 Buscar**.")
         else:
             _se = c_rel.get("sincronizado_em", "")[:16].replace("T", " às ")
             _loja_live = st.session_state.get("re_live_loja", loja_rel)
-            sync_em = f"{_loja_live} — ao vivo, puxado {_se}"
-            df_re = _build_estoque_df(c_rel, busca_re, filtro_status_re)
+            _termo_live = st.session_state.get("re_live_termo", "")
+            sync_em = f"{_loja_live} — ao vivo {_se}" + (f' — "{_termo_live}"' if _termo_live else "")
+            # status aplicado localmente no resultado
+            df_re = _build_estoque_df(c_rel, "", filtro_status_re)
 
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("Variações", len(df_re))
