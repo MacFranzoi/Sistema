@@ -675,6 +675,82 @@ section[data-testid="stMain"] {{
 .plug-submenu a.nav-item.ativo {{
     background: {ACC_LT}; color: {ACC} !important; font-weight: 700;
 }}
+
+/* Barra superior só de marca (aparece no mobile) */
+.plug-mobiletop {{ display: none; }}
+
+/* ───────── MOBILE: cara de app (bottom tab bar) ───────── */
+@media (max-width: 640px) {{
+    /* topo slim com a marca */
+    .plug-mobiletop {{
+        display: flex; align-items: center; gap: 8px;
+        position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+        height: 50px; padding: 0 16px;
+        padding-top: env(safe-area-inset-top);
+        background: {SB}; border-bottom: 1px solid {BOR};
+    }}
+    .plug-mobiletop .brand {{
+        font-weight: 800; font-size: 18px; letter-spacing: -0.4px; color: {TXT};
+    }}
+    .plug-logo-m {{
+        width: 32px; height: 32px; border-radius: 50%;
+        object-fit: cover; border: 1.5px solid {BOR};
+    }}
+
+    /* cabeçalho vira barra inferior */
+    .plug-header {{
+        top: auto; bottom: 0;
+        border-top: 1px solid {BOR}; border-bottom: none;
+        box-shadow: 0 -2px 16px rgba(0,0,0,0.12);
+        padding-bottom: env(safe-area-inset-bottom);
+    }}
+    .plug-logo {{ display: none; }}  /* logo inline some no mobile */
+
+    .plug-cats {{
+        height: 62px; gap: 0; padding: 0;
+        justify-content: flex-start;
+    }}
+    .cat-btn {{
+        flex: 1 0 auto; min-width: 62px;
+        flex-direction: column; gap: 3px;
+        padding: 8px 4px; border-radius: 0;
+        justify-content: center;
+    }}
+    .cat-btn:hover {{ background: transparent; }}
+    .cat-btn.ativo {{ background: transparent; color: {ACC}; }}
+    .cat-ic {{ font-size: 21px; line-height: 1; }}
+    .cat-lb {{
+        font-size: 10px; line-height: 1; font-weight: 600;
+        max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }}
+
+    /* submenu vira folha flutuante acima da barra */
+    .plug-submenu {{
+        position: fixed; left: 0; right: 0;
+        bottom: calc(62px + env(safe-area-inset-bottom));
+        flex-wrap: wrap; gap: 8px;
+        padding: 12px;
+        background: {SB};
+        border-top: 1px solid {BOR};
+        box-shadow: 0 -8px 24px rgba(0,0,0,0.18);
+        max-height: 55vh; overflow-y: auto;
+    }}
+    .plug-submenu a.nav-item {{
+        flex: 1 1 calc(50% - 8px);
+        justify-content: flex-start;
+        padding: 14px 12px; font-size: 14px;
+        border: 1px solid {BOR}; border-radius: 12px;
+    }}
+    .plug-submenu a.nav-item.ativo {{
+        background: {ACC_LT}; border-color: {ACC};
+    }}
+
+    /* espaço pro topo e pra barra inferior */
+    .main .block-container {{
+        padding-top: calc(58px + env(safe-area-inset-top)) !important;
+        padding-bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+    }}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -716,7 +792,8 @@ for _cat in _cats_ordered:
     _acls = " ativo" if _cat == _active_cat else ""
     _cats_row += (
         f'<span class="cat-btn{_acls}" data-cat="{_cat}">'
-        f'{_CAT_ICONS.get(_cat,"•")} {_CAT_LABELS.get(_cat,_cat.title())}'
+        f'<span class="cat-ic">{_CAT_ICONS.get(_cat,"•")}</span>'
+        f'<span class="cat-lb">{_CAT_LABELS.get(_cat,_cat.title())}</span>'
         f'</span>'
     )
 
@@ -732,6 +809,10 @@ for _cat in _cats_ordered:
     _subs_html += _sub
 
 _nav_html = f"""
+<div class="plug-mobiletop">
+  <img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo-m" alt="Plug" />
+  <span class="brand">Plug</span>
+</div>
 <div class="plug-header" id="plugHeader">
   <div class="plug-cats" id="plugCats">{_cats_row}</div>
   {_subs_html}
@@ -791,9 +872,16 @@ _stc.html("""
   if (cats) bindWheel(cats);
   hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
 
-  // Ajusta padding-top do conteúdo para compensar header fixo
+  // No mobile, começa com os submenus fechados (folha não cobre o conteúdo)
+  var win = doc.defaultView || window.parent;
+  if (win.matchMedia && win.matchMedia('(max-width: 640px)').matches) {
+    hdr.querySelectorAll('.plug-submenu').forEach(function(s){ s.classList.add('hidden'); });
+    hdr.querySelectorAll('.cat-btn').forEach(function(b){ b.classList.remove('ativo'); });
+  }
+
+  // Ajusta padding-top do conteúdo para compensar header fixo (só desktop)
   function ajustarPadding() {
-    var h = hdr.offsetHeight;
+    var h = (win.matchMedia && win.matchMedia('(max-width: 640px)').matches) ? 0 : hdr.offsetHeight;
     doc.documentElement.style.setProperty('--plug-header-h', h + 'px');
   }
   ajustarPadding();
