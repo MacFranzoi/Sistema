@@ -1782,34 +1782,31 @@ if _pg == "rel_estoque":
         filtro_status_re = fl2.selectbox("Mostrar", ["Todos","Com estoque","Sem estoque (≤ 0)","Negativos","Zerados"], key="re_status")
         busca_re = fl3.text_input("Buscar produto", key="re_busca", placeholder="Nome ou cód...")
 
-        # Puxa o estoque AO VIVO da loja (memoizado por loja). A busca e o
-        # status são aplicados na hora, no cliente, sobre o dado ao vivo.
-        # Refaz a chamada só ao trocar de loja ou clicar em atualizar.
-        if st.button("🔄 Atualizar agora", key="re_refresh"):
-            st.session_state.pop("re_live_data", None)
-            st.session_state.pop("re_live_key", None)
-        if st.session_state.get("re_live_key") != loja_id_rel or "re_live_data" not in st.session_state:
+        # Puxa o estoque AO VIVO só quando clicar no botão (evita ficar
+        # recarregando a cada rerun). A busca/status filtram o resultado.
+        if st.button("🔎 Buscar estoque ao vivo", type="primary", key="re_buscar_btn", use_container_width=True):
             with st.spinner(f"Puxando estoque ao vivo de {loja_rel}…"):
                 try:
                     st.session_state["re_live_data"] = api.buscar_estoque_ao_vivo(loja_id=loja_id_rel)
-                    st.session_state["re_live_key"] = loja_id_rel
+                    st.session_state["re_live_loja"] = loja_rel
                 except Exception as _e_live:
                     st.session_state["re_live_data"] = None
                     st.error(f"Erro ao puxar estoque: {_e_live}")
         c_rel = st.session_state.get("re_live_data")
 
-        if not c_rel:
-            st.warning(f"Não foi possível puxar o estoque de **{loja_rel}**.")
+        if c_rel is None:
+            st.info("Selecione a loja e o filtro, depois clique em **🔎 Buscar estoque ao vivo**.")
         else:
             _se = c_rel.get("sincronizado_em", "")[:16].replace("T", " às ")
-            sync_em = f"{_se} (ao vivo)"
+            _loja_live = st.session_state.get("re_live_loja", loja_rel)
+            sync_em = f"{_loja_live} — ao vivo, puxado {_se}"
             df_re = _build_estoque_df(c_rel, busca_re, filtro_status_re)
 
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("Variações", len(df_re))
             col_m2.metric("Unidades", int(df_re["Estoque"].sum()))
             col_m3.metric("Valor em estoque", f"R$ {df_re['Valor Total'].sum():,.2f}")
-            st.caption(f"Cache: {sync_em}")
+            st.caption(f"📡 {sync_em}")
 
             st.dataframe(
                 df_re.style.map(lambda v: "color: #e74c3c" if isinstance(v, (int, float)) and v < 0 else "", subset=["Estoque"]),
