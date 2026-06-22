@@ -628,11 +628,11 @@ section[data-testid="stMain"] {{
     max-width: 100% !important;
 }}
 
-/* Barra de navegação horizontal */
+/* Barra de navegação horizontal com links reais */
 .plug-nav {{
     position: sticky; top: 0; z-index: 999;
     background: {SB}; border-bottom: 1px solid {BOR};
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 2px;
     padding: 0 clamp(6px, 2vw, 12px);
     padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
     padding-right: max(clamp(6px, 2vw, 12px), env(safe-area-inset-right));
@@ -640,6 +640,23 @@ section[data-testid="stMain"] {{
     scrollbar-width: none;
 }}
 .plug-nav::-webkit-scrollbar {{ display: none; }}
+.plug-nav a.nav-item {{
+    display: inline-flex; align-items: center;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    text-decoration: none !important;
+    color: {TXT} !important;
+    transition: background 0.15s;
+}}
+.plug-nav a.nav-item:hover {{ background: {BOR}; }}
+.plug-nav a.nav-item.ativo {{
+    background: {ACC_LT};
+    color: {ACC} !important;
+    font-weight: 700;
+}}
+.plug-nav .nav-sep {{
+    color: {BOR}; font-size: 11px; padding: 0 2px; user-select: none;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -649,46 +666,53 @@ if "loja_ativa_id" not in st.session_state:
 loja_id = st.session_state.loja_ativa_id
 loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Todas")
 
-# ── Barra de navegação horizontal ──
+# ── Barra de navegação: links HTML reais (botão direito → abrir em nova aba) ──
 _pg_ativo = st.session_state.pagina
-_todas_pids    = [m[0] for m in _MENU_VISIVEL]
-_todas_labels  = [f"{m[1]} {m[2]}" for m in _MENU_VISIVEL]
-_idx_pg = _todas_pids.index(_pg_ativo) if _pg_ativo in _todas_pids else 0
 
+# Agrupa páginas por setor para mostrar separadores
+_secoes_vistas = []
+_nav_html_items = []
+_ultima_secao = None
+for _m in _MENU_VISIVEL:
+    _pid, _icon, _label, _sec = _m[0], _m[1], _m[2], _m[3]
+    if _sec != _ultima_secao:
+        if _ultima_secao is not None:
+            _nav_html_items.append('<span class="nav-sep">│</span>')
+        _ultima_secao = _sec
+    _ativo_cls = " ativo" if _pid == _pg_ativo else ""
+    _nav_html_items.append(
+        f'<a href="?p={_pid}" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
+    )
+
+_nav_html = '<nav class="plug-nav">' + "".join(_nav_html_items) + '</nav>'
+st.markdown(_nav_html, unsafe_allow_html=True)
+
+# Trata navegação via query param (links HTML fazem GET com ?p=...)
+_p_url = st.query_params.get("p", "")
+_pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
+if _p_url and _p_url in _pids_validas_nav and _p_url != st.session_state.pagina:
+    st.session_state.pagina = _p_url
+    st.rerun()
+
+# ── Seletor de loja com confirmação explícita ──
 _lojas_nomes = ["Todas"] + [n for _, n in api.LOJAS.items()]
 _lojas_ids   = [None]    + [lid for lid, _ in api.LOJAS.items()]
 _loja_idx    = _lojas_ids.index(loja_id) if loja_id in _lojas_ids else 0
 
-def _on_nav_change():
-    _lbl = st.session_state["nav_pagina"]
-    if _lbl in _todas_labels:
-        _nova_pg = _todas_pids[_todas_labels.index(_lbl)]
-        st.session_state.pagina = _nova_pg
-        st.query_params["p"] = _nova_pg
-
-def _on_loja_change():
-    _n = st.session_state["nav_loja"]
-    if _n in _lojas_nomes:
-        st.session_state.loja_ativa_id = _lojas_ids[_lojas_nomes.index(_n)]
-
-_c1, _c2, _c3, _c4 = st.columns([4, 2, 1, 1])
-
-with _c1:
-    st.selectbox("Página", _todas_labels, index=_idx_pg,
-                 key="nav_pagina", label_visibility="collapsed",
-                 on_change=_on_nav_change)
-
-with _c2:
+_lc1, _lc2, _lc3, _lc4 = st.columns([3, 1, 1, 1])
+with _lc1:
     st.selectbox("Loja", _lojas_nomes, index=_loja_idx,
-                 key="nav_loja", label_visibility="collapsed",
-                 on_change=_on_loja_change)
-
-with _c3:
+                 key="nav_loja_pendente", label_visibility="collapsed")
+with _lc2:
+    if st.button("✔ Confirmar loja", key="btn_confirmar_loja", use_container_width=True):
+        _n = st.session_state.get("nav_loja_pendente", "Todas")
+        st.session_state.loja_ativa_id = _lojas_ids[_lojas_nomes.index(_n)] if _n in _lojas_nomes else None
+        st.rerun()
+with _lc3:
     if st.button("☀️" if _dark else "🌙", key="btn_tema", use_container_width=True):
         st.session_state.tema = "light" if _dark else "dark"
         st.rerun()
-
-with _c4:
+with _lc4:
     if st.button("Sair", key="btn_sair", use_container_width=True):
         api.revogar_sessao(st.session_state.get("_sessao_token", ""))
         st.session_state.usuario_logado = None
@@ -5870,9 +5894,12 @@ if _pg == "usuarios":
                     "senha": nu_senha,
                     "setor": setores_opcoes[nu_setor],
                 }
-                api.salvar_usuarios(_usuarios_db)
-                st.success(f"Usuário '{nu_login}' criado!")
-                st.rerun()
+                try:
+                    api.salvar_usuarios(_usuarios_db)
+                    st.success(f"Usuário '{nu_login}' criado!")
+                    st.rerun()
+                except Exception as _e_su:
+                    st.error(f"❌ {_e_su}")
 
     # ── Editar usuário existente ───────────────
     with col_edit:
@@ -5897,17 +5924,23 @@ if _pg == "usuarios":
                 _usuarios_db[login_sel]["setor"] = setores_opcoes[ed_setor]
                 if ed_senha:
                     _usuarios_db[login_sel]["senha"] = ed_senha
-                api.salvar_usuarios(_usuarios_db)
-                st.success("Usuário atualizado!")
-                st.rerun()
+                try:
+                    api.salvar_usuarios(_usuarios_db)
+                    st.success("Usuário atualizado!")
+                    st.rerun()
+                except Exception as _e_eu:
+                    st.error(f"❌ {_e_eu}")
         if excluir:
             if login_sel == _user:
                 st.error("Você não pode excluir seu próprio usuário.")
             else:
                 del _usuarios_db[login_sel]
-                api.salvar_usuarios(_usuarios_db)
-                st.success(f"Usuário '{login_sel}' removido.")
-                st.rerun()
+                try:
+                    api.salvar_usuarios(_usuarios_db)
+                    st.success(f"Usuário '{login_sel}' removido.")
+                    st.rerun()
+                except Exception as _e_du:
+                    st.error(f"❌ {_e_du}")
 
     # ── Gerenciar setores e permissões ────────
     st.divider()
