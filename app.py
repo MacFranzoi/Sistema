@@ -604,7 +604,16 @@ st.markdown(f"""
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
 [data-testid="stSidebar"],
-header[data-testid="stHeader"] {{
+[data-testid="stStatusWidget"],
+[data-testid="stAppDeployButton"],
+#MainMenu,
+footer,
+header[data-testid="stHeader"],
+a[href^="https://streamlit.io"],
+a[href*="streamlit.io/cloud"],
+[class*="viewerBadge"],
+[class*="_profileContainer"],
+.stDeployButton {{
     display: none !important;
     height: 0 !important; min-height: 0 !important;
     visibility: hidden !important; pointer-events: none !important;
@@ -817,40 +826,12 @@ _nav_html = f"""
   <div class="plug-cats" id="plugCats">{_cats_row}</div>
   {_subs_html}
 </div>
-<script>
-(function(){{
-  var hdr = document.getElementById('plugHeader');
-  if (!hdr) return;
-  hdr.addEventListener('click', function(e) {{
-    var btn = e.target.closest('.cat-btn');
-    if (!btn) return;
-    var cat = btn.dataset.cat;
-    var wasActive = btn.classList.contains('ativo');
-    hdr.querySelectorAll('.cat-btn').forEach(function(b) {{ b.classList.remove('ativo'); }});
-    hdr.querySelectorAll('.plug-submenu').forEach(function(s) {{
-      if (s.dataset.submenu === cat && !wasActive) {{
-        s.classList.remove('hidden');
-        btn.classList.add('ativo');
-      }} else {{
-        s.classList.add('hidden');
-      }}
-    }});
-  }});
-  function bindWheel(el) {{
-    el.addEventListener('wheel', function(e) {{
-      if (e.deltaY === 0) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY * 1.5;
-    }}, {{ passive: false }});
-  }}
-  var cats = document.getElementById('plugCats');
-  if (cats) bindWheel(cats);
-  hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
-}})();
-</script>
 """
 st.markdown(_nav_html, unsafe_allow_html=True)
 
+# IMPORTANTE: o Streamlit NÃO executa <script> injetado via st.markdown.
+# Toda a interatividade do menu roda aqui, via componente, alcançando o
+# documento pai (window.parent.document).
 import streamlit.components.v1 as _stc
 _stc.html("""
 <script>
@@ -861,7 +842,33 @@ _stc.html("""
     if (attempts > 0) setTimeout(function(){ retry(attempts-1); }, 150);
     return;
   }
+  var win = doc.defaultView || window.parent;
+  function isMobile(){ return win.matchMedia && win.matchMedia('(max-width: 640px)').matches; }
+
+  // ── Clique nas categorias: abre/fecha o submenu correspondente ──
+  if (!hdr.dataset.bound) {
+    hdr.dataset.bound = '1';
+    hdr.addEventListener('click', function(e) {
+      var btn = e.target.closest('.cat-btn');
+      if (!btn) return;
+      var cat = btn.dataset.cat;
+      var wasActive = btn.classList.contains('ativo');
+      hdr.querySelectorAll('.cat-btn').forEach(function(b) { b.classList.remove('ativo'); });
+      hdr.querySelectorAll('.plug-submenu').forEach(function(s) {
+        if (s.dataset.submenu === cat && !wasActive) {
+          s.classList.remove('hidden');
+          btn.classList.add('ativo');
+        } else {
+          s.classList.add('hidden');
+        }
+      });
+    });
+  }
+
+  // ── Scroll horizontal com a roda do mouse (desktop) ──
   function bindWheel(el) {
+    if (el.dataset.wheelBound) return;
+    el.dataset.wheelBound = '1';
     el.addEventListener('wheel', function(e){
       if (e.deltaY === 0) return;
       e.preventDefault();
@@ -873,15 +880,14 @@ _stc.html("""
   hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
 
   // No mobile, começa com os submenus fechados (folha não cobre o conteúdo)
-  var win = doc.defaultView || window.parent;
-  if (win.matchMedia && win.matchMedia('(max-width: 640px)').matches) {
+  if (isMobile()) {
     hdr.querySelectorAll('.plug-submenu').forEach(function(s){ s.classList.add('hidden'); });
     hdr.querySelectorAll('.cat-btn').forEach(function(b){ b.classList.remove('ativo'); });
   }
 
   // Ajusta padding-top do conteúdo para compensar header fixo (só desktop)
   function ajustarPadding() {
-    var h = (win.matchMedia && win.matchMedia('(max-width: 640px)').matches) ? 0 : hdr.offsetHeight;
+    var h = isMobile() ? 0 : hdr.offsetHeight;
     doc.documentElement.style.setProperty('--plug-header-h', h + 'px');
   }
   ajustarPadding();
