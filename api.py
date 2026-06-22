@@ -41,7 +41,7 @@ _SETORES_PADRAO = {
             "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios","rel_estoque",
-            "sincronizacao","usuarios",
+            "sincronizacao","listas","usuarios",
         ],
     },
     "gerencia": {
@@ -53,6 +53,7 @@ _SETORES_PADRAO = {
             "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios","rel_estoque",
+            "listas",
         ],
     },
     "estoque": {
@@ -85,13 +86,26 @@ _SETORES_PADRAO = {
 def carregar_setores():
     if not os.path.exists(SETORES_FILE):
         _gh_baixar_arquivo("setores.json", SETORES_FILE)
+    salvos = None
     if os.path.exists(SETORES_FILE):
         try:
             with open(SETORES_FILE, encoding="utf-8") as f:
-                return json.load(f)
+                salvos = json.load(f)
         except Exception:
             pass
-    return json.loads(json.dumps(_SETORES_PADRAO))
+    if salvos is None:
+        return json.loads(json.dumps(_SETORES_PADRAO))
+    # Mescla: garante que páginas novas do padrão apareçam nos setores salvos
+    for setor, cfg_padrao in _SETORES_PADRAO.items():
+        if setor not in salvos:
+            salvos[setor] = json.loads(json.dumps(cfg_padrao))
+        else:
+            pags_salvas = set(salvos[setor].get("paginas", []))
+            pags_padrao = set(cfg_padrao.get("paginas", []))
+            novas = pags_padrao - pags_salvas
+            if novas:
+                salvos[setor]["paginas"] = list(pags_salvas | novas)
+    return salvos
 
 def salvar_setores(setores):
     conteudo = json.dumps(setores, ensure_ascii=False, indent=2)
