@@ -2836,6 +2836,14 @@ if _pg == "acerto":
 
     st.divider()
 
+    # ── Normaliza itens (listas antigas podem não ter os campos novos) ──────────
+    for _it in st.session_state.itens_acerto:
+        _vn = _it.get("variacao_nome", "") or ""
+        if "tipo_variacao" not in _it or "cor_preco_variacao" not in _it:
+            _it["cor_preco_variacao"] = _vn.split("/")[0].strip() if "/" in _vn else ""
+            _it["tipo_variacao"]      = _vn.split("/")[1].strip() if "/" in _vn else _vn
+        _it.setdefault("valor_custo", "0.00")
+
     # ── Aplicar custo por tipo (cores agrupadas) ou tipo/preço ──────────────────────────────────────
     if st.session_state.itens_acerto:
         CORES_COMUNS = {"azul", "preto", "branco", "vermelho", "verde", "amarelo", "rosa", "roxo",
@@ -2907,9 +2915,10 @@ if _pg == "acerto":
             "cor_preco_variacao": "Cor/Preço", "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
         }).copy()
         # Garante que o custo seja numérico (pode vir como "0.00" string)
-        _df_ac_edit["Custo Unit. (R$)"] = pd.to_numeric(
-            _df_ac_edit["Custo Unit. (R$)"], errors="coerce"
-        ).fillna(0.0)
+        if "Custo Unit. (R$)" in _df_ac_edit.columns:
+            _df_ac_edit["Custo Unit. (R$)"] = pd.to_numeric(
+                _df_ac_edit["Custo Unit. (R$)"], errors="coerce"
+            ).fillna(0.0)
 
         # Versão do editor: ao aplicar custo por tipo, incrementamos para forçar
         # o data_editor a recarregar os valores novos (evita sobrescrita pelo cache).
@@ -2927,7 +2936,8 @@ if _pg == "acerto":
             key=_editor_key
         )
 
-        if not _edited_ac["Custo Unit. (R$)"].equals(_df_ac_edit["Custo Unit. (R$)"]):
+        if "Custo Unit. (R$)" in _edited_ac.columns and \
+           not _edited_ac["Custo Unit. (R$)"].equals(_df_ac_edit["Custo Unit. (R$)"]):
             for i, row in _edited_ac.iterrows():
                 st.session_state.itens_acerto[i]["valor_custo"] = float(row["Custo Unit. (R$)"])
 
