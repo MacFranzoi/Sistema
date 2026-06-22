@@ -2819,7 +2819,7 @@ if _pg == "acerto":
                     tipo_var = var_nome.split("/")[1].strip() if "/" in var_nome else var_nome
                     st.session_state.itens_acerto.append({
                         "produto_id":      produto_ac["id"],
-                        "produto_nome":    produto_ac["nome"],
+                        "produto_nome":    produto_ac["nome"].split(" (")[0].strip() if " (" in produto_ac["nome"] else produto_ac["nome"],
                         "cod_interno":     produto_ac.get("codigo_interno", ""),
                         "grupo_id":        produto_ac.get("grupo_id", ""),
                         "nome_grupo":      produto_ac.get("nome_grupo", ""),
