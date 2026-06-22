@@ -1796,7 +1796,7 @@ if _pg == "rel_estoque":
             st.caption(f"Cache: {sync_em}")
 
             st.dataframe(
-                df_re.style.applymap(lambda v: "color: #e74c3c" if isinstance(v, int) and v < 0 else "", subset=["Estoque"]),
+                df_re.style.map(lambda v: "color: #e74c3c" if isinstance(v, (int, float)) and v < 0 else "", subset=["Estoque"]),
                 use_container_width=True, hide_index=True
             )
 
