@@ -685,8 +685,18 @@ section[data-testid="stMain"] {{
     background: {ACC_LT}; color: {ACC} !important; font-weight: 700;
 }}
 
-/* Barra superior só de marca (aparece no mobile) */
-.plug-mobiletop {{ display: none; }}
+/* Transição suave do conteúdo ao navegar */
+.main .block-container {
+    animation: plugFade 0.18s ease-out;
+}
+@keyframes plugFade {{
+    from {{ opacity: 0.15; }}
+    to   {{ opacity: 1; }}
+}}
+/* Oculta o input ponte de navegação JS */
+[data-testid="stTextInput"]:has(input[aria-label="__nav_bridge__"]) {{
+    display: none !important; height: 0 !important; overflow: hidden !important;
+}}
 
 /* ───────── MOBILE: cara de app (bottom tab bar) ───────── */
 @media (max-width: 640px) {{
@@ -911,13 +921,49 @@ _stc.html("""
   }
   ajustarPadding();
   new ResizeObserver(ajustarPadding).observe(hdr);
+
+  // ── Intercepta cliques nos links do nav: sem reload de página ──
+  // Ctrl/Cmd/Shift/botão-direito: comportamento normal (abre nova aba)
+  // Clique normal: atualiza URL via pushState + aciona o input ponte pro Python
+  function interceptNav() {
+    doc.querySelectorAll('.nav-item[href]').forEach(function(a) {
+      if (a.dataset.navBound) return;
+      a.dataset.navBound = '1';
+      a.addEventListener('click', function(e) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        var url = new URL(a.getAttribute('href'), win.location.href);
+        var p = url.searchParams.get('p');
+        if (!p) return;
+        // Atualiza URL sem reload
+        win.history.pushState({p: p}, '', url.href);
+        // Aciona o input ponte via React (dispara st.rerun no Python)
+        var bridge = doc.querySelector('input[aria-label="__nav_bridge__"]');
+        if (!bridge) return;
+        var nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(bridge, p);
+        bridge.dispatchEvent(new Event('input', {bubbles: true}));
+      });
+    });
+  }
+  interceptNav();
+  // Re-aplica após cada rerun do Streamlit (os links são recriados)
+  new MutationObserver(interceptNav).observe(doc.body, {childList: true, subtree: true});
 })(20);
 </script>
 """, height=0)
 
-# Trata navegação via query param mantendo o token na URL
-_p_url = st.query_params.get("p", "")
+# ── Input ponte: JS escreve aqui ao interceptar clique no nav (sem reload) ──
 _pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
+_nav_bridge = st.text_input("__nav_bridge__", key="_nav_bridge",
+                             label_visibility="collapsed", value="")
+if _nav_bridge and _nav_bridge in _pids_validas_nav and _nav_bridge != st.session_state.pagina:
+    st.session_state.pagina = _nav_bridge
+    st.session_state["_nav_bridge"] = ""
+    st.rerun()
+
+# Trata navegação via query param (fallback: link aberto em nova aba, ctrl+click)
+_p_url = st.query_params.get("p", "")
 if _p_url and _p_url in _pids_validas_nav and _p_url != st.session_state.pagina:
     st.session_state.pagina = _p_url
     st.rerun()
