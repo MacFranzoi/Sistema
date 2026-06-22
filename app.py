@@ -668,9 +668,10 @@ loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Tod
 
 # ── Barra de navegação: links HTML reais (botão direito → abrir em nova aba) ──
 _pg_ativo = st.session_state.pagina
+_tok_nav   = st.session_state.get("_sessao_token", "")
 
-# Agrupa páginas por setor para mostrar separadores
-_secoes_vistas = []
+# Cada link preserva ?t=TOKEN para manter a sessão após navegação completa.
+# Clique normal → mesma aba. Botão direito / Ctrl+Click → nova aba.
 _nav_html_items = []
 _ultima_secao = None
 for _m in _MENU_VISIVEL:
@@ -680,14 +681,15 @@ for _m in _MENU_VISIVEL:
             _nav_html_items.append('<span class="nav-sep">│</span>')
         _ultima_secao = _sec
     _ativo_cls = " ativo" if _pid == _pg_ativo else ""
+    _href = f"?p={_pid}&t={_tok_nav}" if _tok_nav else f"?p={_pid}"
     _nav_html_items.append(
-        f'<a href="?p={_pid}" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
+        f'<a href="{_href}" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
     )
 
 _nav_html = '<nav class="plug-nav">' + "".join(_nav_html_items) + '</nav>'
 st.markdown(_nav_html, unsafe_allow_html=True)
 
-# Trata navegação via query param (links HTML fazem GET com ?p=...)
+# Trata navegação via query param mantendo o token na URL
 _p_url = st.query_params.get("p", "")
 _pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
 if _p_url and _p_url in _pids_validas_nav and _p_url != st.session_state.pagina:

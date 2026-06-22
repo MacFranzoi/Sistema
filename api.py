@@ -123,14 +123,22 @@ SESSOES_FILE = os.path.join(DIR, "sessoes.json")
 SESSAO_DIAS  = 30  # dias até expirar o token
 
 def _carregar_sessoes():
+    # Tenta arquivo local; se não existe, baixa do GitHub
+    if not os.path.exists(SESSOES_FILE):
+        _gh_baixar_arquivo("sessoes.json", SESSOES_FILE)
     if os.path.exists(SESSOES_FILE):
-        with open(SESSOES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(SESSOES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
     return {}
 
 def _salvar_sessoes(s):
+    conteudo = json.dumps(s, ensure_ascii=False, indent=2)
     with open(SESSOES_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f, ensure_ascii=False, indent=2)
+        f.write(conteudo)
+    _gh_push_arquivo("sessoes.json", conteudo, "Atualiza sessoes")
 
 def criar_sessao(usuario):
     token = secrets.token_urlsafe(32)
