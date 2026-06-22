@@ -628,34 +628,52 @@ section[data-testid="stMain"] {{
     max-width: 100% !important;
 }}
 
-/* Barra de navegação horizontal com links reais */
-.plug-nav {{
+/* Cabeçalho de navegação: logo + categorias + submenu */
+.plug-header {{
     position: sticky; top: 0; z-index: 999;
     background: {SB}; border-bottom: 1px solid {BOR};
+}}
+.plug-cats {{
     display: flex; align-items: center; gap: 2px;
     padding: 0 clamp(6px, 2vw, 12px);
     padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
     padding-right: max(clamp(6px, 2vw, 12px), env(safe-area-inset-right));
-    height: 48px; overflow-x: auto;
-    scrollbar-width: none;
+    height: 48px; overflow-x: auto; scrollbar-width: none;
 }}
-.plug-nav::-webkit-scrollbar {{ display: none; }}
-.plug-nav a.nav-item {{
+.plug-cats::-webkit-scrollbar {{ display: none; }}
+.plug-logo {{
+    width: 34px; height: 34px; border-radius: 50%;
+    object-fit: cover; flex-shrink: 0; margin-right: 6px;
+    border: 1.5px solid {BOR};
+}}
+.cat-btn {{
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    cursor: pointer; user-select: none;
+    color: {TXT}; transition: background 0.15s;
+}}
+.cat-btn:hover {{ background: {BOR}; }}
+.cat-btn.ativo {{ background: {ACC_LT}; color: {ACC}; font-weight: 700; }}
+.plug-submenu {{
+    display: flex; align-items: center; gap: 2px;
+    padding: 4px clamp(6px, 2vw, 12px);
+    padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
+    overflow-x: auto; scrollbar-width: none;
+    border-top: 1px solid {BOR};
+}}
+.plug-submenu::-webkit-scrollbar {{ display: none; }}
+.plug-submenu.hidden {{ display: none !important; }}
+.plug-submenu a.nav-item {{
     display: inline-flex; align-items: center;
     padding: 4px 10px; border-radius: 6px;
     font-size: 13px; font-weight: 500; white-space: nowrap;
     text-decoration: none !important;
-    color: {TXT} !important;
-    transition: background 0.15s;
+    color: {TXT} !important; transition: background 0.15s;
 }}
-.plug-nav a.nav-item:hover {{ background: {BOR}; }}
-.plug-nav a.nav-item.ativo {{
-    background: {ACC_LT};
-    color: {ACC} !important;
-    font-weight: 700;
-}}
-.plug-nav .nav-sep {{
-    color: {BOR}; font-size: 11px; padding: 0 2px; user-select: none;
+.plug-submenu a.nav-item:hover {{ background: {BOR}; }}
+.plug-submenu a.nav-item.ativo {{
+    background: {ACC_LT}; color: {ACC} !important; font-weight: 700;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -666,69 +684,111 @@ if "loja_ativa_id" not in st.session_state:
 loja_id = st.session_state.loja_ativa_id
 loja_sel_nome = next((n for lid, n in api.LOJAS.items() if lid == loja_id), "Todas")
 
-# ── Barra de navegação: links HTML reais (botão direito → abrir em nova aba) ──
+# ── Barra de navegação: logo + categorias + submenu ──
 _pg_ativo = st.session_state.pagina
 _tok_nav   = st.session_state.get("_sessao_token", "")
 
-# Cada link preserva ?t=TOKEN para manter a sessão após navegação completa.
-# Clique normal → mesma aba. Botão direito / Ctrl+Click → nova aba.
-_nav_html_items = []
-_ultima_secao = None
+_LOGO_B64 = "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"
+
+_CAT_ICONS = {
+    "GERAL": "🏠", "CADASTROS": "👥", "ITENS": "🏷️",
+    "VENDAS": "🧾", "ESTOQUE": "📦", "COMPRAS": "🛒",
+    "FINANCEIRO": "💳", "RELATÓRIOS": "📊", "CONFIGURAÇÕES": "⚙️",
+}
+_CAT_LABELS = {
+    "GERAL": "Geral", "CADASTROS": "Cadastros", "ITENS": "Itens",
+    "VENDAS": "Vendas", "ESTOQUE": "Estoque", "COMPRAS": "Compras",
+    "FINANCEIRO": "Financeiro", "RELATÓRIOS": "Relatórios", "CONFIGURAÇÕES": "Config",
+}
+
+_cats_ordered, _cats_items = [], {}
 for _m in _MENU_VISIVEL:
     _pid, _icon, _label, _sec = _m[0], _m[1], _m[2], _m[3]
-    if _sec != _ultima_secao:
-        if _ultima_secao is not None:
-            _nav_html_items.append('<span class="nav-sep">│</span>')
-        _ultima_secao = _sec
-    _ativo_cls = " ativo" if _pid == _pg_ativo else ""
-    _href = f"?p={_pid}&t={_tok_nav}" if _tok_nav else f"?p={_pid}"
-    _nav_html_items.append(
-        f'<a href="{_href}" target="_self" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
+    if _sec not in _cats_items:
+        _cats_items[_sec] = []
+        _cats_ordered.append(_sec)
+    _cats_items[_sec].append((_pid, _icon, _label))
+
+_active_cat = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _cats_ordered[0] if _cats_ordered else "")
+
+_cats_row = f'<img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo" alt="Plug" />'
+for _cat in _cats_ordered:
+    _acls = " ativo" if _cat == _active_cat else ""
+    _cats_row += (
+        f'<span class="cat-btn{_acls}" data-cat="{_cat}">'
+        f'{_CAT_ICONS.get(_cat,"•")} {_CAT_LABELS.get(_cat,_cat.title())}'
+        f'</span>'
     )
 
-_nav_html = '<nav class="plug-nav" id="plugNav">' + "".join(_nav_html_items) + '</nav>'
-_nav_html += """
+_subs_html = ""
+for _cat in _cats_ordered:
+    _vis = "" if _cat == _active_cat else " hidden"
+    _sub = f'<div class="plug-submenu{_vis}" data-submenu="{_cat}">'
+    for _pid, _icon, _label in _cats_items[_cat]:
+        _acls = " ativo" if _pid == _pg_ativo else ""
+        _href = f"?p={_pid}&t={_tok_nav}" if _tok_nav else f"?p={_pid}"
+        _sub += f'<a href="{_href}" target="_self" class="nav-item{_acls}">{_icon} {_label}</a>'
+    _sub += '</div>'
+    _subs_html += _sub
+
+_nav_html = f"""
+<div class="plug-header" id="plugHeader">
+  <div class="plug-cats" id="plugCats">{_cats_row}</div>
+  {_subs_html}
+</div>
 <script>
-(function(){
-  var nav = document.getElementById('plugNav');
-  if (!nav) {
-    // Streamlit pode renderizar depois — tenta de novo
-    var _t = setInterval(function(){
-      nav = document.getElementById('plugNav');
-      if (!nav) return;
-      clearInterval(_t);
-      bindWheel(nav);
-    }, 100);
+(function(){{
+  var hdr = document.getElementById('plugHeader');
+  if (!hdr) return;
+  hdr.addEventListener('click', function(e) {{
+    var btn = e.target.closest('.cat-btn');
+    if (!btn) return;
+    var cat = btn.dataset.cat;
+    var wasActive = btn.classList.contains('ativo');
+    hdr.querySelectorAll('.cat-btn').forEach(function(b) {{ b.classList.remove('ativo'); }});
+    hdr.querySelectorAll('.plug-submenu').forEach(function(s) {{
+      if (s.dataset.submenu === cat && !wasActive) {{
+        s.classList.remove('hidden');
+        btn.classList.add('ativo');
+      }} else {{
+        s.classList.add('hidden');
+      }}
+    }});
+  }});
+  function bindWheel(el) {{
+    el.addEventListener('wheel', function(e) {{
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY * 1.5;
+    }}, {{ passive: false }});
+  }}
+  var cats = document.getElementById('plugCats');
+  if (cats) bindWheel(cats);
+  hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
+}})();
+</script>
+"""
+st.markdown(_nav_html, unsafe_allow_html=True)
+
+import streamlit.components.v1 as _stc
+_stc.html("""
+<script>
+(function retry(attempts){
+  var hdr = window.parent.document.getElementById('plugHeader');
+  if (!hdr) {
+    if (attempts > 0) setTimeout(function(){ retry(attempts-1); }, 150);
     return;
   }
-  bindWheel(nav);
   function bindWheel(el) {
-    el.addEventListener('wheel', function(e) {
+    el.addEventListener('wheel', function(e){
       if (e.deltaY === 0) return;
       e.preventDefault();
       el.scrollLeft += e.deltaY * 1.5;
     }, { passive: false });
   }
-})();
-</script>
-"""
-st.markdown(_nav_html, unsafe_allow_html=True)
-
-# Script separado via components para garantir execução no Streamlit
-import streamlit.components.v1 as _stc
-_stc.html("""
-<script>
-(function retry(attempts){
-  var nav = window.parent.document.getElementById('plugNav');
-  if (!nav) {
-    if (attempts > 0) setTimeout(function(){ retry(attempts-1); }, 150);
-    return;
-  }
-  nav.addEventListener('wheel', function(e){
-    if (e.deltaY === 0) return;
-    e.preventDefault();
-    nav.scrollLeft += e.deltaY * 1.5;
-  }, { passive: false });
+  var cats = window.parent.document.getElementById('plugCats');
+  if (cats) bindWheel(cats);
+  hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
 })(20);
 </script>
 """, height=0)
