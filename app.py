@@ -2815,7 +2815,8 @@ if _pg == "acerto":
             else:
                 for _, row in selecionadas_ac.iterrows():
                     var_nome = row["Variação"]
-                    tipo_det = api.detectar_custo_tipo(produto_ac["nome"], var_nome, api.carregar_custos_tipo())
+                    tipo_var = var_nome.split("/")[0].strip() if "/" in var_nome else var_nome
+                    cat_var = var_nome.split("/")[1].strip() if "/" in var_nome else ""
                     st.session_state.itens_acerto.append({
                         "produto_id":      produto_ac["id"],
                         "produto_nome":    produto_ac["nome"],
@@ -2826,7 +2827,8 @@ if _pg == "acerto":
                         "variacao_id":     row["_variacao_id"],
                         "variacao_cod":    row["Código Var."],
                         "variacao_nome":   var_nome,
-                        "tipo_variacao":   tipo_det or "",
+                        "tipo_variacao":   tipo_var,
+                        "categoria_variacao": cat_var,
                         "quantidade":      int(row["Qtd Correta"]),
                         "valor_custo":     produto_ac.get("valor_custo", "0.00"),
                     })
@@ -2834,46 +2836,48 @@ if _pg == "acerto":
 
     st.divider()
 
-    # ── Aplicar custo por tipo de variação ──────────────────────────────────────
+    # ── Aplicar custo por tipo/categoria de variação ──────────────────────────────────────
     if st.session_state.itens_acerto:
-        tipos_disponiveis = sorted(list(set(
-            item.get("tipo_variacao") for item in st.session_state.itens_acerto
-            if item.get("tipo_variacao")
+        combos_disponiveis = sorted(list(set(
+            f"{item.get('tipo_variacao', '')}" + (f" / {item.get('categoria_variacao', '')}" if item.get('categoria_variacao') else "")
+            for item in st.session_state.itens_acerto
         )))
 
-        if tipos_disponiveis:
-            with st.expander("⚙️ Aplicar custo por tipo de variação", expanded=False):
+        if combos_disponiveis:
+            with st.expander("⚙️ Aplicar custo por tipo/categoria", expanded=False):
                 custos_tipo = api.carregar_custos_tipo()
 
                 col_t1, col_t2 = st.columns([2, 1])
-                tipo_sel = col_t1.selectbox("Tipo disponível na lista", tipos_disponiveis, key="ac_tipo_custo")
+                combo_sel = col_t1.selectbox("Tipo/Categoria disponível", combos_disponiveis, key="ac_combo_custo")
 
-                if tipo_sel:
-                    custo_padrao = float(custos_tipo.get(tipo_sel, 0))
+                if combo_sel:
+                    tipo_only = combo_sel.split("/")[0].strip()
+                    custo_padrao = float(custos_tipo.get(tipo_only, 0))
                     col_t3, col_t4 = st.columns([2, 1])
                     custo_input = col_t3.text_input(
                         "Valor de custo (formato: 19,90)",
                         value=f"{custo_padrao:,.2f}".replace(".", ","),
-                        key="ac_custo_tipo_val",
+                        key="ac_custo_combo_val",
                         placeholder="ex: 19,90"
                     )
 
-                    if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_tipo_custo"):
+                    if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_combo_custo"):
                         try:
                             custo_br = custo_input.replace(",", ".")
                             custo_num = float(custo_br)
 
                             aplicados = 0
                             for item in st.session_state.itens_acerto:
-                                if item.get("tipo_variacao") == tipo_sel:
+                                item_combo = f"{item.get('tipo_variacao', '')}" + (f" / {item.get('categoria_variacao', '')}" if item.get('categoria_variacao') else "")
+                                if item_combo == combo_sel:
                                     item["valor_custo"] = custo_num
                                     aplicados += 1
 
                             if aplicados > 0:
-                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
+                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{combo_sel}**")
                                 st.rerun()
                             else:
-                                st.info(f"Nenhum item com tipo '{tipo_sel}' na lista.")
+                                st.info(f"Nenhum item com '{combo_sel}' na lista.")
                         except ValueError:
                             st.error("Valor inválido. Use formato: 19,90")
 
