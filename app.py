@@ -3123,13 +3123,13 @@ if _pg == "acerto":
     st.divider()
     st.subheader("🔍 Conferir compra no sistema")
 
-    _ult_cod = str(st.session_state.get("_ac_ultima_compra", {}).get("codigo", "") or "")
+    _ult_id_val = str(st.session_state.get("_ac_ultima_compra", {}).get("id", "") or "")
     _cc1, _cc2 = st.columns([2, 1])
     _compra_conf_cod = _cc1.text_input(
-        "Número da compra (ex: 395 — o número que aparece no sistema)",
-        value=_ult_cod,
+        "ID da compra (preenchido automaticamente após criar o acerto)",
+        value=_ult_id_val,
         key="ac_conf_id",
-        placeholder="Digite o número da compra..."
+        placeholder="Digite o ID da compra..."
     )
     _cc2.write("")
     _cc2.write("")
@@ -3138,7 +3138,8 @@ if _pg == "acerto":
     if _btn_conf and _compra_conf_cod.strip():
         with st.spinner("Buscando compra na API…"):
             try:
-                _dc = api.buscar_compra_por_codigo(_compra_conf_cod.strip(), loja_id=loja_id)
+                _resp_conf = api.get_compra(_compra_conf_cod.strip(), loja_id=loja_id)
+                _dc = (_resp_conf.get("data") or {}) if isinstance(_resp_conf, dict) else {}
 
                 if not _dc:
                     st.error(f"Compra #{_compra_conf_cod} não encontrada na loja **{loja_sel_nome}**.")
