@@ -2947,14 +2947,18 @@ if _pg == "acerto":
                             forma_pagamento_id=_ac_fp_id,
                             loja_id=loja_id,
                         )
-                        _compra_id = (_res_ac.get("data") or {}).get("id", "?")
-                        _prod_count = len((_res_ac.get("data") or {}).get("produtos", []))
-                        if _prod_count == 0 and len(st.session_state.itens_acerto) > 0:
-                            st.warning(f"⚠️ Compra **#{_compra_id}** criada mas **NENHUM produto foi salvo**!")
+                        _data_ac = _res_ac.get("data") or {}
+                        _compra_id = _data_ac.get("id", "?")
+                        _valor_prod = float(_data_ac.get("valor_produtos") or 0)
+                        # O POST não devolve o array de produtos — usamos valor_produtos
+                        # (> 0) para confirmar que os itens foram registrados.
+                        if _valor_prod <= 0 and len(st.session_state.itens_acerto) > 0:
+                            st.warning(f"⚠️ Compra **#{_compra_id}** criada mas **NENHUM produto foi registrado** (valor zerado)!")
                             with st.expander("🔍 Resposta da API", expanded=True):
                                 st.json(_res_ac)
                         else:
-                            st.success(f"✅ Compra **#{_compra_id}** criada — **{_prod_count} produtos** salvos no sistema!")
+                            _n = len(st.session_state.itens_acerto)
+                            st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — **{_n} itens** lançados no estoque! (valor R$ {_valor_prod:,.2f})")
                             st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
                             st.session_state.itens_acerto = []
                     except Exception as _e_ac:
