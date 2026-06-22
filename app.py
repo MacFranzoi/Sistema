@@ -683,7 +683,7 @@ for _m in _MENU_VISIVEL:
     _ativo_cls = " ativo" if _pid == _pg_ativo else ""
     _href = f"?p={_pid}&t={_tok_nav}" if _tok_nav else f"?p={_pid}"
     _nav_html_items.append(
-        f'<a href="{_href}" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
+        f'<a href="{_href}" target="_self" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
     )
 
 _nav_html = '<nav class="plug-nav">' + "".join(_nav_html_items) + '</nav>'
