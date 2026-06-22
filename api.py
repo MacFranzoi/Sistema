@@ -475,16 +475,24 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
         _total += _qtd * _custo
         _vid    = it.get("variacao_id") or ""
         _qtd_str = f"{_qtd:.2f}"          # formato "5.00" como o blueprint
+        # nome_produto: usa SEMPRE o nome real do produto (sem a variação),
+        # limpando qualquer sufixo que a API/cache tenha grudado.
+        _nome = (it.get("produto_nome") or "").strip()
+        if " (" in _nome:
+            _nome = _nome.split(" (")[0].strip()
+        # detalhes: usa o nome REAL da variação (ex.: "Branco / Aveludada")
+        # para que cada linha da compra seja identificável no gestãoclick.
+        _det = (it.get("variacao_nome") or "").strip()
         produtos.append({
             "produto": {
                 "produto_id":       str(it["produto_id"]),
                 "variacao_id":      str(_vid),
-                "nome_produto":     it.get("produto_nome", ""),
+                "nome_produto":     _nome,
                 "possui_variacao":  1 if _vid else 0,
                 "quantidade":       _qtd_str,
                 "quantidade_saida": _qtd_str,   # entra TODA a quantidade no estoque
                 "valor_custo":      f"{_custo:.2f}",
-                "detalhes":         "Nenhum detalhe",
+                "detalhes":         _det,
                 "unidade":          "UND",
                 "largura":          0,
                 "altura":           0,

@@ -2978,6 +2978,20 @@ if _pg == "acerto":
                         else:
                             _n = len(st.session_state.itens_acerto)
                             st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — **{_n} itens** lançados no estoque! (valor R$ {_valor_prod:,.2f})")
+                            # Confirmação: mostra cada variação enviada com seu ID,
+                            # para conferir que NÃO foi tudo numa variação só.
+                            _enviados = (_res_ac.get("_body_enviado") or {}).get("produtos", [])
+                            if _enviados:
+                                _conf = pd.DataFrame([{
+                                    "Produto": p["produto"].get("nome_produto", ""),
+                                    "Variação": p["produto"].get("detalhes", ""),
+                                    "ID Variação": p["produto"].get("variacao_id", ""),
+                                    "Qtd": p["produto"].get("quantidade", ""),
+                                } for p in _enviados])
+                                with st.expander(f"🔎 Conferir variações enviadas ({len(_enviados)})", expanded=True):
+                                    st.dataframe(_conf, use_container_width=True, hide_index=True)
+                                    if _conf["ID Variação"].nunique() < len(_conf):
+                                        st.warning("⚠️ Há IDs de variação repetidos — verifique a lista.")
                             st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
                             st.session_state.itens_acerto = []
                     except Exception as _e_ac:
