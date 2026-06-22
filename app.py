@@ -2850,6 +2850,7 @@ if _pg == "acerto":
                          use_container_width=True, disabled=_ac_btn_dis, help=_ac_btn_tip):
                 with st.spinner("Criando compra de acerto…"):
                     try:
+                        st.info(f"📤 Enviando **{len(st.session_state.itens_acerto)} itens** para a API...")
                         _res_ac = api.criar_compra_acerto(
                             st.session_state.itens_acerto,
                             fornecedor_id=_ac_forn_id,
@@ -2858,7 +2859,8 @@ if _pg == "acerto":
                             loja_id=loja_id,
                         )
                         _compra_id = (_res_ac.get("data") or {}).get("id", "?")
-                        st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — estoque lançado!")
+                        _prod_count = len((_res_ac.get("data") or {}).get("produtos", []))
+                        st.success(f"✅ Compra **#{_compra_id}** criada — **{_prod_count} produtos** salvos no sistema!")
                         st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
                         st.session_state.itens_acerto = []
                     except Exception as _e_ac:
