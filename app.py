@@ -1782,11 +1782,27 @@ if _pg == "rel_estoque":
         filtro_status_re = fl2.selectbox("Mostrar", ["Todos","Com estoque","Sem estoque (≤ 0)","Negativos","Zerados"], key="re_status")
         busca_re = fl3.text_input("Buscar produto", key="re_busca", placeholder="Nome ou cód...")
 
-        c_rel = api.carregar_cache(loja_id_rel)
+        # Puxa o estoque AO VIVO da loja (memoizado por loja). A busca e o
+        # status são aplicados na hora, no cliente, sobre o dado ao vivo.
+        # Refaz a chamada só ao trocar de loja ou clicar em atualizar.
+        if st.button("🔄 Atualizar agora", key="re_refresh"):
+            st.session_state.pop("re_live_data", None)
+            st.session_state.pop("re_live_key", None)
+        if st.session_state.get("re_live_key") != loja_id_rel or "re_live_data" not in st.session_state:
+            with st.spinner(f"Puxando estoque ao vivo de {loja_rel}…"):
+                try:
+                    st.session_state["re_live_data"] = api.buscar_estoque_ao_vivo(loja_id=loja_id_rel)
+                    st.session_state["re_live_key"] = loja_id_rel
+                except Exception as _e_live:
+                    st.session_state["re_live_data"] = None
+                    st.error(f"Erro ao puxar estoque: {_e_live}")
+        c_rel = st.session_state.get("re_live_data")
+
         if not c_rel:
-            st.warning(f"Cache de **{loja_rel}** não encontrado. Sincronize primeiro.")
+            st.warning(f"Não foi possível puxar o estoque de **{loja_rel}**.")
         else:
-            sync_em = c_rel.get("sincronizado_em","")[:16].replace("T"," às ")
+            _se = c_rel.get("sincronizado_em", "")[:16].replace("T", " às ")
+            sync_em = f"{_se} (ao vivo)"
             df_re = _build_estoque_df(c_rel, busca_re, filtro_status_re)
 
             col_m1, col_m2, col_m3 = st.columns(3)

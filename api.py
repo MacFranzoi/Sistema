@@ -321,6 +321,42 @@ def carregar_cache(loja_id=None):
         return json.load(f)
 
 
+def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max_paginas=50):
+    """Busca produtos direto na API (estoque em tempo real), com filtro
+    opcional por nome/código. Retorna no mesmo formato do cache:
+    {"produtos": [...], "sincronizado_em": <agora>, "ao_vivo": True}.
+
+    Sem filtro de nome/código baixa todos (paginado) — pode demorar.
+    """
+    todos = []
+    pagina = 1
+    total_paginas = None
+    while pagina <= max_paginas:
+        params = {"pagina": pagina, "limite": limite}
+        if nome:
+            params["nome"] = nome
+        if codigo:
+            params["codigo"] = codigo
+        data = _get("produtos", params, loja_id=loja_id)
+        meta = data.get("meta", {}) if isinstance(data, dict) else {}
+        if total_paginas is None:
+            total_paginas = meta.get("total_paginas", 1)
+        produtos = data.get("data", []) if isinstance(data, dict) else []
+        if not produtos:
+            break
+        todos.extend(produtos)
+        if pagina >= (total_paginas or 1):
+            break
+        pagina += 1
+    return {
+        "produtos": todos,
+        "loja_id": loja_id,
+        "total": len(todos),
+        "sincronizado_em": datetime.now().isoformat(),
+        "ao_vivo": True,
+    }
+
+
 def buscar_produtos(termo, cache):
     termo = termo.lower().strip()
     if not termo or not cache:
