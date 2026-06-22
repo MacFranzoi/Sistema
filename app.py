@@ -686,8 +686,52 @@ for _m in _MENU_VISIVEL:
         f'<a href="{_href}" target="_self" class="nav-item{_ativo_cls}">{_icon} {_label}</a>'
     )
 
-_nav_html = '<nav class="plug-nav">' + "".join(_nav_html_items) + '</nav>'
+_nav_html = '<nav class="plug-nav" id="plugNav">' + "".join(_nav_html_items) + '</nav>'
+_nav_html += """
+<script>
+(function(){
+  var nav = document.getElementById('plugNav');
+  if (!nav) {
+    // Streamlit pode renderizar depois — tenta de novo
+    var _t = setInterval(function(){
+      nav = document.getElementById('plugNav');
+      if (!nav) return;
+      clearInterval(_t);
+      bindWheel(nav);
+    }, 100);
+    return;
+  }
+  bindWheel(nav);
+  function bindWheel(el) {
+    el.addEventListener('wheel', function(e) {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY * 1.5;
+    }, { passive: false });
+  }
+})();
+</script>
+"""
 st.markdown(_nav_html, unsafe_allow_html=True)
+
+# Script separado via components para garantir execução no Streamlit
+import streamlit.components.v1 as _stc
+_stc.html("""
+<script>
+(function retry(attempts){
+  var nav = window.parent.document.getElementById('plugNav');
+  if (!nav) {
+    if (attempts > 0) setTimeout(function(){ retry(attempts-1); }, 150);
+    return;
+  }
+  nav.addEventListener('wheel', function(e){
+    if (e.deltaY === 0) return;
+    e.preventDefault();
+    nav.scrollLeft += e.deltaY * 1.5;
+  }, { passive: false });
+})(20);
+</script>
+""", height=0)
 
 # Trata navegação via query param mantendo o token na URL
 _p_url = st.query_params.get("p", "")
