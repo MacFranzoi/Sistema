@@ -2835,42 +2835,47 @@ if _pg == "acerto":
     st.divider()
 
     # ── Aplicar custo por tipo de variação ──────────────────────────────────────
-    with st.expander("⚙️ Aplicar custo por tipo de variação", expanded=False):
-        custos_tipo = api.carregar_custos_tipo()
-        tipo_opts = list(custos_tipo.keys())
+    if st.session_state.itens_acerto:
+        tipos_disponiveis = sorted(list(set(
+            item.get("tipo_variacao") for item in st.session_state.itens_acerto
+            if item.get("tipo_variacao")
+        )))
 
-        col_t1, col_t2 = st.columns([2, 1])
-        tipo_sel = col_t1.selectbox("Tipo de variação", tipo_opts, key="ac_tipo_custo")
+        if tipos_disponiveis:
+            with st.expander("⚙️ Aplicar custo por tipo de variação", expanded=False):
+                custos_tipo = api.carregar_custos_tipo()
 
-        if tipo_sel:
-            custo_padrao = float(custos_tipo.get(tipo_sel, 0))
-            col_t3, col_t4 = st.columns([2, 1])
-            custo_input = col_t3.text_input(
-                "Valor de custo (formato: 19,90)",
-                value=f"{custo_padrao:,.2f}".replace(".", ","),
-                key="ac_custo_tipo_val",
-                placeholder="ex: 19,90"
-            )
+                col_t1, col_t2 = st.columns([2, 1])
+                tipo_sel = col_t1.selectbox("Tipo disponível na lista", tipos_disponiveis, key="ac_tipo_custo")
 
-            if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_tipo_custo"):
-                try:
-                    custo_br = custo_input.replace(",", ".")
-                    custo_num = float(custo_br)
+                if tipo_sel:
+                    custo_padrao = float(custos_tipo.get(tipo_sel, 0))
+                    col_t3, col_t4 = st.columns([2, 1])
+                    custo_input = col_t3.text_input(
+                        "Valor de custo (formato: 19,90)",
+                        value=f"{custo_padrao:,.2f}".replace(".", ","),
+                        key="ac_custo_tipo_val",
+                        placeholder="ex: 19,90"
+                    )
 
-                    aplicados = 0
-                    for item in st.session_state.itens_acerto:
-                        if tipo_sel.lower() in (item.get("variacao_nome", "") or "").lower():
-                            item["valor_custo"] = custo_num
-                            item["tipo_variacao"] = tipo_sel
-                            aplicados += 1
+                    if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_tipo_custo"):
+                        try:
+                            custo_br = custo_input.replace(",", ".")
+                            custo_num = float(custo_br)
 
-                    if aplicados > 0:
-                        st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
-                        st.rerun()
-                    else:
-                        st.info(f"Nenhum item com tipo '{tipo_sel}' na lista.")
-                except ValueError:
-                    st.error("Valor inválido. Use formato: 19,90")
+                            aplicados = 0
+                            for item in st.session_state.itens_acerto:
+                                if item.get("tipo_variacao") == tipo_sel:
+                                    item["valor_custo"] = custo_num
+                                    aplicados += 1
+
+                            if aplicados > 0:
+                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
+                                st.rerun()
+                            else:
+                                st.info(f"Nenhum item com tipo '{tipo_sel}' na lista.")
+                        except ValueError:
+                            st.error("Valor inválido. Use formato: 19,90")
 
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
