@@ -2883,6 +2883,8 @@ if _pg == "acerto":
                                 aplicados += 1
 
                             if aplicados > 0:
+                                # Força o data_editor a recarregar com os novos custos
+                                st.session_state["_ac_editor_ver"] = st.session_state.get("_ac_editor_ver", 0) + 1
                                 st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
                                 st.rerun()
                         except ValueError:
@@ -2891,20 +2893,27 @@ if _pg == "acerto":
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
     if st.session_state.itens_acerto:
-        _df_ac = pd.DataFrame(st.session_state.itens_acerto)
-        sort_cols = [c for c in ["cod_interno", "variacao_cod"] if c in _df_ac.columns]
-        if sort_cols:
-            _df_ac = _df_ac.sort_values(sort_cols, ignore_index=True)
-        else:
-            _df_ac = _df_ac.reset_index(drop=True)
+        # Ordena a própria lista (in-place, estável) para que o índice da
+        # tabela case exatamente com o índice em session_state.
+        st.session_state.itens_acerto.sort(
+            key=lambda it: (str(it.get("cod_interno", "")), str(it.get("variacao_cod", "")))
+        )
 
+        _df_ac = pd.DataFrame(st.session_state.itens_acerto).reset_index(drop=True)
         cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "tipo_variacao", "cor_preco_variacao", "quantidade", "valor_custo"] if c in _df_ac.columns]
         _df_ac_edit = _df_ac[cols_disp].rename(columns={
             "cod_interno": "Cód.", "produto_nome": "Produto",
             "variacao_cod": "Cód. Var.", "variacao_nome": "Variação", "tipo_variacao": "Tipo Capa",
             "cor_preco_variacao": "Cor/Preço", "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
         }).copy()
+        # Garante que o custo seja numérico (pode vir como "0.00" string)
+        _df_ac_edit["Custo Unit. (R$)"] = pd.to_numeric(
+            _df_ac_edit["Custo Unit. (R$)"], errors="coerce"
+        ).fillna(0.0)
 
+        # Versão do editor: ao aplicar custo por tipo, incrementamos para forçar
+        # o data_editor a recarregar os valores novos (evita sobrescrita pelo cache).
+        _editor_key = f"edit_ac_custos_{st.session_state.get('_ac_editor_ver', 0)}"
         _edited_ac = st.data_editor(
             _df_ac_edit,
             use_container_width=True,
@@ -2915,10 +2924,10 @@ if _pg == "acerto":
                 ),
                 "Qtd": st.column_config.NumberColumn(disabled=True),
             },
-            key="edit_ac_custos"
+            key=_editor_key
         )
 
-        if not _edited_ac.equals(_df_ac_edit):
+        if not _edited_ac["Custo Unit. (R$)"].equals(_df_ac_edit["Custo Unit. (R$)"]):
             for i, row in _edited_ac.iterrows():
                 st.session_state.itens_acerto[i]["valor_custo"] = float(row["Custo Unit. (R$)"])
 
