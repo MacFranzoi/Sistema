@@ -3684,6 +3684,13 @@ TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuaç�
    → iPhone 15 | kit="space" | quantidade_fixa=5
    → iPhone 16 | kit="space" | quantidade_fixa=5
    (kit "space" é herdado por todos até que o usuário troque de kit)
+2c. MODELO REPETIDO — quando um modelo já mencionado anteriormente for dito novamente:
+   → acumule os novos itens sob esse modelo (NÃO duplique o modelo, apenas adicione os itens novos)
+   → considere qualquer variação ortográfica / abreviação que identifique o mesmo modelo
+   Ex: "A54 masculino três ... iPhone 15 brilho dois ... A54 uma preta"
+   → A54 | kit="masculino" | qtd=3
+   → iPhone 15 | kit="brilho" | qtd=2
+   → A54 | kit="avulso cor" descricao_avulso="preta" | qtd=1  ← gera nova entrada (acumula no A54)
 3. nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max"). NUNCA inclua kit, variação, preço, "SL", "MG", "magsafe", "silicone", "masculino", "feminino" ou qualquer outro dado no nome do produto. Se tiver dúvida entre modelo e kit, o nome do modelo termina no número/geração (ex: "Pro Max", "S24+") e todo o resto é kit.
 4. ORDEM DOS TOKENS FLEXÍVEL — dentro de uma entrada, quantidade, kit e preço podem aparecer em qualquer ordem. Identifique cada token pelo tipo:
    • número inteiro OU por extenso (ex: 8, "oito", "seis", "três") → quantidade_fixa
@@ -3700,6 +3707,17 @@ TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuaç�
 8. [número ou extenso] + [kit] → kit=nome mapeado, quantidade_fixa=número
 9. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=null (o sistema usa a quantidade padrão do kit)
 10. Uma entrada JSON por par modelo+cor ou modelo+kit
+11. COMANDOS DE CONTROLE DE VOZ — palavras que não são itens, mas instruções de edição:
+    "errei" / "erro" / "não era isso" / "cancela" / "apaga" / "volta" / "desfaz" →
+      EXCLUA o último item gerado até aquele ponto. Se vier duas vezes seguidas, exclua os dois últimos, etc.
+      Ex: "A54 masculino cinco errei brilho três" → ignora "masculino cinco", gera A54 brilho 3
+      Ex: "iPhone 15 brilho dois errei errei" → ignora os últimos dois itens do iPhone 15
+    "próximo" / "próxima" / "próximo modelo" / "outro modelo" →
+      Encerra o contexto do modelo atual. O próximo token nomeado será um NOVO modelo (não herda).
+      Útil para separar modelos sem precisar dizer o nome completo.
+      Ex: "A54 masculino cinco próximo G54 brilho três" → A54 masc 5 | G54 brilho 3
+      (sem "próximo" o G54 poderia ser ambíguo; com ele fica claro que troca de modelo)
+    "e também" / "e o" / "mais" (referindo-se ao mesmo modelo) → continua acumulando no modelo atual.
 
 Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
 → A07 | kit="diversos masculino" | qtd=1
@@ -3734,6 +3752,12 @@ Exemplo E — herança de kit (produto onde modelo=variação):
 → iPhone 7 Plus | kit="space" | quantidade_fixa=4
 → iPhone 16E | kit="space" | quantidade_fixa=5
 ATENÇÃO: "Space" NÃO é nome_produto — é o kit. O nome_produto é SEMPRE o modelo do aparelho.
+
+Exemplo F — comandos de controle (errei / próximo / modelo repetido):
+"A54 masculino cinco errei brilho três próximo G54 feminino dois A54 uma preta"
+→ A54 | kit="brilho" | qtd=3         ← "masculino cinco" foi cancelado pelo "errei"
+→ G54 | kit="feminino" | qtd=2       ← "próximo" sinalizou troca de modelo
+→ A54 | kit="avulso cor" descricao_avulso="preta" | qtd=1  ← A54 repetido: acumula nova entrada
 
 EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
 Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
