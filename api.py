@@ -459,34 +459,25 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
     """Cria uma Compra para lançar estoque (acerto).
     itens: lista de dicts com produto_id, variacao_id, produto_nome,
            possui_variacao, quantidade, valor_custo.
-    Consolida itens iguais (mesmo produto_id + variacao_id).
+    Envia cada item separadamente conforme a API espera.
     """
     from datetime import date as _date
-    from collections import defaultdict
 
     hoje = _date.today().strftime("%Y-%m-%d")
 
-    # Consolidar itens iguais
-    consolidados = defaultdict(lambda: {"qtd": 0, "custo": 0, "nome": "", "possui_var": 0})
-    for it in itens:
-        chave = (it.get("produto_id"), it.get("variacao_id") or "")
-        consolidados[chave]["qtd"] += int(it.get("quantidade", 1))
-        consolidados[chave]["custo"] = float(it.get("valor_custo") or 0)
-        consolidados[chave]["nome"] = it.get("produto_nome", "")
-        consolidados[chave]["possui_var"] = 1 if it.get("variacao_id") else 0
-
     _total = 0.0
     produtos = []
-    for (pid, vid), dados in consolidados.items():
-        _qtd    = dados["qtd"]
-        _custo  = dados["custo"]
+    for it in itens:
+        _qtd    = int(it.get("quantidade", 1))
+        _custo  = float(it.get("valor_custo") or 0)
         _total += _qtd * _custo
+        _vid    = it.get("variacao_id") or ""
         produtos.append({
             "produto": {
-                "produto_id":       str(pid),
-                "variacao_id":      str(vid),
-                "nome_produto":     dados["nome"],
-                "possui_variacao":  dados["possui_var"],
+                "produto_id":       str(it["produto_id"]),
+                "variacao_id":      str(_vid),
+                "nome_produto":     it.get("produto_nome", ""),
+                "possui_variacao":  1 if _vid else 0,
                 "quantidade":       str(_qtd),
                 "quantidade_saida": "0",
                 "valor_custo":      f"{_custo:.2f}",
