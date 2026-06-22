@@ -576,6 +576,7 @@ _MENU_FULL = [
     ("financeiro",      "💳", "Financeiro",           "FINANCEIRO",   None,  False),
     # RELATÓRIOS
     ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",   None,  False),
+    ("rel_estoque",     "📦", "Estoque",              "RELATÓRIOS",   None,  False),
     # CONFIG
     ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None,  False),
     ("listas",          "📋", "Listas",               "CONFIGURAÇÕES",None,  False),
@@ -1733,6 +1734,118 @@ if _pg == "relatorios":
                     rfr3.markdown(f'<div class="stat-box"><div class="stat-val" style="color:{cor_res}">R$ {resultado:,.0f}</div><div class="stat-lbl">Resultado</div></div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f"Erro: {e}")
+
+# ══════════════════════════════════════════════
+# RELATÓRIO DE ESTOQUE
+# ══════════════════════════════════════════════
+if _pg == "rel_estoque":
+    st.subheader("Relatório de Estoque")
+
+    tab_loja, tab_comp = st.tabs(["📋 Por Loja", "📊 Comparativo — Todas as Lojas"])
+
+    def _build_estoque_df(cache_data, filtro_busca="", filtro_status="Todos"):
+        rows = []
+        for p in cache_data.get("produtos", []):
+            for v in p.get("variacoes", []):
+                vd = v.get("variacao", v)
+                qtd = int(float(vd.get("estoque", 0) or 0))
+                custo = float(p.get("valor_custo") or 0)
+                rows.append({
+                    "Produto":       p.get("nome", ""),
+                    "Cód. Interno":  p.get("codigo_interno", ""),
+                    "Variação":      vd.get("nome", ""),
+                    "Cód. Var.":     vd.get("codigo", ""),
+                    "Estoque":       qtd,
+                    "Custo Unit.":   custo,
+                    "Valor Total":   round(qtd * custo, 2),
+                })
+        df = pd.DataFrame(rows) if rows else pd.DataFrame(
+            columns=["Produto","Cód. Interno","Variação","Cód. Var.","Estoque","Custo Unit.","Valor Total"]
+        )
+        if filtro_busca:
+            t = filtro_busca.lower()
+            df = df[df["Produto"].str.lower().str.contains(t) | df["Cód. Interno"].str.lower().str.contains(t)]
+        if filtro_status == "Negativos":
+            df = df[df["Estoque"] < 0]
+        elif filtro_status == "Zerados":
+            df = df[df["Estoque"] == 0]
+        elif filtro_status == "Sem estoque (≤ 0)":
+            df = df[df["Estoque"] <= 0]
+        elif filtro_status == "Com estoque":
+            df = df[df["Estoque"] > 0]
+        return df.sort_values(["Produto","Variação"]).reset_index(drop=True)
+
+    with tab_loja:
+        fl1, fl2, fl3 = st.columns([2, 1, 1])
+        loja_rel = fl1.selectbox("Loja", list(api.LOJAS.values()), key="re_loja")
+        loja_id_rel = next((lid for lid, ln in api.LOJAS.items() if ln == loja_rel), None)
+        filtro_status_re = fl2.selectbox("Mostrar", ["Todos","Com estoque","Sem estoque (≤ 0)","Negativos","Zerados"], key="re_status")
+        busca_re = fl3.text_input("Buscar produto", key="re_busca", placeholder="Nome ou cód...")
+
+        c_rel = api.carregar_cache(loja_id_rel)
+        if not c_rel:
+            st.warning(f"Cache de **{loja_rel}** não encontrado. Sincronize primeiro.")
+        else:
+            sync_em = c_rel.get("sincronizado_em","")[:16].replace("T"," às ")
+            df_re = _build_estoque_df(c_rel, busca_re, filtro_status_re)
+
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("Variações", len(df_re))
+            col_m2.metric("Unidades", int(df_re["Estoque"].sum()))
+            col_m3.metric("Valor em estoque", f"R$ {df_re['Valor Total'].sum():,.2f}")
+            st.caption(f"Cache: {sync_em}")
+
+            st.dataframe(
+                df_re.style.applymap(lambda v: "color: #e74c3c" if isinstance(v, int) and v < 0 else "", subset=["Estoque"]),
+                use_container_width=True, hide_index=True
+            )
+
+            csv_bytes = df_re.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "⬇️ Baixar CSV",
+                data=csv_bytes,
+                file_name=f"estoque_{loja_rel}_{date.today()}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+    with tab_comp:
+        busca_comp = st.text_input("Buscar produto", key="comp_busca", placeholder="Nome ou cód...")
+        filtro_comp = st.selectbox("Mostrar", ["Todos","Com estoque em alguma loja","Sem estoque em todas"], key="comp_status")
+
+        if st.button("📊 Gerar comparativo", type="primary", use_container_width=True):
+            with st.spinner("Carregando todas as lojas…"):
+                dfs = {}
+                for lid, lnome in api.LOJAS.items():
+                    c = api.carregar_cache(lid)
+                    if c:
+                        dfs[lnome] = _build_estoque_df(c, busca_comp, "Todos").set_index(["Produto","Cód. Interno","Variação","Cód. Var."])
+                if not dfs:
+                    st.warning("Nenhum cache encontrado. Sincronize as lojas primeiro.")
+                else:
+                    df_comp = pd.concat(
+                        {lnome: df["Estoque"] for lnome, df in dfs.items()}, axis=1
+                    ).fillna(0).astype(int).reset_index()
+
+                    if filtro_comp == "Com estoque em alguma loja":
+                        lojas_cols = list(api.LOJAS.values())
+                        df_comp = df_comp[df_comp[[c for c in lojas_cols if c in df_comp.columns]].max(axis=1) > 0]
+                    elif filtro_comp == "Sem estoque em todas":
+                        lojas_cols = list(api.LOJAS.values())
+                        df_comp = df_comp[df_comp[[c for c in lojas_cols if c in df_comp.columns]].max(axis=1) <= 0]
+
+                    st.metric("Variações encontradas", len(df_comp))
+                    st.dataframe(df_comp, use_container_width=True, hide_index=True)
+
+                    csv_comp = df_comp.to_csv(index=False).encode("utf-8-sig")
+                    st.download_button(
+                        "⬇️ Baixar comparativo CSV",
+                        data=csv_comp,
+                        file_name=f"estoque_comparativo_{date.today()}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+
 
 # ══════════════════════════════════════════════
 # SINCRONIZAÇÃO

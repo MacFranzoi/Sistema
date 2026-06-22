@@ -40,7 +40,7 @@ _SETORES_PADRAO = {
             "vendas","orcamentos",
             "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
-            "financeiro","relatorios",
+            "financeiro","relatorios","rel_estoque",
             "sincronizacao","usuarios",
         ],
     },
@@ -52,7 +52,7 @@ _SETORES_PADRAO = {
             "vendas","orcamentos",
             "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
-            "financeiro","relatorios",
+            "financeiro","relatorios","rel_estoque",
         ],
     },
     "estoque": {
@@ -61,6 +61,7 @@ _SETORES_PADRAO = {
             "dashboard",
             "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
             "pedido","compras_hist",
+            "rel_estoque",
         ],
     },
     "compras": {
