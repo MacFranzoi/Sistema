@@ -2831,7 +2831,35 @@ if _pg == "acerto":
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
     if st.session_state.itens_acerto:
-        st.dataframe(df_lista_resumo(st.session_state.itens_acerto), use_container_width=True, hide_index=True)
+        _df_ac = pd.DataFrame(st.session_state.itens_acerto).sort_values(
+            [c for c in ["cod_interno", "variacao_cod"] if c in st.session_state.itens_acerto[0].keys()],
+            ignore_index=True
+        ) if st.session_state.itens_acerto else pd.DataFrame()
+
+        _df_ac_edit = _df_ac[[
+            "cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "quantidade", "valor_custo"
+        ]].rename(columns={
+            "cod_interno": "Cód.", "produto_nome": "Produto",
+            "variacao_cod": "Cód. Var.", "variacao_nome": "Variação",
+            "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
+        }).copy()
+
+        _edited_ac = st.data_editor(
+            _df_ac_edit,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Custo Unit. (R$)": st.column_config.NumberColumn(
+                    min_value=0.01, max_value=9999.99, step=0.01, format="R$ %.2f"
+                ),
+                "Qtd": st.column_config.NumberColumn(disabled=True),
+            },
+            key="edit_ac_custos"
+        )
+
+        if not _edited_ac.equals(_df_ac_edit):
+            for i, row in _edited_ac.iterrows():
+                st.session_state.itens_acerto[i]["valor_custo"] = float(row["Custo Unit. (R$)"])
 
         painel_salvar(st.session_state.itens_acerto, "acerto", key_suffix="ac")
 
