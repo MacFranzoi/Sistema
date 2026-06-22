@@ -2846,17 +2846,17 @@ if _pg == "acerto":
 
     # ── Aplicar custo por tipo (cores agrupadas) ou tipo/preço ──────────────────────────────────────
     if st.session_state.itens_acerto:
-        CORES_COMUNS = {"azul", "preto", "branco", "vermelho", "verde", "amarelo", "rosa", "roxo",
-                        "laranja", "marrom", "cinza", "bege", "dourado", "prata", "transparente",
-                        "ouro", "natural", "nude"}
+        import re as _re
 
         tipos_agrupados = {}
         for item in st.session_state.itens_acerto:
             tipo = item.get("tipo_variacao", "")
-            cor_preco = item.get("cor_preco_variacao", "").strip().lower()
+            cor_preco = item.get("cor_preco_variacao", "")
 
-            eh_cor = cor_preco in CORES_COMUNS if cor_preco else False
-            chave = tipo if eh_cor else f"{item.get('cor_preco_variacao', '')} / {tipo}"
+            # Se a parte antes da "/" tem números, é PREÇO (custo diferente).
+            # Se é texto puro, é COR → mesmo custo, agrupa só pelo tipo.
+            eh_preco = bool(_re.search(r"\d", cor_preco))
+            chave = f"{cor_preco} / {tipo}" if eh_preco else tipo
 
             if chave not in tipos_agrupados:
                 tipos_agrupados[chave] = []
