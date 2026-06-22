@@ -621,7 +621,7 @@ section[data-testid="stMain"] {{
     margin-top: 0 !important;
 }}
 .main .block-container {{
-    padding-top: 0 !important;
+    padding-top: var(--plug-header-h, 52px) !important;
     padding-left: clamp(8px, 3vw, 32px) !important;
     padding-right: clamp(8px, 3vw, 32px) !important;
     padding-bottom: max(40px, env(safe-area-inset-bottom)) !important;
@@ -630,17 +630,12 @@ section[data-testid="stMain"] {{
 
 /* Cabeçalho de navegação: logo + categorias + submenu */
 .plug-header {{
-    position: sticky; top: 0; z-index: 999;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 999;
     background: {SB}; border-bottom: 1px solid {BOR};
 }}
-.plug-logo-bar {{
-    display: flex; align-items: center;
-    padding: 6px clamp(6px, 2vw, 12px);
-    border-bottom: 1px solid {BOR};
-}}
 .plug-logo {{
-    width: 40px; height: 40px; border-radius: 50%;
-    object-fit: cover;
+    width: 34px; height: 34px; border-radius: 50%;
+    object-fit: cover; flex-shrink: 0; margin-right: 8px;
     border: 1.5px solid {BOR};
 }}
 .plug-cats {{
@@ -648,7 +643,7 @@ section[data-testid="stMain"] {{
     padding: 0 clamp(6px, 2vw, 12px);
     padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
     padding-right: max(clamp(6px, 2vw, 12px), env(safe-area-inset-right));
-    height: 44px; overflow-x: auto; scrollbar-width: none;
+    height: 48px; overflow-x: auto; scrollbar-width: none;
 }}
 .plug-cats::-webkit-scrollbar {{ display: none; }}
 .cat-btn {{
@@ -716,7 +711,7 @@ for _m in _MENU_VISIVEL:
 
 _active_cat = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _cats_ordered[0] if _cats_ordered else "")
 
-_cats_row = ""
+_cats_row = f'<img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo" alt="Plug" />'
 for _cat in _cats_ordered:
     _acls = " ativo" if _cat == _active_cat else ""
     _cats_row += (
@@ -738,9 +733,6 @@ for _cat in _cats_ordered:
 
 _nav_html = f"""
 <div class="plug-header" id="plugHeader">
-  <div class="plug-logo-bar">
-    <img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo" alt="Plug" />
-  </div>
   <div class="plug-cats" id="plugCats">{_cats_row}</div>
   {_subs_html}
 </div>
@@ -782,7 +774,8 @@ import streamlit.components.v1 as _stc
 _stc.html("""
 <script>
 (function retry(attempts){
-  var hdr = window.parent.document.getElementById('plugHeader');
+  var doc = window.parent.document;
+  var hdr = doc.getElementById('plugHeader');
   if (!hdr) {
     if (attempts > 0) setTimeout(function(){ retry(attempts-1); }, 150);
     return;
@@ -794,9 +787,17 @@ _stc.html("""
       el.scrollLeft += e.deltaY * 1.5;
     }, { passive: false });
   }
-  var cats = window.parent.document.getElementById('plugCats');
+  var cats = doc.getElementById('plugCats');
   if (cats) bindWheel(cats);
   hdr.querySelectorAll('.plug-submenu').forEach(bindWheel);
+
+  // Ajusta padding-top do conteúdo para compensar header fixo
+  function ajustarPadding() {
+    var h = hdr.offsetHeight;
+    doc.documentElement.style.setProperty('--plug-header-h', h + 'px');
+  }
+  ajustarPadding();
+  new ResizeObserver(ajustarPadding).observe(hdr);
 })(20);
 </script>
 """, height=0)
