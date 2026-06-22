@@ -474,16 +474,17 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
             _custo = 0.01
         _total += _qtd * _custo
         _vid    = it.get("variacao_id") or ""
+        _qtd_str = f"{_qtd:.2f}"          # formato "5.00" como o blueprint
         produtos.append({
             "produto": {
                 "produto_id":       str(it["produto_id"]),
                 "variacao_id":      str(_vid),
                 "nome_produto":     it.get("produto_nome", ""),
                 "possui_variacao":  1 if _vid else 0,
-                "quantidade":       str(_qtd),
-                "quantidade_saida": "0",
+                "quantidade":       _qtd_str,
+                "quantidade_saida": _qtd_str,   # entra TODA a quantidade no estoque
                 "valor_custo":      f"{_custo:.2f}",
-                "detalhes":         "",
+                "detalhes":         "Nenhum detalhe",
                 "unidade":          "UND",
                 "largura":          0,
                 "altura":           0,
@@ -509,7 +510,11 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
             }
         ],
     }
-    return _post("compras", body, loja_id=loja_id)
+    _resp = _post("compras", body, loja_id=loja_id)
+    # Anexa o body enviado para depuração (não afeta a API)
+    if isinstance(_resp, dict):
+        _resp["_body_enviado"] = body
+    return _resp
 
 
 def estoque_produto_por_loja(produto_id):
