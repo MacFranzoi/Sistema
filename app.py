@@ -633,19 +633,24 @@ section[data-testid="stMain"] {{
     position: sticky; top: 0; z-index: 999;
     background: {SB}; border-bottom: 1px solid {BOR};
 }}
+.plug-logo-bar {{
+    display: flex; align-items: center;
+    padding: 6px clamp(6px, 2vw, 12px);
+    border-bottom: 1px solid {BOR};
+}}
+.plug-logo {{
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid {BOR};
+}}
 .plug-cats {{
     display: flex; align-items: center; gap: 2px;
     padding: 0 clamp(6px, 2vw, 12px);
     padding-left: max(clamp(6px, 2vw, 12px), env(safe-area-inset-left));
     padding-right: max(clamp(6px, 2vw, 12px), env(safe-area-inset-right));
-    height: 48px; overflow-x: auto; scrollbar-width: none;
+    height: 44px; overflow-x: auto; scrollbar-width: none;
 }}
 .plug-cats::-webkit-scrollbar {{ display: none; }}
-.plug-logo {{
-    width: 34px; height: 34px; border-radius: 50%;
-    object-fit: cover; flex-shrink: 0; margin-right: 6px;
-    border: 1.5px solid {BOR};
-}}
 .cat-btn {{
     display: inline-flex; align-items: center; gap: 4px;
     padding: 4px 10px; border-radius: 6px;
@@ -711,7 +716,7 @@ for _m in _MENU_VISIVEL:
 
 _active_cat = next((m[3] for m in _MENU_VISIVEL if m[0] == _pg_ativo), _cats_ordered[0] if _cats_ordered else "")
 
-_cats_row = f'<img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo" alt="Plug" />'
+_cats_row = ""
 for _cat in _cats_ordered:
     _acls = " ativo" if _cat == _active_cat else ""
     _cats_row += (
@@ -733,6 +738,9 @@ for _cat in _cats_ordered:
 
 _nav_html = f"""
 <div class="plug-header" id="plugHeader">
+  <div class="plug-logo-bar">
+    <img src="data:image/jpeg;base64,{_LOGO_B64}" class="plug-logo" alt="Plug" />
+  </div>
   <div class="plug-cats" id="plugCats">{_cats_row}</div>
   {_subs_html}
 </div>
