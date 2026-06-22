@@ -686,9 +686,9 @@ section[data-testid="stMain"] {{
 }}
 
 /* Transição suave do conteúdo ao navegar */
-.main .block-container {
+.main .block-container {{
     animation: plugFade 0.18s ease-out;
-}
+}}
 @keyframes plugFade {{
     from {{ opacity: 0.15; }}
     to   {{ opacity: 1; }}
