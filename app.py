@@ -3566,6 +3566,33 @@ As pessoas anotam os modelos com abreviações e erros de digitação. Seu traba
 Pedido recebido (pré-processado — timestamps e nomes removidos, modelos com barra já expandidos):
 {_texto_proc}
 
+FORMATO DO TEXTO — detecte automaticamente e interprete de acordo:
+
+TABELA (colunas separadas por |, tab, ;, ou espaços alinhados, com cabeçalho opcional):
+  Ex: "Modelo | Kit | Qtd" ou "A54 | masculino | 5" ou "iPhone 15 brilho 3"
+  → cada linha é um item. As colunas podem ser: modelo, kit/variação, quantidade, preço, observação.
+  → se houver cabeçalho ("Modelo", "Kit", "Qtd", "Produto", "Tipo", "Cor", "Quantidade") ignore-o.
+  → números na coluna de quantidade → quantidade_fixa.
+  → textos de kit/cor → identifique kit ou avulso cor conforme as regras abaixo.
+  → uma linha pode ter só modelo + qtd (sem kit) — processe como faria para qualquer linha.
+  Ex tabela:
+    Modelo        | Kit         | Qtd
+    A54           | masculino   | 5
+    iPhone 15     | brilho      | 3
+    Edge 60       | feminino    | 2
+  → A54 | kit="masculino" | qtd=5
+  → iPhone 15 | kit="brilho" | qtd=3
+  → Edge 60 | kit="feminino" | qtd=2
+
+LISTA WPP (linhas com abreviações, sem colunas definidas):
+  Formato normal: "A54 masc 5", "iphone15 brilho três"
+
+FALA NATURAL / DITADO (fala contínua sem pontuação):
+  Ex: "a cinquenta e quatro masculino cinco edge sessenta feminino dois"
+  → usa herança de modelo e as regras de transcrição de voz abaixo.
+
+Os três formatos podem aparecer misturados no mesmo texto — processe cada linha conforme seu formato.
+
 Catálogo de aparelhos (cod_interno | nome):
 {_catalogo_txt}
 
