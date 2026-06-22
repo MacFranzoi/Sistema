@@ -2860,9 +2860,14 @@ if _pg == "acerto":
                         )
                         _compra_id = (_res_ac.get("data") or {}).get("id", "?")
                         _prod_count = len((_res_ac.get("data") or {}).get("produtos", []))
-                        st.success(f"✅ Compra **#{_compra_id}** criada — **{_prod_count} produtos** salvos no sistema!")
-                        st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
-                        st.session_state.itens_acerto = []
+                        if _prod_count == 0 and len(st.session_state.itens_acerto) > 0:
+                            st.warning(f"⚠️ Compra **#{_compra_id}** criada mas **NENHUM produto foi salvo**!")
+                            with st.expander("🔍 Resposta da API", expanded=True):
+                                st.json(_res_ac)
+                        else:
+                            st.success(f"✅ Compra **#{_compra_id}** criada — **{_prod_count} produtos** salvos no sistema!")
+                            st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
+                            st.session_state.itens_acerto = []
                     except Exception as _e_ac:
                         st.error(f"❌ Erro: {_e_ac}")
         with col_z:
