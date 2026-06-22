@@ -2836,48 +2836,55 @@ if _pg == "acerto":
 
     st.divider()
 
-    # ── Aplicar custo por tipo/categoria de variação ──────────────────────────────────────
+    # ── Aplicar custo por tipo (cores agrupadas) ou tipo/preço ──────────────────────────────────────
     if st.session_state.itens_acerto:
-        combos_disponiveis = sorted(list(set(
-            f"{item.get('tipo_variacao', '')}" + (f" / {item.get('categoria_variacao', '')}" if item.get('categoria_variacao') else "")
-            for item in st.session_state.itens_acerto
-        )))
+        CORES_COMUNS = {"azul", "preto", "branco", "vermelho", "verde", "amarelo", "rosa", "roxo",
+                        "laranja", "marrom", "cinza", "bege", "dourado", "prata", "transparente",
+                        "ouro", "prata", "natural", "nude"}
 
-        if combos_disponiveis:
-            with st.expander("⚙️ Aplicar custo por tipo/categoria", expanded=False):
+        tipos_agrupados = {}
+        for item in st.session_state.itens_acerto:
+            tipo = item.get("tipo_variacao", "")
+            cat = item.get("categoria_variacao", "").strip().lower()
+
+            eh_cor = cat in CORES_COMUNS if cat else False
+            chave = tipo if eh_cor else f"{tipo} / {item.get('categoria_variacao', '')}"
+
+            if chave not in tipos_agrupados:
+                tipos_agrupados[chave] = []
+            tipos_agrupados[chave].append(item)
+
+        if tipos_agrupados:
+            with st.expander("⚙️ Aplicar custo por tipo", expanded=False):
                 custos_tipo = api.carregar_custos_tipo()
 
                 col_t1, col_t2 = st.columns([2, 1])
-                combo_sel = col_t1.selectbox("Tipo/Categoria disponível", combos_disponiveis, key="ac_combo_custo")
+                tipo_sel = col_t1.selectbox("Tipo disponível", sorted(tipos_agrupados.keys()), key="ac_tipo_sel")
 
-                if combo_sel:
-                    tipo_only = combo_sel.split("/")[0].strip()
-                    custo_padrao = float(custos_tipo.get(tipo_only, 0))
+                if tipo_sel:
+                    tipo_base = tipo_sel.split("/")[0].strip()
+                    custo_padrao = float(custos_tipo.get(tipo_base, 0))
                     col_t3, col_t4 = st.columns([2, 1])
                     custo_input = col_t3.text_input(
                         "Valor de custo (formato: 19,90)",
                         value=f"{custo_padrao:,.2f}".replace(".", ","),
-                        key="ac_custo_combo_val",
+                        key="ac_custo_input",
                         placeholder="ex: 19,90"
                     )
 
-                    if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_combo_custo"):
+                    if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_btn"):
                         try:
                             custo_br = custo_input.replace(",", ".")
                             custo_num = float(custo_br)
 
                             aplicados = 0
-                            for item in st.session_state.itens_acerto:
-                                item_combo = f"{item.get('tipo_variacao', '')}" + (f" / {item.get('categoria_variacao', '')}" if item.get('categoria_variacao') else "")
-                                if item_combo == combo_sel:
-                                    item["valor_custo"] = custo_num
-                                    aplicados += 1
+                            for item in tipos_agrupados[tipo_sel]:
+                                item["valor_custo"] = custo_num
+                                aplicados += 1
 
                             if aplicados > 0:
-                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{combo_sel}**")
+                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
                                 st.rerun()
-                            else:
-                                st.info(f"Nenhum item com '{combo_sel}' na lista.")
                         except ValueError:
                             st.error("Valor inválido. Use formato: 19,90")
 
