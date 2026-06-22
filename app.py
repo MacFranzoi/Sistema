@@ -957,7 +957,9 @@ def painel_etiquetas(itens, key_suffix=""):
                     for it in itens
                 ]
             }
-            st.success("Lista enviada para a área de transferência! Vá para a aba **Etiquetas**.")
+            st.session_state.pagina = "etiquetas"
+            st.query_params["p"] = "etiquetas"
+            st.rerun()
 
 
 def painel_salvar(itens, tipo, key_suffix=""):
@@ -2703,7 +2705,10 @@ if _pg == "entrada":
                     "origem": "Entrada de Mercadoria",
                     "itens": list(st.session_state.itens_entrada)
                 }
-                st.success("Enviado para área de transferência! Vá para **Acerto de Estoque**.")
+                # Navega via rerun (preserva session_state) em vez de link HTML
+                st.session_state.pagina = "acerto"
+                st.query_params["p"] = "acerto"
+                st.rerun()
 
         # Etiquetas após entrada
         if st.session_state.get("itens_entrada_ok"):
@@ -3109,7 +3114,9 @@ if _pg == "acerto":
                     "origem": "Acerto de Estoque",
                     "itens": list(st.session_state.itens_acerto)
                 }
-                st.success("Enviado! Vá para **Entrada de Mercadoria**.")
+                st.session_state.pagina = "entrada"
+                st.query_params["p"] = "entrada"
+                st.rerun()
 
         if st.session_state.get("itens_acerto_ok"):
             painel_etiquetas(st.session_state.itens_acerto_ok, key_suffix="ac_ok")
@@ -5142,7 +5149,9 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
                         "origem": f"Pedido ({fornecedor_global or '—'})",
                         "itens": itens_entrada
                     }
-                    st.success("Enviado! Vá para **Entrada de Mercadoria** quando a mercadoria chegar.")
+                    st.session_state.pagina = "entrada"
+                    st.query_params["p"] = "entrada"
+                    st.rerun()
             with col_d:
                 if st.button("📋 Texto do pedido", use_container_width=True):
                     linhas = [f"PEDIDO — {fornecedor_global or '—'} — {data_pedido}", "=" * 60]
