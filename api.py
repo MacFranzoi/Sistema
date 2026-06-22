@@ -470,6 +470,8 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
     for it in itens:
         _qtd    = int(it.get("quantidade", 1))
         _custo  = float(it.get("valor_custo") or 0)
+        if _custo <= 0:
+            _custo = 0.01
         _total += _qtd * _custo
         _vid    = it.get("variacao_id") or ""
         produtos.append({
