@@ -845,6 +845,25 @@ _stc.html("""
   var win = doc.defaultView || window.parent;
   function isMobile(){ return win.matchMedia && win.matchMedia('(max-width: 640px)').matches; }
 
+  // ── Remove a marca/badge do Streamlit (injetada tarde, fora do alcance do CSS) ──
+  function nukeStreamlit(){
+    var sels = [
+      '[data-testid="stStatusWidget"]', '[data-testid="stAppDeployButton"]',
+      '[data-testid="stToolbar"]', '[data-testid="stDecoration"]',
+      '[data-testid="stHeader"]', '.stDeployButton', '#MainMenu', 'footer',
+      'a[href*="streamlit.io"]', '[class*="viewerBadge"]',
+      '[class*="_profileContainer"]', '[class*="_container_"][class*="badge"]'
+    ];
+    sels.forEach(function(s){
+      doc.querySelectorAll(s).forEach(function(el){
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+      });
+    });
+  }
+  nukeStreamlit();
+  setInterval(nukeStreamlit, 1200);
+
   // ── Clique nas categorias: abre/fecha o submenu correspondente ──
   if (!hdr.dataset.bound) {
     hdr.dataset.bound = '1';
