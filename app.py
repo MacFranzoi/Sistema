@@ -2870,14 +2870,15 @@ if _pg == "acerto":
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
     if st.session_state.itens_acerto:
-        _df_ac = pd.DataFrame(st.session_state.itens_acerto).sort_values(
-            [c for c in ["cod_interno", "variacao_cod"] if c in st.session_state.itens_acerto[0].keys()],
-            ignore_index=True
-        ) if st.session_state.itens_acerto else pd.DataFrame()
+        _df_ac = pd.DataFrame(st.session_state.itens_acerto)
+        sort_cols = [c for c in ["cod_interno", "variacao_cod"] if c in _df_ac.columns]
+        if sort_cols:
+            _df_ac = _df_ac.sort_values(sort_cols, ignore_index=True)
+        else:
+            _df_ac = _df_ac.reset_index(drop=True)
 
-        _df_ac_edit = _df_ac[[
-            "cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "quantidade", "valor_custo"
-        ]].rename(columns={
+        cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "quantidade", "valor_custo"] if c in _df_ac.columns]
+        _df_ac_edit = _df_ac[cols_disp].rename(columns={
             "cod_interno": "Cód.", "produto_nome": "Produto",
             "variacao_cod": "Cód. Var.", "variacao_nome": "Variação",
             "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
