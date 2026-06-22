@@ -3053,6 +3053,7 @@ if _pg == "acerto":
                                         st.warning("⚠️ Há IDs de variação repetidos — verifique a lista.")
                             st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
                             st.session_state["_ac_ultima_compra"] = {"id": _compra_id, "loja_id": loja_id}
+                            st.session_state["_ac_body_enviado"] = (_res_ac.get("_body_enviado") or {}).get("produtos", [])
                             st.session_state.itens_acerto = []
                     except Exception as _e_ac:
                         st.error(f"❌ Erro: {_e_ac}")
@@ -3073,19 +3074,108 @@ if _pg == "acerto":
     else:
         st.info("Adicione produtos à lista acima.")
 
-    # ── Conferência: ver o JSON da última compra criada (GET /compras/{id}) ──
-    _ult = st.session_state.get("_ac_ultima_compra")
-    if _ult and _ult.get("id") not in (None, "?", ""):
-        st.divider()
-        st.caption("🔧 Conferência da última compra criada")
-        if st.button(f"📄 Ver JSON da compra #{_ult['id']} (GET /compras)", key="ac_ver_json"):
-            with st.spinner("Buscando compra na API…"):
-                try:
-                    _json_compra = api.get_compra(_ult["id"], loja_id=_ult.get("loja_id"))
-                    st.json(_json_compra)
-                    st.caption("👆 Copie esse JSON e me envie para conferir as variações gravadas.")
-                except Exception as _e_get:
-                    st.error(f"Erro ao buscar compra: {_e_get}")
+    # ── Conferência de compra: confronta o que foi enviado com o que o sistema gravou ──
+    st.divider()
+    st.subheader("🔍 Conferir compra no sistema")
+
+    _cc1, _cc2 = st.columns([2, 1])
+    _compra_conf_id = _cc1.text_input(
+        "ID da compra (ex: 14540862)",
+        value=str(st.session_state.get("_ac_ultima_compra", {}).get("id", "") or ""),
+        key="ac_conf_id",
+        placeholder="Digite o ID da compra criada..."
+    )
+    _cc2.write("")
+    _cc2.write("")
+    _btn_conf = _cc2.button("🔎 Verificar", type="primary", key="ac_conf_btn", use_container_width=True)
+
+    if _btn_conf and _compra_conf_id.strip():
+        with st.spinner("Buscando compra na API…"):
+            try:
+                _resp_conf = api.get_compra(_compra_conf_id.strip(), loja_id=loja_id)
+                _dc = (_resp_conf.get("data") or {}) if isinstance(_resp_conf, dict) else {}
+
+                if not _dc:
+                    st.error(f"Compra #{_compra_conf_id} não encontrada na loja **{loja_sel_nome}**.")
+                else:
+                    # ── Cabeçalho da compra ──
+                    _sit_conf = _dc.get("nome_situacao", "?")
+                    _val_conf = float(_dc.get("valor_produtos") or 0)
+                    _data_conf = _dc.get("data_emissao", "?")
+                    st.markdown(
+                        f"**Compra #{_dc.get('id')}** · {_data_conf} · "
+                        f"Situação: **{_sit_conf}** · Valor produtos: **R$ {_val_conf:,.2f}**"
+                    )
+
+                    # ── Itens gravados no sistema ──
+                    _prods_conf = _dc.get("produtos", [])
+
+                    # ── Itens que enviamos (do body salvo) ──
+                    _ult_id = str(st.session_state.get("_ac_ultima_compra", {}).get("id", ""))
+                    _enviados_body = []
+                    if _ult_id == _compra_conf_id.strip():
+                        # Última compra criada nesta sessão — temos o body
+                        _enviados_body = st.session_state.get("_ac_body_enviado", [])
+
+                    # ── Monta tabela de confronto ──
+                    rows_conf = []
+                    for _pg in _prods_conf:
+                        _pp = _pg.get("produto", _pg)
+                        _vid_sys = str(_pp.get("variacao_id") or "")
+                        _qtd_sys = float(_pp.get("quantidade") or 0)
+                        _nome_sys = _pp.get("nome_produto") or ""
+                        _det_sys  = _pp.get("detalhes") or ""
+
+                        # Tenta casar com o enviado pelo variacao_id
+                        _env = next((
+                            e["produto"] for e in _enviados_body
+                            if str(e.get("produto", {}).get("variacao_id", "")) == _vid_sys
+                        ), None)
+
+                        if _env:
+                            _qtd_env = float(_env.get("quantidade") or 0)
+                            _ok = abs(_qtd_sys - _qtd_env) < 0.01
+                            _status = "✅" if _ok else f"⚠️ esperado {_qtd_env:.0f}"
+                        else:
+                            _ok = True
+                            _status = "✅"
+
+                        rows_conf.append({
+                            "Status":   _status,
+                            "Produto":  _nome_sys,
+                            "Variação": _det_sys,
+                            "ID Var.":  _vid_sys,
+                            "Qtd sistema": int(_qtd_sys),
+                        })
+
+                    if rows_conf:
+                        _df_conf = pd.DataFrame(rows_conf)
+                        _total_ok  = _df_conf["Status"].str.startswith("✅").sum()
+                        _total_err = len(_df_conf) - _total_ok
+
+                        if _total_err == 0:
+                            st.success(f"✅ {_total_ok} item(ns) confirmado(s) — tudo batendo com o enviado.")
+                        else:
+                            st.warning(f"⚠️ {_total_err} divergência(s) encontrada(s).")
+
+                        st.dataframe(_df_conf, use_container_width=True, hide_index=True)
+
+                        # Se temos o enviado, mostra itens que mandamos mas NÃO apareceram
+                        if _enviados_body:
+                            _vids_sys = {str(p.get("produto", {}).get("variacao_id", "")) for p in _prods_conf}
+                            _faltando = [
+                                e["produto"] for e in _enviados_body
+                                if str(e.get("produto", {}).get("variacao_id", "")) not in _vids_sys
+                            ]
+                            if _faltando:
+                                st.error(f"❌ {len(_faltando)} item(ns) enviado(s) que NÃO aparecem na compra:")
+                                for _f in _faltando:
+                                    st.caption(f"• {_f.get('nome_produto')} — {_f.get('detalhes')} (var {_f.get('variacao_id')}, qtd {_f.get('quantidade')})")
+                    else:
+                        st.warning("A compra não tem produtos registrados.")
+
+            except Exception as _e_conf:
+                st.error(f"Erro: {_e_conf}")
 
 
 # ══════════════════════════════════════════════
