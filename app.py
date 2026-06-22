@@ -2814,6 +2814,8 @@ if _pg == "acerto":
                 st.warning("Preencha a quantidade em pelo menos uma variação.")
             else:
                 for _, row in selecionadas_ac.iterrows():
+                    var_nome = row["Variação"]
+                    tipo_det = api.detectar_custo_tipo(produto_ac["nome"], var_nome, api.carregar_custos_tipo())
                     st.session_state.itens_acerto.append({
                         "produto_id":      produto_ac["id"],
                         "produto_nome":    produto_ac["nome"],
@@ -2823,7 +2825,8 @@ if _pg == "acerto":
                         "possui_variacao": produto_ac.get("possui_variacao", "1"),
                         "variacao_id":     row["_variacao_id"],
                         "variacao_cod":    row["Código Var."],
-                        "variacao_nome":   row["Variação"],
+                        "variacao_nome":   var_nome,
+                        "tipo_variacao":   tipo_det or "",
                         "quantidade":      int(row["Qtd Correta"]),
                         "valor_custo":     produto_ac.get("valor_custo", "0.00"),
                     })
@@ -2831,41 +2834,43 @@ if _pg == "acerto":
 
     st.divider()
 
-    # ── Aplicar custo por categoria ──────────────────────────────────────
-    with st.expander("⚙️ Aplicar custo por categoria", expanded=False):
-        try:
-            arvore_cat = api.grupos_arvore()
-            cat_opts = ["(Nenhum)"] + [g["label"] for g in arvore_cat]
-            cat_sel = st.selectbox("Categoria", cat_opts, key="ac_cat_custo")
+    # ── Aplicar custo por tipo de variação ──────────────────────────────────────
+    with st.expander("⚙️ Aplicar custo por tipo de variação", expanded=False):
+        custos_tipo = api.carregar_custos_tipo()
+        tipo_opts = list(custos_tipo.keys())
 
-            if cat_sel != "(Nenhum)":
-                cat_obj = next((g for g in arvore_cat if g["label"] == cat_sel), None)
-                if cat_obj:
-                    cat_ids = api.grupos_filhos_ids(cat_obj["id"])
+        col_t1, col_t2 = st.columns([2, 1])
+        tipo_sel = col_t1.selectbox("Tipo de variação", tipo_opts, key="ac_tipo_custo")
 
-                    col_c1, col_c2 = st.columns([2, 1])
-                    custo_input = col_c1.text_input("Valor de custo (formato: 19,90)", value="", key="ac_custo_val", placeholder="ex: 19,90")
+        if tipo_sel:
+            custo_padrao = float(custos_tipo.get(tipo_sel, 0))
+            col_t3, col_t4 = st.columns([2, 1])
+            custo_input = col_t3.text_input(
+                "Valor de custo (formato: 19,90)",
+                value=f"{custo_padrao:,.2f}".replace(".", ","),
+                key="ac_custo_tipo_val",
+                placeholder="ex: 19,90"
+            )
 
-                    if col_c2.button("✅ Aplicar", use_container_width=True, key="ac_apply_custo"):
-                        try:
-                            custo_br = custo_input.replace(",", ".")
-                            custo_num = float(custo_br)
+            if col_t4.button("✅ Aplicar", use_container_width=True, key="ac_apply_tipo_custo"):
+                try:
+                    custo_br = custo_input.replace(",", ".")
+                    custo_num = float(custo_br)
 
-                            aplicados = 0
-                            for item in st.session_state.itens_acerto:
-                                if str(item.get("grupo_id", "")) in cat_ids:
-                                    item["valor_custo"] = custo_num
-                                    aplicados += 1
+                    aplicados = 0
+                    for item in st.session_state.itens_acerto:
+                        if tipo_sel.lower() in (item.get("variacao_nome", "") or "").lower():
+                            item["valor_custo"] = custo_num
+                            item["tipo_variacao"] = tipo_sel
+                            aplicados += 1
 
-                            if aplicados > 0:
-                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de {cat_sel}")
-                                st.rerun()
-                            else:
-                                st.info(f"Nenhum item de {cat_sel} na lista.")
-                        except ValueError:
-                            st.error("Valor inválido. Use formato: 19,90")
-        except Exception as e:
-            st.caption(f"⚠️ Erro ao carregar categorias: {e}")
+                    if aplicados > 0:
+                        st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de **{tipo_sel}**")
+                        st.rerun()
+                    else:
+                        st.info(f"Nenhum item com tipo '{tipo_sel}' na lista.")
+                except ValueError:
+                    st.error("Valor inválido. Use formato: 19,90")
 
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
@@ -2877,10 +2882,10 @@ if _pg == "acerto":
         else:
             _df_ac = _df_ac.reset_index(drop=True)
 
-        cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "quantidade", "valor_custo"] if c in _df_ac.columns]
+        cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "tipo_variacao", "quantidade", "valor_custo"] if c in _df_ac.columns]
         _df_ac_edit = _df_ac[cols_disp].rename(columns={
             "cod_interno": "Cód.", "produto_nome": "Produto",
-            "variacao_cod": "Cód. Var.", "variacao_nome": "Variação",
+            "variacao_cod": "Cód. Var.", "variacao_nome": "Variação", "tipo_variacao": "Tipo",
             "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
         }).copy()
 
