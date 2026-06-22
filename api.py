@@ -455,6 +455,37 @@ def listar_situacoes_compras():
     return data.get("data", [])
 
 
+def _resolver_variacao_id_loja(produto_id, variacao_cod, variacao_nome, loja_id):
+    """Retorna o variacao_id correto para a loja de destino.
+
+    O ID interno da variação é ESPECÍFICO de cada loja (muda por loja),
+    enquanto o código da variação (ex.: 'A010002') é estável. Como a
+    compra é lançada numa loja específica, precisamos enviar o variacao_id
+    daquela loja — senão o gestãoclick não acha a variação e joga tudo na
+    primeira (ex.: Preto). Casa primeiro pelo código, depois pelo nome.
+    """
+    if not loja_id:
+        return None
+    cache = carregar_cache(loja_id)
+    if not cache:
+        return None
+    for p in cache.get("produtos", []):
+        if str(p.get("id")) != str(produto_id):
+            continue
+        if variacao_cod:
+            for v in p.get("variacoes", []):
+                vd = v["variacao"]
+                if str(vd.get("codigo", "")) == str(variacao_cod):
+                    return vd["id"]
+        if variacao_nome:
+            for v in p.get("variacoes", []):
+                vd = v["variacao"]
+                if str(vd.get("nome", "")) == str(variacao_nome):
+                    return vd["id"]
+        break
+    return None
+
+
 def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=None, loja_id=None):
     """Cria uma Compra para lançar estoque (acerto).
     itens: lista de dicts com produto_id, variacao_id, produto_nome,
@@ -474,6 +505,14 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
             _custo = 0.01
         _total += _qtd * _custo
         _vid    = it.get("variacao_id") or ""
+        # Re-resolve o variacao_id para a LOJA de destino (o ID é por loja).
+        if _vid:
+            _vid_loja = _resolver_variacao_id_loja(
+                it.get("produto_id"), it.get("variacao_cod"),
+                it.get("variacao_nome"), loja_id
+            )
+            if _vid_loja:
+                _vid = _vid_loja
         _qtd_str = f"{_qtd:.2f}"          # formato "5.00" como o blueprint
         # nome_produto: usa SEMPRE o nome real do produto (sem a variação),
         # limpando qualquer sufixo que a API/cache tenha grudado.
