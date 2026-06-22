@@ -2004,6 +2004,19 @@ def get_compra(compra_id, loja_id=None):
     return _get(f"compras/{compra_id}", loja_id=loja_id)
 
 
+def buscar_compra_por_codigo(codigo, loja_id=None):
+    """GET /compras?codigo=X — busca pelo número visível no sistema (campo codigo).
+    Retorna o primeiro resultado ou None.
+    """
+    r = _get("compras", params={"codigo": str(codigo)}, loja_id=loja_id)
+    data = r.get("data", []) if isinstance(r, dict) else []
+    if isinstance(data, list) and data:
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    return None
+
+
 # ──────────────────────────────────────────────
 # Registrar compra no GestãoClick
 # ──────────────────────────────────────────────

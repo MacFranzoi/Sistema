@@ -3096,7 +3096,8 @@ if _pg == "acerto":
                                     if _conf["ID Variação"].nunique() < len(_conf):
                                         st.warning("⚠️ Há IDs de variação repetidos — verifique a lista.")
                             st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
-                            st.session_state["_ac_ultima_compra"] = {"id": _compra_id, "loja_id": loja_id}
+                            _compra_cod = _data_ac.get("codigo", "")
+                            st.session_state["_ac_ultima_compra"] = {"id": _compra_id, "codigo": _compra_cod, "loja_id": loja_id}
                             st.session_state["_ac_body_enviado"] = (_res_ac.get("_body_enviado") or {}).get("produtos", [])
                             st.session_state.itens_acerto = []
                     except Exception as _e_ac:
@@ -3122,25 +3123,25 @@ if _pg == "acerto":
     st.divider()
     st.subheader("🔍 Conferir compra no sistema")
 
+    _ult_cod = str(st.session_state.get("_ac_ultima_compra", {}).get("codigo", "") or "")
     _cc1, _cc2 = st.columns([2, 1])
-    _compra_conf_id = _cc1.text_input(
-        "ID da compra (ex: 14540862)",
-        value=str(st.session_state.get("_ac_ultima_compra", {}).get("id", "") or ""),
+    _compra_conf_cod = _cc1.text_input(
+        "Número da compra (ex: 395 — o número que aparece no sistema)",
+        value=_ult_cod,
         key="ac_conf_id",
-        placeholder="Digite o ID da compra criada..."
+        placeholder="Digite o número da compra..."
     )
     _cc2.write("")
     _cc2.write("")
     _btn_conf = _cc2.button("🔎 Verificar", type="primary", key="ac_conf_btn", use_container_width=True)
 
-    if _btn_conf and _compra_conf_id.strip():
+    if _btn_conf and _compra_conf_cod.strip():
         with st.spinner("Buscando compra na API…"):
             try:
-                _resp_conf = api.get_compra(_compra_conf_id.strip(), loja_id=loja_id)
-                _dc = (_resp_conf.get("data") or {}) if isinstance(_resp_conf, dict) else {}
+                _dc = api.buscar_compra_por_codigo(_compra_conf_cod.strip(), loja_id=loja_id)
 
                 if not _dc:
-                    st.error(f"Compra #{_compra_conf_id} não encontrada na loja **{loja_sel_nome}**.")
+                    st.error(f"Compra #{_compra_conf_cod} não encontrada na loja **{loja_sel_nome}**.")
                 else:
                     # ── Cabeçalho da compra ──
                     _sit_conf = _dc.get("nome_situacao", "?")
@@ -3155,10 +3156,9 @@ if _pg == "acerto":
                     _prods_conf = _dc.get("produtos", [])
 
                     # ── Itens que enviamos (do body salvo) ──
-                    _ult_id = str(st.session_state.get("_ac_ultima_compra", {}).get("id", ""))
+                    _ult_cod_sess = str(st.session_state.get("_ac_ultima_compra", {}).get("codigo", "") or "")
                     _enviados_body = []
-                    if _ult_id == _compra_conf_id.strip():
-                        # Última compra criada nesta sessão — temos o body
+                    if _ult_cod_sess == _compra_conf_cod.strip():
                         _enviados_body = st.session_state.get("_ac_body_enviado", [])
 
                     # ── Monta tabela de confronto ──
