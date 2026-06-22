@@ -447,37 +447,49 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
     """
     from datetime import date as _date
     hoje = _date.today().strftime("%Y-%m-%d")
+
+    _total = 0.0
     produtos = []
     for it in itens:
-        _qtd = str(it["quantidade"])
-        _vid = it.get("variacao_id") or ""
+        _qtd    = int(it.get("quantidade", 1))
+        _custo  = float(it.get("valor_custo") or 0)
+        _total += _qtd * _custo
+        _vid    = it.get("variacao_id") or ""
         produtos.append({
             "produto": {
-                "produto_id":      str(it["produto_id"]),
-                "variacao_id":     str(_vid),
-                "nome_produto":    it.get("produto_nome", ""),
-                "possui_variacao": 1 if _vid else 0,
-                "quantidade":      _qtd,
-                "quantidade_saida": _qtd,
-                "valor_custo":     str(it.get("valor_custo") or "0.00"),
-                "detalhes":        "",
-                "unidade":         "UND",
-                "largura":         0,
-                "altura":          0,
+                "produto_id":       str(it["produto_id"]),
+                "variacao_id":      str(_vid),
+                "nome_produto":     it.get("produto_nome", ""),
+                "possui_variacao":  1 if _vid else 0,
+                "quantidade":       str(_qtd),
+                "quantidade_saida": "0",
+                "valor_custo":      f"{_custo:.2f}",
+                "detalhes":         "",
+                "unidade":          "UND",
+                "largura":          0,
+                "altura":           0,
             }
         })
+
     body = {
-        "fornecedor_id":   str(fornecedor_id),
-        "data_emissao":    hoje,
-        "data":            hoje,
-        "situacao_id":     str(situacao_id),
-        "observacoes":     f"Acerto de estoque — {hoje}",
-        "valor_frete":     "0.00",
-        "numero_parcelas": "1",
-        "produtos":        produtos,
+        "fornecedor_id": str(fornecedor_id),
+        "data_emissao":  hoje,
+        "situacao_id":   str(situacao_id),
+        "observacoes":   f"Acerto de estoque — {hoje}",
+        "valor_frete":   "0.00",
+        "produtos":      produtos,
+        "pagamentos": [
+            {
+                "pagamento": {
+                    "data_vencimento":    hoje,
+                    "valor":             f"{_total:.2f}",
+                    "forma_pagamento_id": str(forma_pagamento_id) if forma_pagamento_id else "",
+                    "plano_contas_id":   "17129225",
+                    "observacao":        "Acerto de estoque",
+                }
+            }
+        ],
     }
-    if forma_pagamento_id:
-        body["forma_pagamento_id"] = str(forma_pagamento_id)
     return _post("compras", body, loja_id=loja_id)
 
 
