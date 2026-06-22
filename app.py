@@ -2744,12 +2744,20 @@ if _pg == "acerto":
                             forma_pagamento_id=_ac_fp_id,
                             loja_id=loja_id,
                         )
+                        st.session_state["_ac_debug_resp"] = _res_ac
                         _compra_id = (_res_ac.get("data") or {}).get("id", "?")
-                        st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — estoque lançado!")
-                        st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
-                        st.session_state.itens_acerto = []
+                        if _compra_id == "?":
+                            st.warning(f"⚠️ Resposta inesperada — veja debug abaixo")
+                        else:
+                            st.success(f"✅ Compra **#{_compra_id}** criada em **{loja_sel_nome}** — estoque lançado!")
+                            st.session_state.itens_acerto_ok = list(st.session_state.itens_acerto)
+                            st.session_state.itens_acerto = []
                     except Exception as _e_ac:
+                        st.session_state["_ac_debug_resp"] = str(_e_ac)
                         st.error(f"❌ Erro: {_e_ac}")
+                if st.session_state.get("_ac_debug_resp"):
+                    with st.expander("🔍 Resposta bruta da API (debug)", expanded=True):
+                        st.json(st.session_state["_ac_debug_resp"])
         with col_z:
             if st.button("↗️ Enviar para Entrada", use_container_width=True, key="ac_para_entrada"):
                 st.session_state.clipboard = {

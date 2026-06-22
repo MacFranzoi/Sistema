@@ -239,8 +239,8 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
             if _idx >= 0:
                 try:
                     _parsed = json.loads(r.text[_idx:])
-                    # Só aceita se tem status success (não é JSON de contexto de erro)
-                    if _parsed.get("status") == "success":
+                    # Aceita qualquer JSON com "code" e "data" (not just status:success)
+                    if "data" in _parsed or _parsed.get("status") == "success":
                         return _parsed
                 except Exception:
                     pass
