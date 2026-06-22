@@ -2818,6 +2818,8 @@ if _pg == "acerto":
                         "produto_id":      produto_ac["id"],
                         "produto_nome":    produto_ac["nome"],
                         "cod_interno":     produto_ac.get("codigo_interno", ""),
+                        "grupo_id":        produto_ac.get("grupo_id", ""),
+                        "nome_grupo":      produto_ac.get("nome_grupo", ""),
                         "possui_variacao": produto_ac.get("possui_variacao", "1"),
                         "variacao_id":     row["_variacao_id"],
                         "variacao_cod":    row["Código Var."],
@@ -2828,6 +2830,43 @@ if _pg == "acerto":
                 st.success(f"{len(selecionadas_ac)} adicionada(s)!")
 
     st.divider()
+
+    # ── Aplicar custo por categoria ──────────────────────────────────────
+    with st.expander("⚙️ Aplicar custo por categoria", expanded=False):
+        try:
+            arvore_cat = api.grupos_arvore()
+            cat_opts = ["(Nenhum)"] + [g["label"] for g in arvore_cat]
+            cat_sel = st.selectbox("Categoria", cat_opts, key="ac_cat_custo")
+
+            if cat_sel != "(Nenhum)":
+                cat_obj = next((g for g in arvore_cat if g["label"] == cat_sel), None)
+                if cat_obj:
+                    cat_ids = api.grupos_filhos_ids(cat_obj["id"])
+
+                    col_c1, col_c2 = st.columns([2, 1])
+                    custo_input = col_c1.text_input("Valor de custo (formato: 19,90)", value="", key="ac_custo_val", placeholder="ex: 19,90")
+
+                    if col_c2.button("✅ Aplicar", use_container_width=True, key="ac_apply_custo"):
+                        try:
+                            custo_br = custo_input.replace(",", ".")
+                            custo_num = float(custo_br)
+
+                            aplicados = 0
+                            for item in st.session_state.itens_acerto:
+                                if str(item.get("grupo_id", "")) in cat_ids:
+                                    item["valor_custo"] = custo_num
+                                    aplicados += 1
+
+                            if aplicados > 0:
+                                st.success(f"✅ Custo **R$ {custo_num:,.2f}** aplicado a **{aplicados} itens** de {cat_sel}")
+                                st.rerun()
+                            else:
+                                st.info(f"Nenhum item de {cat_sel} na lista.")
+                        except ValueError:
+                            st.error("Valor inválido. Use formato: 19,90")
+        except Exception as e:
+            st.caption(f"⚠️ Erro ao carregar categorias: {e}")
+
     st.subheader(f"📝 Lista de acerto ({len(st.session_state.itens_acerto)} itens)")
 
     if st.session_state.itens_acerto:
