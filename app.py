@@ -2815,8 +2815,8 @@ if _pg == "acerto":
             else:
                 for _, row in selecionadas_ac.iterrows():
                     var_nome = row["Variação"]
-                    tipo_var = var_nome.split("/")[0].strip() if "/" in var_nome else var_nome
-                    cat_var = var_nome.split("/")[1].strip() if "/" in var_nome else ""
+                    cor_preco = var_nome.split("/")[0].strip() if "/" in var_nome else ""
+                    tipo_var = var_nome.split("/")[1].strip() if "/" in var_nome else var_nome
                     st.session_state.itens_acerto.append({
                         "produto_id":      produto_ac["id"],
                         "produto_nome":    produto_ac["nome"],
@@ -2828,7 +2828,7 @@ if _pg == "acerto":
                         "variacao_cod":    row["Código Var."],
                         "variacao_nome":   var_nome,
                         "tipo_variacao":   tipo_var,
-                        "categoria_variacao": cat_var,
+                        "cor_preco_variacao": cor_preco,
                         "quantidade":      int(row["Qtd Correta"]),
                         "valor_custo":     produto_ac.get("valor_custo", "0.00"),
                     })
@@ -2840,15 +2840,15 @@ if _pg == "acerto":
     if st.session_state.itens_acerto:
         CORES_COMUNS = {"azul", "preto", "branco", "vermelho", "verde", "amarelo", "rosa", "roxo",
                         "laranja", "marrom", "cinza", "bege", "dourado", "prata", "transparente",
-                        "ouro", "prata", "natural", "nude"}
+                        "ouro", "natural", "nude"}
 
         tipos_agrupados = {}
         for item in st.session_state.itens_acerto:
             tipo = item.get("tipo_variacao", "")
-            cat = item.get("categoria_variacao", "").strip().lower()
+            cor_preco = item.get("cor_preco_variacao", "").strip().lower()
 
-            eh_cor = cat in CORES_COMUNS if cat else False
-            chave = tipo if eh_cor else f"{tipo} / {item.get('categoria_variacao', '')}"
+            eh_cor = cor_preco in CORES_COMUNS if cor_preco else False
+            chave = tipo if eh_cor else f"{item.get('cor_preco_variacao', '')} / {tipo}"
 
             if chave not in tipos_agrupados:
                 tipos_agrupados[chave] = []
@@ -2862,7 +2862,7 @@ if _pg == "acerto":
                 tipo_sel = col_t1.selectbox("Tipo disponível", sorted(tipos_agrupados.keys()), key="ac_tipo_sel")
 
                 if tipo_sel:
-                    tipo_base = tipo_sel.split("/")[0].strip()
+                    tipo_base = tipo_sel.split("/")[-1].strip()
                     custo_padrao = float(custos_tipo.get(tipo_base, 0))
                     col_t3, col_t4 = st.columns([2, 1])
                     custo_input = col_t3.text_input(
@@ -2898,11 +2898,11 @@ if _pg == "acerto":
         else:
             _df_ac = _df_ac.reset_index(drop=True)
 
-        cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "tipo_variacao", "quantidade", "valor_custo"] if c in _df_ac.columns]
+        cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "tipo_variacao", "cor_preco_variacao", "quantidade", "valor_custo"] if c in _df_ac.columns]
         _df_ac_edit = _df_ac[cols_disp].rename(columns={
             "cod_interno": "Cód.", "produto_nome": "Produto",
-            "variacao_cod": "Cód. Var.", "variacao_nome": "Variação", "tipo_variacao": "Tipo",
-            "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
+            "variacao_cod": "Cód. Var.", "variacao_nome": "Variação", "tipo_variacao": "Tipo Capa",
+            "cor_preco_variacao": "Cor/Preço", "quantidade": "Qtd", "valor_custo": "Custo Unit. (R$)"
         }).copy()
 
         _edited_ac = st.data_editor(
