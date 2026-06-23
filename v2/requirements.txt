@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 python-multipart
-# As libs abaixo são usadas pelo api.py (reaproveitado da raiz)
+# Libs usadas pelo api.py (raiz do repo)
 requests
 pandas
 openpyxl
@@ -9,3 +9,12 @@ fpdf2
 anthropic
 Pillow
 apscheduler
+openai
+# Observabilidade
+sentry-sdk[fastapi]
+# Persistência Supabase (opcional — fallback GitHub se não configurado)
+supabase
+# Testes
+pytest
+pytest-asyncio
+httpx

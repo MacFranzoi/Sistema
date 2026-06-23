@@ -19,6 +19,22 @@ from fastapi.responses import JSONResponse, FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
+# ── Sentry (opcional — ativo se SENTRY_DSN estiver no ambiente) ──────────────
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if _SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_SENTRY_DSN,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.05,
+            environment=os.environ.get("RAILWAY_ENVIRONMENT", "production"),
+        )
+    except ImportError:
+        pass
+
 app = FastAPI(title="Plug ERP 2.0", docs_url="/api/docs")
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -1266,6 +1282,27 @@ def entrada_aprovacao(request: Request, dados: EntradaAprovacaoIn):
 def diagnostico(request: Request):
     usuario_atual(request)
     return api.diagnostico_config()
+
+
+# ── Voz (transcrição Whisper — requer OPENAI_API_KEY) ───────────────────────
+@app.post("/api/voz/transcrever")
+async def voz_transcrever(request: Request, arquivo: UploadFile = File(...)):
+    usuario_atual(request)
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    if not openai_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY não configurada")
+    try:
+        import openai as _openai
+        client = _openai.OpenAI(api_key=openai_key)
+        audio_bytes = await arquivo.read()
+        transcricao = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(arquivo.filename or "audio.webm", audio_bytes, arquivo.content_type or "audio/webm"),
+            language="pt",
+        )
+        return {"texto": transcricao.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Frontend estático (SPA) ──────────────────────────────────────────────────

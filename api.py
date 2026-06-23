@@ -6,6 +6,11 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta
 
+try:
+    import db  # camada Supabase (opcional — fallback para GitHub se ausente)
+except Exception:
+    db = None  # type: ignore
+
 ACCESS_TOKEN = "998d6e5bed008c2023d5c5bc062ac9311e05c045"
 SECRET_TOKEN = "884b009905a80a147cea7172f25c83700c097166"
 BASE_URL = "https://api.gestaoclick.com/api"
@@ -82,6 +87,10 @@ _SETORES_PADRAO = {
 }
 
 def carregar_setores():
+    if db and db.ativo():
+        dados = db.ler("setores")
+        if dados:
+            return dados
     if not os.path.exists(SETORES_FILE):
         _gh_baixar_arquivo("setores.json", SETORES_FILE)
     if os.path.exists(SETORES_FILE):
@@ -96,7 +105,10 @@ def salvar_setores(setores):
     conteudo = json.dumps(setores, ensure_ascii=False, indent=2)
     with open(SETORES_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    _gh_push_arquivo("setores.json", conteudo, "Atualiza setores")
+    if db and db.ativo():
+        db.salvar("setores", setores)
+    else:
+        _gh_push_arquivo("setores.json", conteudo, "Atualiza setores")
 
 SETORES = carregar_setores()
 
@@ -150,7 +162,10 @@ def revogar_sessao(token):
     _salvar_sessoes(sessoes)
 
 def carregar_usuarios():
-    # Tenta puxar do GitHub se o arquivo local não existe
+    if db and db.ativo():
+        dados = db.ler("usuarios")
+        if dados:
+            return dados
     if not os.path.exists(USUARIOS_FILE):
         _gh_baixar_arquivo("usuarios.json", USUARIOS_FILE)
     if os.path.exists(USUARIOS_FILE):
@@ -163,7 +178,10 @@ def salvar_usuarios(usuarios):
     conteudo = json.dumps(usuarios, ensure_ascii=False, indent=2)
     with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
+    if db and db.ativo():
+        db.salvar("usuarios", usuarios)
+    else:
+        _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",
@@ -191,7 +209,10 @@ def salvar_custos_tipo(dados):
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(CUSTOS_TIPO_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    _gh_push_arquivo("custos_tipo.json", conteudo, "Atualiza custos por tipo")
+    if db and db.ativo():
+        db.salvar("custos_tipo", dados)
+    else:
+        _gh_push_arquivo("custos_tipo.json", conteudo, "Atualiza custos por tipo")
 
 
 def detectar_custo_tipo(produto_nome, grupo_nome="", custos=None):
@@ -332,8 +353,23 @@ def buscar_produtos(termo, cache):
     return [p for nome, cod, p in idx if termo in nome or termo in cod][:30]
 
 
-# ──────────────────────────────────────────────
-# Estoque
+def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None):
+    """Busca produtos no cache local com filtro de nome e/ou código."""
+    cache = carregar_cache(loja_id)
+    if not cache or (not nome and not codigo):
+        return {"produtos": []}
+    nome_l = (nome or "").lower().strip()
+    cod_l  = (codigo or "").lower().strip()
+    resultado = []
+    for p in cache.get("produtos", []):
+        if nome_l and nome_l not in (p.get("nome") or "").lower():
+            continue
+        if cod_l and cod_l not in (p.get("codigo_interno") or "").lower():
+            continue
+        resultado.append(p)
+        if len(resultado) >= 100:
+            break
+    return {"produtos": resultado}
 # ──────────────────────────────────────────────
 
 def atualizar_estoque_variacao(produto_id, variacao_id, quantidade, loja_id=None, modo="set"):
@@ -666,19 +702,19 @@ def sincronizar_listas_do_github():
 # ──────────────────────────────────────────────
 
 def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
+    slug = nome.replace(" ", "_").replace("/", "-")[:40]
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nome_arq = f"{tipo}_{slug}_{ts}.json"
+
     # Descobre a maior ordem atual para esse tipo
     max_ordem = 0
     try:
-        for arq in os.listdir(DIR_LISTAS):
-            if not arq.endswith(".json"):
-                continue
-            with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
-                d = json.load(f)
-            if d.get("tipo") == tipo and d.get("ordem") is not None:
-                try:
-                    max_ordem = max(max_ordem, int(d["ordem"]))
-                except (TypeError, ValueError):
-                    pass
+        existentes = listar_listas_salvas(tipo=tipo)
+        for l in existentes:
+            try:
+                max_ordem = max(max_ordem, int(l.get("ordem", 0)))
+            except (TypeError, ValueError):
+                pass
     except Exception:
         pass
 
@@ -691,20 +727,34 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
         "ordem": max_ordem + 1,
         "itens": itens
     }
-    slug = nome.replace(" ", "_").replace("/", "-")[:40]
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nome_arq = f"{tipo}_{slug}_{ts}.json"
-    caminho = os.path.join(DIR_LISTAS, nome_arq)
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    caminho = os.path.join(DIR_LISTAS, nome_arq)
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    # Sobe pro GitHub em background (falha silenciosamente)
-    _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
+    if db and db.ativo():
+        db.salvar(f"listas/{nome_arq}", dados)
+    else:
+        _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
     return caminho
 
 
 def listar_listas_salvas(tipo=None):
-    # Puxa do GitHub arquivos que ainda não existem localmente
+    if db and db.ativo():
+        chaves = db.listar("listas/")
+        listas = []
+        for chave in chaves:
+            dados = db.ler(chave)
+            if not dados:
+                continue
+            if tipo and dados.get("tipo") != tipo:
+                continue
+            dados["_arquivo"] = chave.replace("listas/", "")
+            listas.append(dados)
+        com_ordem = sorted([l for l in listas if "ordem" in l], key=lambda l: l["ordem"])
+        sem_ordem = sorted([l for l in listas if "ordem" not in l], key=lambda l: l.get("criado_em", ""), reverse=True)
+        return com_ordem + sem_ordem
+
+    # fallback: arquivos locais + GitHub
     sincronizar_listas_do_github()
     arquivos = sorted(
         [f for f in os.listdir(DIR_LISTAS) if f.endswith(".json")],
@@ -715,20 +765,22 @@ def listar_listas_salvas(tipo=None):
         try:
             with open(os.path.join(DIR_LISTAS, arq), encoding="utf-8") as f:
                 dados = json.load(f)
-            # Filtra por tipo via campo JSON (não mais pelo prefixo do nome)
             if tipo and dados.get("tipo") != tipo:
                 continue
             dados["_arquivo"] = arq
             listas.append(dados)
         except Exception:
             pass
-    # Ordena: listas com `ordem` primeiro (ascendente), depois por data desc
     com_ordem = sorted([l for l in listas if "ordem" in l], key=lambda l: l["ordem"])
     sem_ordem = sorted([l for l in listas if "ordem" not in l], key=lambda l: l.get("criado_em", ""), reverse=True)
     return com_ordem + sem_ordem
 
 
 def carregar_lista(arquivo):
+    if db and db.ativo():
+        dados = db.ler(f"listas/{arquivo}")
+        if dados:
+            return dados
     with open(os.path.join(DIR_LISTAS, arquivo), encoding="utf-8") as f:
         return json.load(f)
 
@@ -999,6 +1051,10 @@ def grupos_arvore():
 
 def carregar_disponibilidade():
     """Retorna {loja_id: {produto_id: bool}}"""
+    if db and db.ativo():
+        dados = db.ler("disponibilidade_lojas")
+        if dados is not None:
+            return dados
     if not os.path.exists(DISPONIBILIDADE_FILE):
         _gh_baixar_arquivo("disponibilidade_lojas.json", DISPONIBILIDADE_FILE)
     if not os.path.exists(DISPONIBILIDADE_FILE):
@@ -1011,7 +1067,10 @@ def salvar_disponibilidade(dados):
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(DISPONIBILIDADE_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    _gh_push_arquivo("disponibilidade_lojas.json", conteudo, "Atualiza disponibilidade por loja")
+    if db and db.ativo():
+        db.salvar("disponibilidade_lojas", dados)
+    else:
+        _gh_push_arquivo("disponibilidade_lojas.json", conteudo, "Atualiza disponibilidade por loja")
 
 
 def toggle_produto_loja(produto_id, loja_id, ativo: bool):

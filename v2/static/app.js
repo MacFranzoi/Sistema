@@ -888,10 +888,32 @@ async function renderEntrada(cont) {
 
   // ── WhatsApp IA ──
   function modoWpp() {
+    const temSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
     $("#ent-modo").innerHTML = `
       <textarea id="ew-txt" placeholder="Chegaram 5 POCO X3 aveludada preta, 3 iPhone 14 silicone azul…" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px;outline:none;font-family:inherit"></textarea>
-      <div class="busca" style="margin-top:8px"><button id="ew-gerar">✨ Identificar com IA</button></div>
+      <div class="busca" style="margin-top:8px">
+        ${temSpeech ? '<button id="ew-mic">🎤 Voz</button>' : ''}
+        <button id="ew-gerar">✨ Identificar com IA</button>
+      </div>
       <div id="ew-msg"></div>`;
+
+    if (temSpeech) {
+      const SpeechRecog = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recog = new SpeechRecog();
+      recog.lang = "pt-BR"; recog.continuous = true; recog.interimResults = false;
+      let gravando = false;
+      recog.onresult = (e) => {
+        for (let i = e.resultIndex; i < e.results.length; i++)
+          $("#ew-txt").value += e.results[i][0].transcript + " ";
+      };
+      recog.onend = () => { gravando = false; if ($("#ew-mic")) $("#ew-mic").textContent = "🎤 Voz"; };
+      recog.onerror = () => { gravando = false; if ($("#ew-mic")) $("#ew-mic").textContent = "🎤 Voz"; };
+      $("#ew-mic").onclick = () => {
+        if (gravando) { recog.stop(); }
+        else { recog.start(); gravando = true; $("#ew-mic").textContent = "⏹ Parar"; }
+      };
+    }
+
     $("#ew-gerar").onclick = async () => {
       const texto = $("#ew-txt").value.trim();
       if (!texto) return;
@@ -1528,6 +1550,7 @@ async function renderPedido(cont) {
           <textarea id="pw-avulsos" placeholder="iPhone 16 / Carteira | 2&#10;Samsung A15 / Película" style="width:100%;height:60px;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;outline:none;font-family:inherit"></textarea></details>
         <div class="busca" style="margin-top:10px">
           <input id="pw-forn" placeholder="Fornecedor (opcional)" />
+          <button id="pw-mic">🎤 Voz</button>
           <button id="pw-gerar">✨ Gerar pré-pedido</button>
         </div>
         <div id="pw-review"></div>
@@ -1544,6 +1567,25 @@ async function renderPedido(cont) {
     </div>
 
     <div id="pe-lista"></div>`;
+
+  // ── Microfone para WhatsApp/IA ──
+  (function() {
+    const SpeechRecog = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecog) { if ($("#pw-mic")) $("#pw-mic").style.display = "none"; return; }
+    const recog = new SpeechRecog();
+    recog.lang = "pt-BR"; recog.continuous = true; recog.interimResults = false;
+    let gravando = false;
+    recog.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++)
+        $("#pw-texto").value += e.results[i][0].transcript + "\n";
+    };
+    recog.onend = () => { gravando = false; if ($("#pw-mic")) $("#pw-mic").textContent = "🎤 Voz"; };
+    recog.onerror = () => { gravando = false; if ($("#pw-mic")) $("#pw-mic").textContent = "🎤 Voz"; };
+    $("#pw-mic").onclick = () => {
+      if (gravando) { recog.stop(); }
+      else { recog.start(); gravando = true; $("#pw-mic").textContent = "⏹ Parar"; }
+    };
+  })();
 
   // ── WhatsApp/IA ──
   $("#pw-gerar").onclick = async () => {
