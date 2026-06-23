@@ -242,6 +242,9 @@ const PAGINAS = {
 
   financeiro: async (cont) => renderFinanceiro(cont),
   relatorios: async (cont) => renderRelatorios(cont),
+  sincronizacao: async (cont) => renderSincronizacao(cont),
+  precos: async (cont) => renderPrecos(cont),
+  disponibilidade: async (cont) => renderDisponibilidade(cont),
 };
 
 // View de estoque (busca ao vivo)
@@ -486,6 +489,217 @@ async function renderRelatorios(cont) {
   };
   $("#rel-buscar").onclick = buscar;
   buscar();
+}
+
+// Sincronização: status por loja + botão sincronizar tudo
+async function renderSincronizacao(cont) {
+  cont.innerHTML = `
+    <div class="page-title">🔄 Sincronização</div>
+    <div class="page-sub">Atualiza o cache de produtos a partir da GestãoClick</div>
+    <div class="busca"><button id="sinc-btn">🔄 Sincronizar todas as lojas</button></div>
+    <div id="sinc-status"><div class="loading">Carregando…</div></div>`;
+
+  const carregarStatus = async () => {
+    const d = await api("/api/sincronizacao/status");
+    $("#sinc-status").innerHTML = `<div class="cards">${d.lojas.map((l) => `
+      <div class="card">
+        <div class="card-head">🏪 ${esc(l.nome)}
+          ${l.online ? '<span class="badge badge-green">● Cache OK</span>' : '<span class="badge badge-red">● Sem cache</span>'}
+        </div>
+        <div class="stat-val" style="font-size:1.4rem">${l.total}</div>
+        <div class="stat-lbl">Sincronizado: ${esc((l.sincronizado_em || "—").slice(0, 16).replace("T", " "))}</div>
+      </div>`).join("")}</div>`;
+  };
+
+  $("#sinc-btn").onclick = async () => {
+    const btn = $("#sinc-btn");
+    btn.disabled = true; btn.textContent = "Sincronizando… (pode levar 1-2 min)";
+    try {
+      const d = await apiPost("/api/sincronizar", {});
+      const erros = d.resultados.filter((r) => !r.ok);
+      await carregarStatus();
+      if (erros.length) {
+        $("#sinc-status").insertAdjacentHTML("afterbegin",
+          `<div class="aviso">Concluído com erros: ${erros.map((e) => esc(e.nome + ": " + e.erro)).join("; ")}</div>`);
+      }
+    } catch (err) {
+      $("#sinc-status").insertAdjacentHTML("afterbegin", `<div class="aviso">${esc(err.message)}</div>`);
+    } finally {
+      btn.disabled = false; btn.textContent = "🔄 Sincronizar todas as lojas";
+    }
+  };
+  carregarStatus();
+}
+
+// Carrega grupos (árvore) uma vez e cacheia
+let _gruposCache = null;
+async function carregarGrupos() {
+  if (_gruposCache) return _gruposCache;
+  try { _gruposCache = (await api("/api/grupos")).grupos || []; }
+  catch (e) { _gruposCache = []; }
+  return _gruposCache;
+}
+function selectGrupos(id, grupos) {
+  return `<select id="${id}" class="loja-sel" style="min-width:200px">
+    <option value="">Todos os grupos</option>
+    ${grupos.map((g) => `<option value="${esc(g.id)}">${esc(g.label)}</option>`).join("")}
+  </select>`;
+}
+
+// Preços: busca produtos, edita custo/venda, salva em lote
+async function renderPrecos(cont) {
+  const grupos = await carregarGrupos();
+  cont.innerHTML = `
+    <div class="page-title">💰 Tabela de Preços</div>
+    <div class="page-sub">Edite custo e venda; salve em lote</div>
+    <div class="busca">
+      <input id="pr-termo" type="text" placeholder="Nome ou código…" />
+      ${selectGrupos("pr-grupo", grupos)}
+      <button id="pr-buscar">Buscar</button>
+    </div>
+    <div id="pr-resultado"><div class="placeholder">Busque produtos para editar os preços.</div></div>`;
+
+  const buscar = async () => {
+    const res = $("#pr-resultado");
+    res.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ loja: Estado.lojaId, termo: $("#pr-termo").value.trim(), grupo: $("#pr-grupo").value });
+      const d = await api("/api/precos?" + q.toString());
+      if (!d.produtos.length) { res.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      res.innerHTML = `
+        <div class="stat-lbl" style="margin-bottom:8px">${d.produtos.length} produtos</div>
+        <table class="tabela" id="pr-tabela">
+          <thead><tr><th>Cód.</th><th>Produto</th><th>Custo (R$)</th><th>Venda (R$)</th><th>Margem</th></tr></thead>
+          <tbody>${d.produtos.map((p, i) => `
+            <tr data-id="${esc(p.id)}" data-nome="${esc(p.nome)}">
+              <td>${esc(p.codigo)}</td><td>${esc(p.nome)}</td>
+              <td><input class="pr-in pr-custo" type="number" step="0.01" value="${p.custo}" data-i="${i}" style="width:100px"></td>
+              <td><input class="pr-in pr-venda" type="number" step="0.01" value="${p.venda}" data-i="${i}" style="width:100px"></td>
+              <td class="pr-margem" data-i="${i}">${p.margem}%</td>
+            </tr>`).join("")}</tbody>
+        </table>
+        <div class="busca" style="margin-top:16px"><button id="pr-salvar">💾 Salvar preços</button></div>
+        <div id="pr-msg"></div>`;
+
+      // recalcula margem ao editar
+      const recalc = (i) => {
+        const c = Number($(`.pr-custo[data-i="${i}"]`).value) || 0;
+        const v = Number($(`.pr-venda[data-i="${i}"]`).value) || 0;
+        const m = c > 0 ? (((v - c) / c) * 100).toFixed(1) : "0.0";
+        $(`.pr-margem[data-i="${i}"]`).textContent = m + "%";
+      };
+      res.querySelectorAll(".pr-in").forEach((inp) => {
+        inp.style.cssText += ";background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px";
+        inp.addEventListener("input", () => recalc(inp.dataset.i));
+      });
+
+      $("#pr-salvar").onclick = async () => {
+        const itens = [];
+        res.querySelectorAll("#pr-tabela tbody tr").forEach((tr, i) => {
+          itens.push({
+            produto_id: tr.dataset.id,
+            produto_nome: tr.dataset.nome,
+            valor_custo: Number($(`.pr-custo[data-i="${i}"]`).value) || 0,
+            valor_venda: Number($(`.pr-venda[data-i="${i}"]`).value) || 0,
+          });
+        });
+        const btn = $("#pr-salvar"); btn.disabled = true; btn.textContent = "Salvando…";
+        try {
+          const r = await apiPost("/api/precos", { loja: Estado.lojaId, itens });
+          let msg = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.atualizados} preço(s) atualizado(s).</div>`;
+          if (r.erros.length) msg += `<div class="aviso">${r.erros.map((e) => esc(e.nome + ": " + e.erro)).join("<br>")}</div>`;
+          $("#pr-msg").innerHTML = msg;
+        } catch (err) {
+          $("#pr-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+        } finally {
+          btn.disabled = false; btn.textContent = "💾 Salvar preços";
+        }
+      };
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#pr-buscar").onclick = buscar;
+  $("#pr-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+}
+
+// Disponibilidade: checkbox por loja, salva mudanças
+async function renderDisponibilidade(cont) {
+  const grupos = await carregarGrupos();
+  cont.innerHTML = `
+    <div class="page-title">🔘 Disponibilidade por Loja</div>
+    <div class="page-sub">Controle em quais lojas cada produto está ativo</div>
+    <div class="busca">
+      <input id="dp-termo" type="text" placeholder="Nome ou código…" />
+      ${selectGrupos("dp-grupo", grupos)}
+      <label style="color:var(--txt2);font-size:.85rem;display:flex;align-items:center;gap:6px">
+        <input id="dp-div" type="checkbox"> Só divergentes</label>
+      <button id="dp-buscar">Buscar</button>
+    </div>
+    <div id="dp-resultado"><div class="placeholder">Busque produtos para editar a disponibilidade.</div></div>`;
+
+  const buscar = async () => {
+    const res = $("#dp-resultado");
+    res.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({
+        termo: $("#dp-termo").value.trim(), grupo: $("#dp-grupo").value,
+        so_divergentes: $("#dp-div").checked,
+      });
+      const d = await api("/api/disponibilidade?" + q.toString());
+      if (!d.produtos.length) { res.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      const cabLojas = d.lojas.map((l) => `<th>${esc(l.nome)}</th>`).join("");
+      const linhas = d.produtos.map((p) => `
+        <tr data-id="${esc(p.id)}">
+          <td>${p.divergente ? "⚠️" : ""}</td><td>${esc(p.codigo)}</td><td>${esc(p.nome)}</td>
+          ${d.lojas.map((l) => `<td style="text-align:center"><input type="checkbox" class="dp-chk" data-loja="${esc(l.id)}" ${p.lojas[l.id] ? "checked" : ""}></td>`).join("")}
+        </tr>`).join("");
+      res.innerHTML = `
+        <div class="stat-lbl" style="margin-bottom:8px">${d.produtos.length} produtos</div>
+        <table class="tabela" id="dp-tabela">
+          <thead><tr><th>⚠️</th><th>Cód.</th><th>Produto</th>${cabLojas}</tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+        <div class="busca" style="margin-top:16px"><button id="dp-salvar">💾 Salvar disponibilidade</button></div>
+        <div id="dp-msg"></div>`;
+
+      // guarda estado original p/ enviar só mudanças
+      const original = new Map();
+      res.querySelectorAll("#dp-tabela tbody tr").forEach((tr) => {
+        tr.querySelectorAll(".dp-chk").forEach((chk) => {
+          original.set(tr.dataset.id + "|" + chk.dataset.loja, chk.checked);
+        });
+      });
+
+      $("#dp-salvar").onclick = async () => {
+        const mudancas = [];
+        res.querySelectorAll("#dp-tabela tbody tr").forEach((tr) => {
+          tr.querySelectorAll(".dp-chk").forEach((chk) => {
+            const key = tr.dataset.id + "|" + chk.dataset.loja;
+            if (original.get(key) !== chk.checked) {
+              mudancas.push({ produto_id: tr.dataset.id, loja_id: chk.dataset.loja, ativo: chk.checked });
+            }
+          });
+        });
+        if (!mudancas.length) { $("#dp-msg").innerHTML = '<div class="placeholder">Nenhuma mudança para salvar.</div>'; return; }
+        const btn = $("#dp-salvar"); btn.disabled = true; btn.textContent = "Salvando…";
+        try {
+          const r = await apiPost("/api/disponibilidade", { mudancas });
+          let msg = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.aplicadas} alteração(ões) salva(s).</div>`;
+          if (r.erros.length) msg += `<div class="aviso">${r.erros.length} erro(s).</div>`;
+          $("#dp-msg").innerHTML = msg;
+        } catch (err) {
+          $("#dp-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+        } finally {
+          btn.disabled = false; btn.textContent = "💾 Salvar disponibilidade";
+        }
+      };
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#dp-buscar").onclick = buscar;
+  $("#dp-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
 }
 
 // ── Arranca ────────────────────────────────────────────────────────

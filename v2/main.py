@@ -439,6 +439,191 @@ def rel_vendas(
     }
 
 
+# ── Sincronização ─────────────────────────────────────────────────────────────
+@app.get("/api/sincronizacao/status")
+def sincronizacao_status(request: Request):
+    usuario_atual(request)
+    status = []
+    for lid, nome in api.LOJAS.items():
+        c = api.carregar_cache(lid)
+        status.append({
+            "loja_id": lid,
+            "nome": nome,
+            "total": (c or {}).get("total", 0),
+            "sincronizado_em": (c or {}).get("sincronizado_em", ""),
+            "online": bool(c),
+        })
+    return {"lojas": status}
+
+
+@app.post("/api/sincronizar")
+def sincronizar(request: Request, loja: str = Query(default="")):
+    usuario_atual(request)
+    resultados = []
+    lojas = [(loja, api.LOJAS.get(loja, ""))] if loja else list(api.LOJAS.items())
+    for lid, nome in lojas:
+        try:
+            res = api.sincronizar_produtos(loja_id=lid)
+            resultados.append({"loja_id": lid, "nome": nome, "ok": True, "total": (res or {}).get("total", 0)})
+        except Exception as e:
+            resultados.append({"loja_id": lid, "nome": nome, "ok": False, "erro": str(e)})
+    return {"resultados": resultados}
+
+
+# ── Grupos (para filtros) ─────────────────────────────────────────────────────
+@app.get("/api/grupos")
+def grupos(request: Request):
+    usuario_atual(request)
+    return {"grupos": api.grupos_arvore()}
+
+
+# ── Produtos do cache (preços, disponibilidade) ──────────────────────────────
+def _filtrar_produtos_cache(loja_id, termo, grupo):
+    cache = api.carregar_cache(loja_id)
+    if not cache:
+        # se a loja não tem cache, tenta o cache geral
+        cache = api.carregar_cache(None)
+    prods = (cache or {}).get("produtos", [])
+    if termo:
+        t = termo.lower()
+        prods = [p for p in prods
+                 if t in (p.get("nome") or "").lower() or t in (p.get("codigo_interno") or "").lower()]
+    if grupo:
+        ids = set(api.grupos_filhos_ids(grupo))
+        prods = [p for p in prods if str(p.get("grupo_id", "")) in ids]
+    return sorted(prods, key=lambda p: p.get("codigo_interno") or "")
+
+
+@app.get("/api/precos")
+def precos_listar(
+    request: Request,
+    loja: str = Query(default=""),
+    termo: str = Query(default=""),
+    grupo: str = Query(default=""),
+):
+    usuario_atual(request)
+    prods = _filtrar_produtos_cache(loja or None, termo, grupo)[:150]
+    itens = []
+    for p in prods:
+        custo = float(p.get("valor_custo") or 0)
+        venda = float(p.get("valor_venda") or 0)
+        margem = round((venda - custo) / custo * 100, 1) if custo > 0 else 0.0
+        itens.append({
+            "id": p.get("id", ""),
+            "codigo": p.get("codigo_interno", ""),
+            "nome": p.get("nome", ""),
+            "grupo": p.get("nome_grupo", ""),
+            "custo": custo,
+            "venda": venda,
+            "margem": margem,
+        })
+    return {"produtos": itens, "total": len(itens)}
+
+
+class PrecoItem(BaseModel):
+    produto_id: str
+    produto_nome: str = ""
+    valor_custo: float
+    valor_venda: float
+
+
+class PrecosIn(BaseModel):
+    loja: str = ""
+    itens: list[PrecoItem]
+
+
+@app.post("/api/precos")
+def precos_salvar(request: Request, dados: PrecosIn):
+    usuario_atual(request)
+    entradas = [
+        {"produto_id": it.produto_id, "produto_nome": it.produto_nome,
+         "valor_custo": it.valor_custo, "valor_venda": it.valor_venda}
+        for it in dados.itens
+    ]
+    res = api.atualizar_precos_lote(entradas, loja_id=dados.loja or None)
+    ok = [r for r in res if r.get("ok")]
+    erros = [{"nome": r.get("produto_nome", ""), "erro": r.get("erro", "")} for r in res if not r.get("ok")]
+    return {"atualizados": len(ok), "erros": erros}
+
+
+# ── Disponibilidade por loja ──────────────────────────────────────────────────
+@app.get("/api/disponibilidade")
+def disponibilidade_listar(
+    request: Request,
+    termo: str = Query(default=""),
+    grupo: str = Query(default=""),
+    so_divergentes: bool = Query(default=False),
+):
+    usuario_atual(request)
+    caches = {lid: api.carregar_cache(lid) for lid in api.LOJAS}
+    cache_any = next((c for c in caches.values() if c), None)
+    if not cache_any:
+        return {"lojas": [], "produtos": []}
+    override = api.carregar_disponibilidade()
+    ativo_por_loja = {}
+    for lid, c in caches.items():
+        ativo_por_loja[lid] = (
+            {str(p["id"]): (str(p.get("ativo", "1")) == "1") for p in c.get("produtos", [])}
+            if c else {}
+        )
+    prods = cache_any.get("produtos", [])
+    if termo:
+        t = termo.lower()
+        prods = [p for p in prods
+                 if t in (p.get("nome") or "").lower() or t in (p.get("codigo_interno") or "").lower()]
+    if grupo:
+        ids = set(api.grupos_filhos_ids(grupo))
+        prods = [p for p in prods if str(p.get("grupo_id", "")) in ids]
+    lista = []
+    for p in sorted(prods, key=lambda p: p.get("codigo_interno") or ""):
+        pid = str(p["id"])
+        status = {}
+        for lid in api.LOJAS:
+            if pid in override.get(lid, {}):
+                status[lid] = bool(override[lid][pid])
+            else:
+                status[lid] = ativo_por_loja.get(lid, {}).get(pid, True)
+        divergente = len(set(status.values())) > 1
+        if so_divergentes and not divergente:
+            continue
+        lista.append({
+            "id": p.get("id", ""),
+            "codigo": p.get("codigo_interno", ""),
+            "nome": p.get("nome", ""),
+            "grupo": p.get("nome_grupo", ""),
+            "divergente": divergente,
+            "lojas": status,
+        })
+    return {
+        "lojas": [{"id": lid, "nome": nome} for lid, nome in api.LOJAS.items()],
+        "produtos": lista[:150],
+    }
+
+
+class DispItem(BaseModel):
+    produto_id: str
+    loja_id: str
+    ativo: bool
+
+
+class DispIn(BaseModel):
+    mudancas: list[DispItem]
+
+
+@app.post("/api/disponibilidade")
+def disponibilidade_salvar(request: Request, dados: DispIn):
+    usuario_atual(request)
+    erros = []
+    ok = 0
+    for m in dados.mudancas:
+        try:
+            api.toggle_produto_loja(m.produto_id, m.loja_id, m.ativo)
+            ok += 1
+        except Exception as e:
+            erros.append({"produto_id": m.produto_id, "loja_id": m.loja_id, "erro": str(e)})
+    return {"aplicadas": ok, "erros": erros}
+
+
 # ── Diagnóstico (mostra se as credenciais estão configuradas) ────────────────
 @app.get("/api/diagnostico")
 def diagnostico(request: Request):
