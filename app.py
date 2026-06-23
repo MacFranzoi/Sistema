@@ -702,14 +702,6 @@ section[data-testid="stMain"] {{
     from {{ opacity: 0.15; }}
     to   {{ opacity: 1; }}
 }}
-/* Esconde o input ponte FORA da tela (não display:none — precisa receber foco
-   para o Streamlit commitar o valor no blur). */
-[data-testid="stTextInput"]:has(input[aria-label="PLUGNAVBRIDGE"]) {{
-    position: fixed !important; left: -9999px !important; top: 0 !important;
-    width: 1px !important; height: 1px !important; opacity: 0 !important;
-    margin: 0 !important; padding: 0 !important; overflow: hidden !important;
-    z-index: -1 !important;
-}}
 /* Barra de marca: oculta no desktop, visível só no mobile */
 .plug-mobiletop {{ display: none; }}
 
@@ -937,69 +929,9 @@ _stc.html("""
   ajustarPadding();
   new ResizeObserver(ajustarPadding).observe(hdr);
 
-  // ── SPA: intercepta cliques no menu e navega via bridge (sem reload de browser) ──
-  function triggerBridge(p) {
-    var inp = doc.querySelector('input[aria-label="PLUGNAVBRIDGE"]');
-    if (!inp) { setTimeout(function(){ triggerBridge(p); }, 80); return; }
-    var setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
-    // 1) foca para que o Streamlit aceite o commit
-    inp.focus();
-    // 2) seta o valor pelo setter nativo (React detecta a mudança); timestamp
-    //    garante valor diferente mesmo navegando para a mesma página
-    setter.call(inp, p + '|' + Date.now());
-    // 3) dispara input (atualiza o estado React do widget)
-    inp.dispatchEvent(new Event('input', {bubbles: true}));
-    // 4) Streamlit só ENVIA o valor ao servidor no Enter ou no blur — fazemos os dois
-    inp.dispatchEvent(new KeyboardEvent('keydown',
-      {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
-    inp.dispatchEvent(new KeyboardEvent('keyup',
-      {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
-    inp.blur();
-  }
-
-  // Retorna o 'p' da página atualmente ativa no menu (null se nenhum)
-  function paginaAtiva() {
-    var active = doc.querySelector('a.nav-item.ativo[href]');
-    if (!active) return null;
-    try { return new URL(active.getAttribute('href'), win.location.href).searchParams.get('p'); }
-    catch(e){ return null; }
-  }
-
-  // Navega via SPA (bridge). Se em ~1.2s o menu não refletir a página nova,
-  // cai para navegação real — assim o menu SEMPRE funciona.
-  function navegarSPA(p, href) {
-    win.history.pushState({}, '', href);
-    triggerBridge(p);
-    if (paginaAtiva() === p) return;  // já estamos nela
-    if (win.__plugNavPoll) clearInterval(win.__plugNavPoll);
-    var tries = 0;
-    win.__plugNavPoll = setInterval(function(){
-      tries++;
-      if (paginaAtiva() === p) { clearInterval(win.__plugNavPoll); return; }
-      if (tries >= 15) {  // ~1.2s sem efeito → navegação real (fallback)
-        clearInterval(win.__plugNavPoll);
-        win.location.href = href;
-      }
-    }, 80);
-  }
-
-  function bindNavLinks() {
-    doc.querySelectorAll('.nav-item[href]').forEach(function(a) {
-      if (a.dataset.navBound) return;
-      a.dataset.navBound = '1';
-      a.addEventListener('click', function(e) {
-        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-        e.preventDefault();
-        var url = new URL(a.getAttribute('href'), win.location.href);
-        var p = url.searchParams.get('p');
-        if (!p) return;
-        navegarSPA(p, url.href);
-      });
-    });
-  }
-  bindNavLinks();
-  new MutationObserver(function(){ bindNavLinks(); })
-    .observe(doc.body, {childList: true, subtree: true});
+  // Navegação: os links do menu são <a href="?p=...&t=..."> nativos.
+  // Não interceptamos mais o clique — navegação nativa é 100% confiável.
+  // O header é position:fixed, então não "salta" visualmente no reload.
 
 })(20);
 </script>
@@ -1007,13 +939,8 @@ _stc.html("""
 
 
 def _main_content():
-    # ── Bridge SPA: input oculto; JS escreve aqui para navegar sem reload ──
-    _nav_raw = st.text_input("PLUGNAVBRIDGE", key="_nav_bridge", label_visibility="collapsed")
-    _nav_pid = _nav_raw.split("|")[0] if _nav_raw else ""
+    # Navegação por links nativos <a href="?p=...&t=..."> — confiável, sem JS.
     _pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
-    if _nav_pid and _nav_pid in _pids_validas_nav and _nav_pid != st.session_state.pagina:
-        st.session_state.pagina = _nav_pid
-        st.rerun()
 
     # Carrega usuários aqui para evitar UnboundLocalError de escopo Python
     # (a variável é também atribuída mais abaixo na aba de admin de usuários)
