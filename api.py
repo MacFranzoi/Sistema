@@ -334,31 +334,33 @@ def carregar_cache(loja_id=None):
 def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max_paginas=None):
     """Busca produtos direto na API (estoque em tempo real).
 
-    Com nome/codigo: a API filtra no servidor — devolve poucos resultados
-    (geralmente 1 página). Sem filtro: pagina tudo (lento, use só se necessário).
+    Busca página 1 sequencialmente para descobrir o total de páginas,
+    depois busca as demais em paralelo (até 8 threads).
     """
-    todos = []
-    pagina = 1
-    total_paginas = None
-    # Com filtro a API devolve poucos resultados; sem filtro limita a 20 páginas.
+    import concurrent.futures as _cf
+
     _max = max_paginas if max_paginas is not None else (5 if (nome or codigo) else 20)
-    while pagina <= _max:
+
+    def _fetch(pagina):
         params = {"pagina": pagina, "limite": limite}
-        if nome:
-            params["nome"] = nome
-        if codigo:
-            params["codigo"] = codigo
+        if nome:   params["nome"]   = nome
+        if codigo: params["codigo"] = codigo
         data = _get("produtos", params, loja_id=loja_id)
         meta = data.get("meta", {}) if isinstance(data, dict) else {}
-        if total_paginas is None:
-            total_paginas = meta.get("total_paginas", 1)
-        produtos = data.get("data", []) if isinstance(data, dict) else []
-        if not produtos:
-            break
-        todos.extend(produtos)
-        if pagina >= min(total_paginas or 1, _max):
-            break
-        pagina += 1
+        prods = data.get("data", []) if isinstance(data, dict) else []
+        total_pgs = meta.get("total_paginas", 1)
+        return prods, total_pgs
+
+    # Página 1 primeiro — descobre quantas páginas existem
+    prods1, total_paginas = _fetch(1)
+    todos = list(prods1)
+
+    paginas_restantes = list(range(2, min(total_paginas, _max) + 1))
+    if paginas_restantes and prods1:
+        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+            for prods, _ in ex.map(_fetch, paginas_restantes):
+                todos.extend(prods)
+
     return {
         "produtos": todos,
         "loja_id": loja_id,
