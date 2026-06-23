@@ -698,6 +698,9 @@ section[data-testid="stMain"] {{
     display: none !important; height: 0 !important; overflow: hidden !important;
 }}
 
+/* Barra de marca: oculta no desktop, visível só no mobile */
+.plug-mobiletop {{ display: none; }}
+
 /* ───────── MOBILE: cara de app (bottom tab bar) ───────── */
 @media (max-width: 640px) {{
     /* topo slim com a marca */
