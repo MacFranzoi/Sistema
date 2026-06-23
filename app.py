@@ -702,6 +702,11 @@ section[data-testid="stMain"] {{
     from {{ opacity: 0.15; }}
     to   {{ opacity: 1; }}
 }}
+/* Oculta o input ponte de navegação JS */
+[data-testid="stTextInput"]:has(input[aria-label="PLUGNAVBRIDGE"]) {{
+    display: none !important; height: 0 !important; margin: 0 !important;
+    padding: 0 !important; overflow: hidden !important;
+}}
 /* Barra de marca: oculta no desktop, visível só no mobile */
 .plug-mobiletop {{ display: none; }}
 
@@ -928,14 +933,55 @@ _stc.html("""
   }
   ajustarPadding();
   new ResizeObserver(ajustarPadding).observe(hdr);
+
+  // ── SPA: intercepta cliques no menu e navega via bridge (sem reload de browser) ──
+  function triggerBridge(p) {
+    var inp = doc.querySelector('input[aria-label="PLUGNAVBRIDGE"]');
+    if (!inp) { setTimeout(function(){ triggerBridge(p); }, 80); return; }
+    var setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
+    // timestamp no valor força Streamlit a detectar mudança mesmo para a mesma página
+    setter.call(inp, p + '|' + Date.now());
+    inp.dispatchEvent(new Event('input', {bubbles: true}));
+  }
+
+  function bindNavLinks() {
+    doc.querySelectorAll('.nav-item[href]').forEach(function(a) {
+      if (a.dataset.navBound) return;
+      a.dataset.navBound = '1';
+      a.addEventListener('click', function(e) {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        var url = new URL(a.getAttribute('href'), win.location.href);
+        var p = url.searchParams.get('p');
+        if (!p) return;
+        win.history.pushState({}, '', url.href);
+        triggerBridge(p);
+      });
+    });
+  }
+  bindNavLinks();
+  new MutationObserver(function(){ bindNavLinks(); })
+    .observe(doc.body, {childList: true, subtree: true});
+
 })(20);
 </script>
 """, height=0)
 
 
 def _main_content():
-    # Trata navegação via query param
+    # ── Bridge SPA: input oculto; JS escreve aqui para navegar sem reload ──
+    _nav_raw = st.text_input("PLUGNAVBRIDGE", key="_nav_bridge", label_visibility="collapsed")
+    _nav_pid = _nav_raw.split("|")[0] if _nav_raw else ""
     _pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
+    if _nav_pid and _nav_pid in _pids_validas_nav and _nav_pid != st.session_state.pagina:
+        st.session_state.pagina = _nav_pid
+        st.rerun()
+
+    # Carrega usuários aqui para evitar UnboundLocalError de escopo Python
+    # (a variável é também atribuída mais abaixo na aba de admin de usuários)
+    _usuarios_db = api.carregar_usuarios()
+
+    # Trata navegação via query param
     _p_url = st.query_params.get("p", "")
     if _p_url and _p_url in _pids_validas_nav and _p_url != st.session_state.pagina:
         st.session_state.pagina = _p_url
