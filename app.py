@@ -5,6 +5,15 @@ from datetime import date, datetime
 import api
 from fpdf import FPDF
 
+# Inicia tarefas em background (só no Railway, não no dev local)
+import os as _os
+if _os.environ.get("RAILWAY_ENVIRONMENT") or _os.environ.get("PORT"):
+    try:
+        import scheduler as _scheduler
+        _scheduler.start()
+    except Exception:
+        pass
+
 # set_page_config DEVE ser a primeira chamada — antes do routing de versão
 st.set_page_config(
     page_title="Plug ERP", page_icon="⚡",
