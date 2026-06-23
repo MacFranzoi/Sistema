@@ -988,9 +988,10 @@ def _main_content():
     # ── Bridge de navegação JS: input oculto que o JS escreve para mudar de página ──
     _nav_bridge_val = st.text_input("⚡nav⚡", key="_nav_bridge",
                                      label_visibility="hidden", value="")
-    if _nav_bridge_val and _nav_bridge_val in [m[0] for m in _MENU_VISIVEL]:
+    if (_nav_bridge_val
+            and _nav_bridge_val in [m[0] for m in _MENU_VISIVEL]
+            and _nav_bridge_val != st.session_state.pagina):
         st.session_state.pagina = _nav_bridge_val
-        st.session_state["_nav_bridge"] = ""
         st.rerun()
 
     # Trata navegação via query param
