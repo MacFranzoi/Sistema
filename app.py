@@ -4009,7 +4009,10 @@ def _main_content():
                                     st.error("Configure ANTHROPIC_API_KEY nos secrets do Streamlit.")
                                 else:
                                     import anthropic as _ant
-                                    _client = _ant.Anthropic(api_key=_ant_key)
+                                    _client = _ant.Anthropic(
+                                        api_key=_ant_key,
+                                        max_retries=3,  # tenta de novo automaticamente em erros 500
+                                    )
                                     _msg = _client.messages.create(
                                         model="claude-sonnet-4-6",
                                         max_tokens=8192,
@@ -4419,7 +4422,15 @@ def _main_content():
                             st.session_state["wpp_expandido"] = _base_reprocess + _linhas_expandidas
                             st.session_state["wpp_nao_comp"] = _nao_compreendidos
                         except Exception as e:
-                            st.error(f"Erro na IA: {e}")
+                            _emsg = str(e)
+                            if "500" in _emsg or "internal_server_error" in _emsg.lower() or "api_error" in _emsg.lower():
+                                st.error("⚠️ Erro temporário da IA (servidor da Anthropic instável). **Tente novamente em alguns segundos** — já é feito 3 tentativas automáticas.")
+                            elif "401" in _emsg or "authentication" in _emsg.lower():
+                                st.error("❌ ANTHROPIC_API_KEY inválida. Verifique em Railway → Variables.")
+                            elif "429" in _emsg or "rate_limit" in _emsg.lower():
+                                st.error("⏳ Limite de uso da API atingido. Aguarde 1 minuto e tente novamente.")
+                            else:
+                                st.error(f"Erro na IA: {e}")
 
             # ── Resto truncado — cole novamente ───────────────────────
             if st.session_state.get("wpp_truncado_resto"):
