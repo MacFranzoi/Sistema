@@ -281,26 +281,55 @@ def sincronizar_produtos(loja_id=None, progress_callback=None):
     }
     with open(cache_path(loja_id), "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
+    invalidar_cache(loja_id)
     return cache
 
 
+_cache_mem: dict = {}  # {loja_id_key: cache_dict}
+_search_idx: dict = {}  # {loja_id_key: [(nome_lower, cod_lower, prod), ...]}
+
+
+def _loja_key(loja_id):
+    return str(loja_id) if loja_id else "todas"
+
+
+def _build_idx(key, cache):
+    _search_idx[key] = [
+        ((p.get("nome") or "").lower(), (p.get("codigo_interno") or "").lower(), p)
+        for p in cache.get("produtos", [])
+    ]
+
+
 def carregar_cache(loja_id=None):
+    key = _loja_key(loja_id)
+    if key in _cache_mem:
+        return _cache_mem[key]
     p = cache_path(loja_id)
     if not os.path.exists(p):
         return None
     with open(p, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    _cache_mem[key] = data
+    _build_idx(key, data)
+    return data
+
+
+def invalidar_cache(loja_id=None):
+    key = _loja_key(loja_id)
+    _cache_mem.pop(key, None)
+    _search_idx.pop(key, None)
 
 
 def buscar_produtos(termo, cache):
     termo = termo.lower().strip()
     if not termo or not cache:
         return []
-    return [
-        p for p in cache.get("produtos", [])
-        if termo in (p.get("nome") or "").lower()
-        or termo in (p.get("codigo_interno") or "").lower()
-    ][:30]
+    key = _loja_key(cache.get("loja_id"))
+    idx = _search_idx.get(key)
+    if idx is None:
+        _build_idx(key, cache)
+        idx = _search_idx[key]
+    return [p for nome, cod, p in idx if termo in nome or termo in cod][:30]
 
 
 # ──────────────────────────────────────────────

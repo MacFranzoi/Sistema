@@ -6,9 +6,7 @@ import api
 from fpdf import FPDF
 
 
-@st.cache_data(ttl=600, show_spinner=False)
 def _cache_produto(loja_id):
-    """Carrega cache de produtos do disco com cache em memória por 10 min."""
     return api.carregar_cache(loja_id)
 
 # set_page_config DEVE ser a primeira chamada — antes do routing de versão
@@ -1775,7 +1773,6 @@ if _pg == "sincronizacao":
             except Exception as e:
                 erros_sync.append(f"{lnome}: {e}")
         barra.progress(1.0)
-        _cache_produto.clear()  # invalida cache em memória após sync
         if erros_sync:
             status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
         else:
