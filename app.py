@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import api
 from fpdf import FPDF
 
@@ -981,6 +981,19 @@ def _main_content():
     # (a variável é também atribuída mais abaixo na aba de admin de usuários)
     _usuarios_db = api.carregar_usuarios()
 
+    # ── Aviso de persistência: só admin, só se GITHUB_TOKEN faltar/inválido ──
+    if _setor == "admin" and not st.session_state.get("_diag_ok"):
+        _diag = api.diagnostico_config()
+        if not _diag["github_ok"]:
+            st.error(
+                "⚠️ **Persistência desativada** — `GITHUB_TOKEN` não está configurado "
+                "ou é inválido no Railway. Sem ele, **sessões, usuários e listas são "
+                "perdidos a cada reinício** (causa do logout automático). "
+                "Configure em Railway → Variables → `GITHUB_TOKEN`."
+            )
+        else:
+            st.session_state["_diag_ok"] = True
+
     # Trata navegação via query param
     _p_url = st.query_params.get("p", "")
     if _p_url and _p_url in _pids_validas_nav and _p_url != st.session_state.pagina:
@@ -1046,7 +1059,7 @@ def _main_content():
                         api.marcar_notificacao_lida(_nn["id"], _user)
                         st.rerun()
                 _pg_notif = _nn.get("pagina","")
-                if _pg_notif and _pg_notif in _todas_pids:
+                if _pg_notif and _pg_notif in _pids_validas:
                     if _nnb.button("Ir →", key=f"ir_{_nn['id']}", use_container_width=True):
                         api.marcar_notificacao_lida(_nn["id"], _user)
                         st.session_state.pagina = _pg_notif
@@ -1485,7 +1498,6 @@ def _main_content():
 
         # Resumo financeiro do dia/mês
         with st.expander("💰 Resumo financeiro rápido", expanded=False):
-            from datetime import timedelta
             _df1, _df2, _df3 = st.columns([1, 1, 1])
             _d_dash_ini = _df1.date_input("De", value=date.today().replace(day=1), key="dash_fi")
             _d_dash_fim = _df2.date_input("Até", value=date.today(), key="dash_ff")
@@ -1699,8 +1711,6 @@ def _main_content():
     # VENDAS
     # ─────────────────────────────────────────────────────────────────
     if _pg == "vendas":
-        import pandas as pd
-        from datetime import date, timedelta
 
         vf1, vf2, vf3 = st.columns([1, 1, 1])
         d_ini_v = vf1.date_input("De", value=date.today() - timedelta(days=30), key="v_ini")
@@ -1749,8 +1759,6 @@ def _main_content():
     # ORÇAMENTOS
     # ─────────────────────────────────────────────────────────────────
     if _pg == "orcamentos":
-        import pandas as pd
-        from datetime import date, timedelta
 
         of1, of2, of3 = st.columns([1, 1, 1])
         d_ini_o = of1.date_input("De", value=date.today() - timedelta(days=30), key="o_ini")
@@ -1797,8 +1805,6 @@ def _main_content():
     # HISTÓRICO DE COMPRAS
     # ─────────────────────────────────────────────────────────────────
     if _pg == "compras_hist":
-        import pandas as pd
-        from datetime import date, timedelta
 
         hf1, hf2, hf3 = st.columns([1, 1, 1])
         d_ini_h = hf1.date_input("De", value=date.today() - timedelta(days=60), key="h_ini")
@@ -1866,8 +1872,6 @@ def _main_content():
     # FINANCEIRO
     # ─────────────────────────────────────────────────────────────────
     if _pg == "financeiro":
-        import pandas as pd
-        from datetime import date, timedelta
 
         tab_rec, tab_pag = st.tabs(["💰 Contas a Receber", "💸 Contas a Pagar"])
 
@@ -1965,8 +1969,6 @@ def _main_content():
     # RELATÓRIOS
     # ─────────────────────────────────────────────────────────────────
     if _pg == "relatorios":
-        import pandas as pd
-        from datetime import date, timedelta
 
         st.markdown(f"<p style='color:{TXT2};margin-bottom:18px'>Selecione um relatório abaixo para gerar:</p>", unsafe_allow_html=True)
 

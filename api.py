@@ -252,11 +252,16 @@ def _request(method, endpoint, params=None, body=None, loja_id=None, tentativas=
             if not r.content or not r.text.strip():
                 return {"code": r.status_code, "data": {}}
             return r.json()
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            # Falhas de rede transitórias (comuns em nuvem) — tenta de novo com backoff
             if i == tentativas - 1:
                 raise Exception(f"API não respondeu após {tentativas} tentativas. Tente novamente.")
             time.sleep(2 ** i)
         except requests.exceptions.HTTPError:
+            # 5xx geralmente é transitório — tenta de novo; 4xx falha imediato
+            if r.status_code >= 500 and i < tentativas - 1:
+                time.sleep(2 ** i)
+                continue
             raise Exception(f"Erro HTTP {r.status_code}: {r.text[:300]}")
         except ValueError:
             # CakePHP mistura PHP notices antes do JSON — busca {"code" diretamente
@@ -780,12 +785,19 @@ _GH_REPO   = "MacFranzoi/Sistema"
 _GH_BRANCH = "main"
 _GH_API    = "https://api.github.com"
 
+def _gh_token() -> str:
+    """GITHUB_TOKEN: env var primeiro (Railway), depois st.secrets (dev local)."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        try:
+            import streamlit as _st
+            token = _st.secrets.get("GITHUB_TOKEN", "")
+        except Exception:
+            pass
+    return token
+
 def _gh_headers():
-    try:
-        import streamlit as _st
-        token = _st.secrets.get("GITHUB_TOKEN", "")
-    except Exception:
-        token = os.environ.get("GITHUB_TOKEN", "")
+    token = _gh_token()
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -793,6 +805,28 @@ def _gh_headers():
     }
 
 _GH_HEADERS = None  # legacy alias — use _gh_headers() instead
+
+def diagnostico_config():
+    """Verifica se as credenciais necessárias estão configuradas (Railway env vars).
+
+    Retorna dict com status de cada integração. Sem GITHUB_TOKEN a persistência
+    (sessões, usuários, listas) NÃO sobrevive a reinícios do container.
+    """
+    status = {
+        "github_token": bool(_gh_token()),
+        "anthropic_key": bool(_get_anthropic_key()),
+        "openai_key": bool(_get_openai_key()),
+        "github_ok": False,
+    }
+    # Testa de fato o acesso ao GitHub (token válido + repo acessível)
+    if status["github_token"]:
+        try:
+            r = requests.get(f"{_GH_API}/repos/{_GH_REPO}",
+                             headers=_gh_headers(), timeout=8)
+            status["github_ok"] = (r.status_code == 200)
+        except Exception:
+            status["github_ok"] = False
+    return status
 
 def _gh_get_sha(path):
     """Retorna SHA do arquivo no GitHub (necessário para atualizar)."""
