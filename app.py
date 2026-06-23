@@ -702,10 +702,13 @@ section[data-testid="stMain"] {{
     from {{ opacity: 0.15; }}
     to   {{ opacity: 1; }}
 }}
-/* Oculta o input ponte de navegação JS */
+/* Esconde o input ponte FORA da tela (não display:none — precisa receber foco
+   para o Streamlit commitar o valor no blur). */
 [data-testid="stTextInput"]:has(input[aria-label="PLUGNAVBRIDGE"]) {{
-    display: none !important; height: 0 !important; margin: 0 !important;
-    padding: 0 !important; overflow: hidden !important;
+    position: fixed !important; left: -9999px !important; top: 0 !important;
+    width: 1px !important; height: 1px !important; opacity: 0 !important;
+    margin: 0 !important; padding: 0 !important; overflow: hidden !important;
+    z-index: -1 !important;
 }}
 /* Barra de marca: oculta no desktop, visível só no mobile */
 .plug-mobiletop {{ display: none; }}
@@ -939,9 +942,45 @@ _stc.html("""
     var inp = doc.querySelector('input[aria-label="PLUGNAVBRIDGE"]');
     if (!inp) { setTimeout(function(){ triggerBridge(p); }, 80); return; }
     var setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
-    // timestamp no valor força Streamlit a detectar mudança mesmo para a mesma página
+    // 1) foca para que o Streamlit aceite o commit
+    inp.focus();
+    // 2) seta o valor pelo setter nativo (React detecta a mudança); timestamp
+    //    garante valor diferente mesmo navegando para a mesma página
     setter.call(inp, p + '|' + Date.now());
+    // 3) dispara input (atualiza o estado React do widget)
     inp.dispatchEvent(new Event('input', {bubbles: true}));
+    // 4) Streamlit só ENVIA o valor ao servidor no Enter ou no blur — fazemos os dois
+    inp.dispatchEvent(new KeyboardEvent('keydown',
+      {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+    inp.dispatchEvent(new KeyboardEvent('keyup',
+      {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+    inp.blur();
+  }
+
+  // Retorna o 'p' da página atualmente ativa no menu (null se nenhum)
+  function paginaAtiva() {
+    var active = doc.querySelector('a.nav-item.ativo[href]');
+    if (!active) return null;
+    try { return new URL(active.getAttribute('href'), win.location.href).searchParams.get('p'); }
+    catch(e){ return null; }
+  }
+
+  // Navega via SPA (bridge). Se em ~1.2s o menu não refletir a página nova,
+  // cai para navegação real — assim o menu SEMPRE funciona.
+  function navegarSPA(p, href) {
+    win.history.pushState({}, '', href);
+    triggerBridge(p);
+    if (paginaAtiva() === p) return;  // já estamos nela
+    if (win.__plugNavPoll) clearInterval(win.__plugNavPoll);
+    var tries = 0;
+    win.__plugNavPoll = setInterval(function(){
+      tries++;
+      if (paginaAtiva() === p) { clearInterval(win.__plugNavPoll); return; }
+      if (tries >= 15) {  // ~1.2s sem efeito → navegação real (fallback)
+        clearInterval(win.__plugNavPoll);
+        win.location.href = href;
+      }
+    }, 80);
   }
 
   function bindNavLinks() {
@@ -954,8 +993,7 @@ _stc.html("""
         var url = new URL(a.getAttribute('href'), win.location.href);
         var p = url.searchParams.get('p');
         if (!p) return;
-        win.history.pushState({}, '', url.href);
-        triggerBridge(p);
+        navegarSPA(p, url.href);
       });
     });
   }
