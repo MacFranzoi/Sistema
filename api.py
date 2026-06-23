@@ -526,12 +526,21 @@ _GH_REPO   = "MacFranzoi/Sistema"
 _GH_BRANCH = "main"
 _GH_API    = "https://api.github.com"
 
+def _gh_token() -> str:
+    """Pega o GITHUB_TOKEN. No Railway vem de os.environ; no Streamlit Cloud, de secrets.
+    IMPORTANTE: checa os.environ PRIMEIRO — no Railway não existe secrets.toml e o
+    st.secrets pode devolver "" sem erro, quebrando toda a persistência via GitHub."""
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        try:
+            import streamlit as _st
+            token = _st.secrets.get("GITHUB_TOKEN", "")
+        except Exception:
+            pass
+    return token
+
 def _gh_headers():
-    try:
-        import streamlit as _st
-        token = _st.secrets.get("GITHUB_TOKEN", "")
-    except Exception:
-        token = os.environ.get("GITHUB_TOKEN", "")
+    token = _gh_token()
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",

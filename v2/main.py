@@ -76,6 +76,15 @@ def paginas_do_usuario(user: str) -> list:
     return setores.get(setor, {}).get("paginas", [])
 
 
+def admin_atual(request: Request) -> str:
+    """Como usuario_atual, mas exige que o usuário seja do setor admin."""
+    user = usuario_atual(request)
+    usuarios = api.carregar_usuarios()
+    if usuarios.get(user, {}).get("setor") != "admin":
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores.")
+    return user
+
+
 # ── Modelos de entrada ───────────────────────────────────────────────────────
 class LoginIn(BaseModel):
     usuario: str
@@ -740,6 +749,296 @@ def produtos_clonar(request: Request, dados: CloneIn):
         raise HTTPException(status_code=400, detail="Preencha o nome e o código.")
     try:
         res = api.clonar_produto(dados.produto_id, dados.novo_nome, dados.novo_codigo, loja_id=dados.loja or None)
+        return {"ok": True, "resultado": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Usuários (admin) ──────────────────────────────────────────────────────────
+@app.get("/api/usuarios")
+def usuarios_listar(request: Request):
+    admin_atual(request)
+    usuarios = api.carregar_usuarios()
+    setores = api.carregar_setores()
+    lista = []
+    for login, ud in usuarios.items():
+        sk = ud.get("setor", "vendas")
+        lista.append({
+            "login": login,
+            "nome": ud.get("nome", ""),
+            "setor": sk,
+            "setor_label": setores.get(sk, {}).get("label", sk),
+            "paginas": setores.get(sk, {}).get("paginas", []),
+        })
+    setores_out = [{"id": k, "label": v.get("label", k)} for k, v in setores.items()]
+    return {"usuarios": lista, "setores": setores_out}
+
+
+class UsuarioIn(BaseModel):
+    login: str
+    nome: str = ""
+    senha: str = ""
+    setor: str = "vendas"
+
+
+@app.post("/api/usuarios")
+def usuarios_criar(request: Request, dados: UsuarioIn):
+    admin_atual(request)
+    login = (dados.login or "").strip().lower()
+    usuarios = api.carregar_usuarios()
+    if not login or not dados.senha:
+        raise HTTPException(status_code=400, detail="Login e senha são obrigatórios.")
+    if login in usuarios:
+        raise HTTPException(status_code=400, detail=f"Login '{login}' já existe.")
+    usuarios[login] = {"nome": dados.nome or login, "senha": dados.senha, "setor": dados.setor}
+    api.salvar_usuarios(usuarios)
+    return {"ok": True}
+
+
+class UsuarioEditIn(BaseModel):
+    nome: str = ""
+    senha: str = ""   # vazio = mantém
+    setor: str = "vendas"
+
+
+@app.put("/api/usuarios/{login}")
+def usuarios_editar(request: Request, login: str, dados: UsuarioEditIn):
+    me_admin = admin_atual(request)
+    usuarios = api.carregar_usuarios()
+    if login not in usuarios:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    if login == me_admin and dados.setor != "admin":
+        raise HTTPException(status_code=400, detail="Você não pode remover seu próprio acesso admin.")
+    usuarios[login]["nome"] = dados.nome
+    usuarios[login]["setor"] = dados.setor
+    if dados.senha:
+        usuarios[login]["senha"] = dados.senha
+    api.salvar_usuarios(usuarios)
+    return {"ok": True}
+
+
+@app.delete("/api/usuarios/{login}")
+def usuarios_excluir(request: Request, login: str):
+    me_admin = admin_atual(request)
+    if login == me_admin:
+        raise HTTPException(status_code=400, detail="Você não pode excluir seu próprio usuário.")
+    usuarios = api.carregar_usuarios()
+    if login in usuarios:
+        del usuarios[login]
+        api.salvar_usuarios(usuarios)
+    return {"ok": True}
+
+
+@app.post("/api/usuarios/importar")
+def usuarios_importar(request: Request):
+    admin_atual(request)
+    usuarios = api.carregar_usuarios()
+    resultado = api.criar_usuarios_funcionarios(usuarios)
+    api.salvar_usuarios(usuarios)
+    return resultado
+
+
+# ── Aprovações de entrada ─────────────────────────────────────────────────────
+@app.get("/api/aprovacoes")
+def aprovacoes_listar(request: Request):
+    user = usuario_atual(request)
+    usuarios = api.carregar_usuarios()
+    setor = usuarios.get(user, {}).get("setor", "vendas")
+    setores = api.carregar_setores()
+    pode = setor == "admin" or "aprovacoes" in setores.get(setor, {}).get("paginas", [])
+    pendentes = api.listar_entradas_aprovacao(status="aguardando")
+    todos = api.listar_entradas_aprovacao()
+    historico = [a for a in todos if a.get("status") != "aguardando"]
+
+    def _resumo(a):
+        return {
+            "id": a.get("id", ""),
+            "criado_em": (a.get("criado_em", "") or "")[:16].replace("T", " "),
+            "criador": a.get("nome_criador", a.get("criado_por", "")),
+            "loja_nome": a.get("loja_nome", ""),
+            "obs_envio": a.get("obs_envio", ""),
+            "status": a.get("status", ""),
+            "aprovador": a.get("nome_aprovador", "") or "—",
+            "aprovado_em": (a.get("aprovado_em", "") or "")[:16].replace("T", " ") or "—",
+            "obs_aprovacao": a.get("obs_aprovacao", "") or "",
+            "itens": [
+                {"produto": i.get("produto_nome", ""), "variacao": i.get("variacao_nome", ""), "qtd": i.get("quantidade", 1)}
+                for i in a.get("itens", [])
+            ],
+        }
+    return {
+        "pode_aprovar": pode,
+        "pendentes": [_resumo(a) for a in pendentes],
+        "historico": [_resumo(a) for a in historico],
+    }
+
+
+class AprovacaoIn(BaseModel):
+    aprovado: bool
+    obs: str = ""
+    loja: str = ""
+
+
+@app.post("/api/aprovacoes/{entrada_id}")
+def aprovacoes_decidir(request: Request, entrada_id: str, dados: AprovacaoIn):
+    user = usuario_atual(request)
+    usuarios = api.carregar_usuarios()
+    setor = usuarios.get(user, {}).get("setor", "vendas")
+    setores = api.carregar_setores()
+    if not (setor == "admin" or "aprovacoes" in setores.get(setor, {}).get("paginas", [])):
+        raise HTTPException(status_code=403, detail="Você não tem permissão para aprovar.")
+    nome = usuarios.get(user, {}).get("nome", user)
+    res = api.aprovar_entrada_pendente(entrada_id, user, nome, dados.aprovado, dados.obs or "")
+    if not res:
+        raise HTTPException(status_code=404, detail="Entrada não encontrada.")
+    if dados.aprovado:
+        loja_ap = res.get("loja_id") or dados.loja
+        if not loja_ap:
+            raise HTTPException(status_code=400, detail="Selecione uma loja para aplicar o estoque.")
+        api.atualizar_estoque_lote(res["itens"], loja_id=loja_ap, modo="soma")
+        try:
+            api.criar_notificacao(
+                para_usuarios=[res.get("criado_por", "")],
+                tipo="aprovacao_resultado",
+                titulo="Sua lista foi aprovada ✅",
+                corpo=f"{nome} aprovou sua entrada de {len(res.get('itens', []))} item(ns) — loja {res.get('loja_nome', '')}",
+                pagina="entrada", de_usuario=user,
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            api.criar_notificacao(
+                para_usuarios=[res.get("criado_por", "")],
+                tipo="aprovacao_resultado",
+                titulo="Sua lista foi rejeitada ❌",
+                corpo=f"{nome} rejeitou sua entrada. Obs: {dados.obs or '—'}",
+                pagina="entrada", de_usuario=user,
+            )
+        except Exception:
+            pass
+    return {"ok": True, "status": res.get("status")}
+
+
+# ── Listas salvas ─────────────────────────────────────────────────────────────
+@app.get("/api/listas")
+def listas_listar(request: Request, tipo: str = Query(default="")):
+    usuario_atual(request)
+    todas = api.listar_listas_salvas(tipo or None)
+    out = [{
+        "arquivo": l.get("_arquivo", ""),
+        "nome": l.get("nome", l.get("_arquivo", "")),
+        "tipo": l.get("tipo", ""),
+        "loja_nome": l.get("loja_nome", ""),
+        "criado_em": (l.get("criado_em", "") or "")[:10],
+        "n_itens": len(l.get("itens", [])),
+    } for l in todas]
+    return {"listas": out}
+
+
+@app.get("/api/listas/{arquivo}")
+def listas_ver(request: Request, arquivo: str):
+    usuario_atual(request)
+    d = api.carregar_lista(arquivo)
+    if not d:
+        raise HTTPException(status_code=404, detail="Lista não encontrada.")
+    itens = [
+        {"produto": i.get("produto_nome", ""), "variacao": i.get("variacao_nome", ""),
+         "codigo": i.get("variacao_cod", "") or i.get("cod_interno", ""), "qtd": i.get("quantidade", "")}
+        for i in d.get("itens", [])
+    ]
+    return {
+        "nome": d.get("nome", arquivo), "tipo": d.get("tipo", ""),
+        "loja_nome": d.get("loja_nome", ""), "itens": itens,
+    }
+
+
+@app.delete("/api/listas/{arquivo}")
+def listas_excluir(request: Request, arquivo: str):
+    usuario_atual(request)
+    api.excluir_lista(arquivo)
+    return {"ok": True}
+
+
+# ── Etiquetas ─────────────────────────────────────────────────────────────────
+@app.get("/api/etiquetas/formatos")
+def etiquetas_formatos(request: Request):
+    usuario_atual(request)
+    return {"formatos": [{"id": k, "label": v.get("label", k)} for k, v in api.FORMATOS_ETIQUETA.items()]}
+
+
+class EtiquetaItem(BaseModel):
+    produto_nome: str = ""
+    variacao_nome: str = ""
+    variacao_cod: str = ""
+    variacao_id: str = ""
+    quantidade: int = 1
+
+
+class EtiquetasIn(BaseModel):
+    formato: str = "pimaco_a4351"
+    itens: list[EtiquetaItem]
+
+
+@app.post("/api/etiquetas/pdf")
+def etiquetas_pdf(request: Request, dados: EtiquetasIn):
+    usuario_atual(request)
+    if not dados.itens:
+        raise HTTPException(status_code=400, detail="Adicione itens antes de gerar.")
+    itens = [it.model_dump() for it in dados.itens]
+    pdf = api.gerar_pdf_etiquetas(itens, dados.formato)
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="etiquetas_{dados.formato}.pdf"'},
+    )
+
+
+# ── Pedido de Compra ──────────────────────────────────────────────────────────
+@app.get("/api/situacoes_compras")
+def situacoes_compras(request: Request):
+    usuario_atual(request)
+    dados = api.buscar_situacoes_compras()
+    out = []
+    for s in dados:
+        if isinstance(s, dict) and "situacao" in s:
+            s = s["situacao"]
+        if isinstance(s, dict):
+            out.append({"id": s.get("id", ""), "nome": s.get("nome", "")})
+    return {"situacoes": out}
+
+
+class PedidoItem(BaseModel):
+    produto_id: str
+    variacao_id: str
+    produto_nome: str = ""
+    quantidade: int = 1
+    valor_custo: str = "0.00"
+
+
+class PedidoIn(BaseModel):
+    fornecedor_id: str
+    situacao_id: str
+    data_emissao: str
+    observacoes: str = ""
+    loja: str = ""
+    itens: list[PedidoItem]
+
+
+@app.post("/api/pedido/registrar")
+def pedido_registrar(request: Request, dados: PedidoIn):
+    usuario_atual(request)
+    if not dados.fornecedor_id:
+        raise HTTPException(status_code=400, detail="Selecione um fornecedor.")
+    if not dados.situacao_id:
+        raise HTTPException(status_code=400, detail="Selecione a situação do pedido.")
+    if not dados.itens:
+        raise HTTPException(status_code=400, detail="Adicione itens ao pedido.")
+    itens = [it.model_dump() for it in dados.itens]
+    try:
+        res = api.registrar_compra_gestaoclick(
+            itens, fornecedor_id=dados.fornecedor_id, data_emissao=dados.data_emissao,
+            situacao_id=dados.situacao_id, observacoes=dados.observacoes, loja_id=dados.loja or None,
+        )
         return {"ok": True, "resultado": res}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

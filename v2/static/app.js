@@ -257,6 +257,11 @@ const PAGINAS = {
   }),
   novo_modelo: async (cont) => renderNovoProduto(cont),
   clonar_modelo: async (cont) => renderClonar(cont),
+  usuarios: async (cont) => renderUsuarios(cont),
+  aprovacoes: async (cont) => renderAprovacoes(cont),
+  listas: async (cont) => renderListas(cont),
+  etiquetas: async (cont) => renderEtiquetas(cont),
+  pedido: async (cont) => renderPedido(cont),
 };
 
 // View de estoque (busca ao vivo)
@@ -942,6 +947,396 @@ async function renderClonar(cont) {
   };
   $("#cl-buscar").onclick = buscar;
   $("#cl-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+}
+
+// Usuários (admin): lista + adicionar + editar/excluir + importar
+async function renderUsuarios(cont) {
+  cont.innerHTML = '<div class="loading">Carregando…</div>';
+  let d;
+  try { d = await api("/api/usuarios"); }
+  catch (err) { cont.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; return; }
+  const setorOpts = d.setores.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join("");
+
+  cont.innerHTML = `
+    <div class="page-title">👤 Usuários</div>
+    <div class="page-sub">Gerenciamento de contas e setores</div>
+    <div class="busca"><button id="us-importar" class="btn-sair">📋 Importar funcionários do GestãoClick</button></div>
+    <div id="us-imp-msg"></div>
+    <table class="tabela" style="margin-bottom:24px">
+      <thead><tr><th>Login</th><th>Nome</th><th>Setor</th><th></th></tr></thead>
+      <tbody>${d.usuarios.map((u) => `
+        <tr data-login="${esc(u.login)}">
+          <td><b>${esc(u.login)}</b></td><td>${esc(u.nome)}</td><td>${esc(u.setor_label)}</td>
+          <td><button class="btn-sair us-edit" data-login="${esc(u.login)}">✏️</button></td>
+        </tr>`).join("")}</tbody>
+    </table>
+    <div class="card" style="max-width:440px">
+      <div class="card-head">➕ Adicionar usuário</div>
+      <input id="us-login" class="us-in" placeholder="Login (sem espaços)" />
+      <input id="us-nome" class="us-in" placeholder="Nome completo" />
+      <input id="us-senha" class="us-in" placeholder="Senha inicial" />
+      <select id="us-setor" class="loja-sel" style="width:100%;margin-bottom:8px">${setorOpts}</select>
+      <div class="busca"><button id="us-add">Salvar</button></div>
+      <div id="us-add-msg"></div>
+    </div>
+    <div id="us-edit-box"></div>`;
+
+  cont.querySelectorAll(".us-in").forEach((i) =>
+    i.style.cssText = "display:block;width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
+
+  $("#us-importar").onclick = async () => {
+    const btn = $("#us-importar"); btn.disabled = true; btn.textContent = "Importando…";
+    try {
+      const r = await apiPost("/api/usuarios/importar", {});
+      let m = "";
+      if (r.criados && r.criados.length) m += `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.criados.length} conta(s): ${r.criados.map((c) => esc(c.login + " (senha: " + c.senha + ")")).join(", ")}</div>`;
+      if (r.ja_existem && r.ja_existem.length) m += `<div class="placeholder">Já existiam: ${esc(r.ja_existem.join(", "))}</div>`;
+      $("#us-imp-msg").innerHTML = m || '<div class="placeholder">Nenhum funcionário novo encontrado.</div>';
+      if (r.criados && r.criados.length) setTimeout(() => navegar("usuarios"), 1500);
+    } catch (err) { $("#us-imp-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    finally { btn.disabled = false; btn.textContent = "📋 Importar funcionários do GestãoClick"; }
+  };
+
+  $("#us-add").onclick = async () => {
+    try {
+      await apiPost("/api/usuarios", {
+        login: $("#us-login").value, nome: $("#us-nome").value,
+        senha: $("#us-senha").value, setor: $("#us-setor").value,
+      });
+      navegar("usuarios");
+    } catch (err) { $("#us-add-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+  };
+
+  cont.querySelectorAll(".us-edit").forEach((b) => {
+    b.onclick = () => {
+      const u = d.usuarios.find((x) => x.login === b.dataset.login);
+      $("#us-edit-box").innerHTML = `
+        <div class="card" style="max-width:440px;margin-top:16px">
+          <div class="card-head">✏️ Editar: ${esc(u.login)}</div>
+          <input id="ue-nome" class="us-in" value="${esc(u.nome)}" placeholder="Nome" />
+          <input id="ue-senha" class="us-in" placeholder="Nova senha (vazio = manter)" />
+          <select id="ue-setor" class="loja-sel" style="width:100%;margin-bottom:8px">${d.setores.map((s) => `<option value="${esc(s.id)}" ${s.id === u.setor ? "selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
+          <div class="busca"><button id="ue-salvar">💾 Salvar</button><button id="ue-excluir" class="btn-sair">🗑️ Excluir</button></div>
+          <div id="ue-msg"></div>`;
+      $("#us-edit-box").querySelectorAll(".us-in").forEach((i) =>
+        i.style.cssText = "display:block;width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
+      $("#ue-salvar").onclick = async () => {
+        try {
+          await api(`/api/usuarios/${encodeURIComponent(u.login)}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nome: $("#ue-nome").value, senha: $("#ue-senha").value, setor: $("#ue-setor").value }),
+          });
+          navegar("usuarios");
+        } catch (err) { $("#ue-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      };
+      $("#ue-excluir").onclick = async () => {
+        if (!confirm(`Excluir o usuário '${u.login}'?`)) return;
+        try {
+          await api(`/api/usuarios/${encodeURIComponent(u.login)}`, { method: "DELETE" });
+          navegar("usuarios");
+        } catch (err) { $("#ue-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      };
+      $("#us-edit-box").scrollIntoView({ behavior: "smooth" });
+    };
+  });
+}
+
+// Aprovações de entrada
+async function renderAprovacoes(cont) {
+  cont.innerHTML = '<div class="loading">Carregando…</div>';
+  let d;
+  try { d = await api("/api/aprovacoes"); }
+  catch (err) { cont.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; return; }
+
+  const itensTabela = (itens) => `
+    <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th></tr></thead>
+    <tbody>${itens.map((i) => `<tr><td>${esc(i.produto)}</td><td>${esc(i.variacao)}</td><td>${i.qtd}</td></tr>`).join("")}</tbody></table>`;
+
+  cont.innerHTML = `
+    <div class="page-title">✅ Aprovações de Entrada</div>
+    <div class="page-sub">Entradas aguardando aprovação</div>
+    ${d.pendentes.length ? d.pendentes.map((a) => `
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-head">🔔 ${esc(a.criador)} · ${esc(a.loja_nome)} · ${a.itens.length} itens <span class="stat-lbl">${esc(a.criado_em)}</span></div>
+        ${a.obs_envio ? `<div class="placeholder" style="padding:8px;margin-bottom:8px">${esc(a.obs_envio)}</div>` : ""}
+        ${itensTabela(a.itens)}
+        ${d.pode_aprovar ? `
+          <input class="ap-obs us-in" data-id="${esc(a.id)}" placeholder="Observação (opcional)" />
+          <div class="busca"><button class="ap-ok" data-id="${esc(a.id)}">✅ Aprovar e aplicar</button>
+            <button class="ap-no btn-sair" data-id="${esc(a.id)}">❌ Rejeitar</button></div>
+          <div class="ap-msg" data-id="${esc(a.id)}"></div>` : '<div class="placeholder">Aguardando um administrador.</div>'}
+      </div>`).join("") : '<div class="placeholder">Nenhuma entrada aguardando aprovação.</div>'}
+    ${d.historico.length ? `
+      <div class="page-sub" style="margin-top:24px">📋 Histórico</div>
+      <table class="tabela">
+        <thead><tr><th>Status</th><th>Envio</th><th>Por</th><th>Loja</th><th>Itens</th><th>Aprovador</th><th>Obs</th></tr></thead>
+        <tbody>${d.historico.map((h) => `<tr>
+          <td>${h.status === "aprovado" ? '<span class="badge badge-green">✅ Aprovado</span>' : '<span class="badge badge-red">❌ Rejeitado</span>'}</td>
+          <td>${esc(h.criado_em)}</td><td>${esc(h.criador)}</td><td>${esc(h.loja_nome)}</td>
+          <td>${h.itens.length}</td><td>${esc(h.aprovador)}</td><td>${esc(h.obs_aprovacao)}</td></tr>`).join("")}</tbody>
+      </table>` : ""}`;
+
+  cont.querySelectorAll(".ap-obs").forEach((i) =>
+    i.style.cssText = "display:block;width:100%;margin:8px 0;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
+
+  const decidir = async (id, aprovado) => {
+    const obs = (cont.querySelector(`.ap-obs[data-id="${id}"]`) || {}).value || "";
+    const msg = cont.querySelector(`.ap-msg[data-id="${id}"]`);
+    try {
+      await apiPost(`/api/aprovacoes/${encodeURIComponent(id)}`, { aprovado, obs, loja: Estado.lojaId });
+      navegar("aprovacoes");
+    } catch (err) { msg.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+  };
+  cont.querySelectorAll(".ap-ok").forEach((b) => b.onclick = () => {
+    if (aprovado_loja_ok()) decidir(b.dataset.id, true);
+    else cont.querySelector(`.ap-msg[data-id="${b.dataset.id}"]`).innerHTML = '<div class="aviso">Selecione uma loja no topo antes de aprovar.</div>';
+  });
+  cont.querySelectorAll(".ap-no").forEach((b) => b.onclick = () => decidir(b.dataset.id, false));
+}
+function aprovado_loja_ok() { return !!Estado.lojaId; }
+
+// Listas salvas
+async function renderListas(cont) {
+  const TIPOS = { "": "Todas", pedido: "🛒 Pedido", entrada: "📥 Entrada", acerto: "🔧 Acerto", etiquetas: "🏷️ Etiquetas" };
+  let filtro = "";
+  cont.innerHTML = `
+    <div class="page-title">📋 Listas salvas</div>
+    <div class="page-sub">Listas de pedido, entrada, acerto e etiquetas</div>
+    <div class="submenu" style="position:static;padding:0;border:none;margin-bottom:16px">
+      ${Object.entries(TIPOS).map(([k, v], i) => `<button class="sub-item ${i === 0 ? "ativo" : ""}" data-tipo="${k}">${v}</button>`).join("")}
+    </div>
+    <div id="ls-resultado"><div class="loading">Carregando…</div></div>`;
+
+  const carregar = async () => {
+    const res = $("#ls-resultado");
+    res.innerHTML = '<div class="loading">Carregando…</div>';
+    try {
+      const q = new URLSearchParams({ tipo: filtro });
+      const d = await api("/api/listas?" + q.toString());
+      if (!d.listas.length) { res.innerHTML = '<div class="placeholder">Nenhuma lista encontrada.</div>'; return; }
+      res.innerHTML = d.listas.map((l) => `
+        <div class="card" style="margin-bottom:10px" data-arq="${esc(l.arquivo)}">
+          <div class="card-head">${esc(l.nome)}
+            <span class="stat-lbl">${esc(TIPOS[l.tipo] || l.tipo)} · ${esc(l.loja_nome)} · ${l.n_itens} itens · ${esc(l.criado_em)}</span></div>
+          <div class="busca">
+            <button class="ls-ver" data-arq="${esc(l.arquivo)}">👁️ Ver itens</button>
+            <button class="ls-del btn-sair" data-arq="${esc(l.arquivo)}">🗑️ Excluir</button>
+          </div>
+          <div class="ls-itens" data-arq="${esc(l.arquivo)}"></div>
+        </div>`).join("");
+
+      res.querySelectorAll(".ls-ver").forEach((b) => b.onclick = async () => {
+        const box = res.querySelector(`.ls-itens[data-arq="${CSS.escape(b.dataset.arq)}"]`);
+        if (box.innerHTML) { box.innerHTML = ""; return; }
+        box.innerHTML = '<div class="loading">Carregando…</div>';
+        try {
+          const dd = await api("/api/listas/" + encodeURIComponent(b.dataset.arq));
+          box.innerHTML = `<table class="tabela" style="margin-top:8px">
+            <thead><tr><th>Produto</th><th>Variação</th><th>Código</th><th>Qtd</th></tr></thead>
+            <tbody>${dd.itens.map((i) => `<tr><td>${esc(i.produto)}</td><td>${esc(i.variacao)}</td><td>${esc(i.codigo)}</td><td>${esc(i.qtd)}</td></tr>`).join("")}</tbody></table>`;
+        } catch (err) { box.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      });
+      res.querySelectorAll(".ls-del").forEach((b) => b.onclick = async () => {
+        if (!confirm("Excluir esta lista?")) return;
+        try { await api("/api/listas/" + encodeURIComponent(b.dataset.arq), { method: "DELETE" }); carregar(); }
+        catch (err) { alert(err.message); }
+      });
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  cont.querySelectorAll("[data-tipo]").forEach((b) => b.onclick = () => {
+    filtro = b.dataset.tipo;
+    cont.querySelectorAll("[data-tipo]").forEach((x) => x.classList.toggle("ativo", x === b));
+    carregar();
+  });
+  carregar();
+}
+
+// Helper reutilizável: busca produtos e chama onAdd(item) por variação com qtd>0
+function montarBuscaProdutos(prodDiv, onAdd, { rotuloQtd = "Qtd", comCusto = false } = {}) {
+  return async (termo) => {
+    prodDiv.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ termo, loja: Estado.lojaId });
+      const d = await api("/api/produtos/buscar?" + q.toString());
+      if (!d.produtos.length) { prodDiv.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      prodDiv.innerHTML = d.produtos.map((p, pi) => `
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-head">${esc(p.nome)} <span class="stat-lbl">${esc(p.codigo_interno)}</span></div>
+          <table class="tabela">
+            <thead><tr><th>Variação</th><th>Cód.</th><th>Estoque</th>${comCusto ? "<th>Custo</th>" : ""}<th>${esc(rotuloQtd)}</th></tr></thead>
+            <tbody>${p.variacoes.map((v, vi) => `
+              <tr><td>${esc(v.nome)}</td><td>${esc(v.codigo)}</td><td>${v.estoque}</td>
+              ${comCusto ? `<td><input type="number" step="0.01" min="0" class="mb-custo" data-p="${pi}" data-v="${vi}" placeholder="0.00" style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px"></td>` : ""}
+              <td><input type="number" min="0" class="mb-qtd" data-p="${pi}" data-v="${vi}" style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px"></td></tr>`).join("")}</tbody>
+          </table>
+          <div class="busca" style="margin-top:10px"><button class="mb-add" data-p="${pi}">➕ Adicionar</button></div>
+        </div>`).join("");
+      prodDiv.querySelectorAll(".mb-add").forEach((btn) => {
+        btn.onclick = () => {
+          const pi = +btn.dataset.p, p = d.produtos[pi]; let n = 0;
+          prodDiv.querySelectorAll(`.mb-qtd[data-p="${pi}"]`).forEach((inp) => {
+            const qtd = Number(inp.value);
+            if (qtd > 0) {
+              const v = p.variacoes[+inp.dataset.v];
+              const custoInp = comCusto ? prodDiv.querySelector(`.mb-custo[data-p="${pi}"][data-v="${inp.dataset.v}"]`) : null;
+              onAdd({
+                produto_id: p.id, produto_nome: p.nome,
+                variacao_id: v.id, variacao_nome: v.nome, variacao_cod: v.codigo,
+                quantidade: qtd, valor_custo: custoInp ? (custoInp.value || "0.00") : "0.00",
+              });
+              inp.value = ""; if (custoInp) custoInp.value = ""; n++;
+            }
+          });
+        };
+      });
+    } catch (err) {
+      prodDiv.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+}
+
+// Etiquetas: monta lista e gera PDF
+async function renderEtiquetas(cont) {
+  let formatos = [];
+  try { formatos = (await api("/api/etiquetas/formatos")).formatos; } catch (e) {}
+  const lista = [];
+  cont.innerHTML = `
+    <div class="page-title">🏷️ Etiquetas</div>
+    <div class="page-sub">Monte a lista e gere o PDF com código de barras</div>
+    <div class="busca">
+      <input id="et-termo" type="text" placeholder="Buscar produto…" />
+      <button id="et-buscar">Buscar</button>
+    </div>
+    <div id="et-prod"></div>
+    <div id="et-lista" style="margin-top:20px"></div>`;
+
+  const renderLista = () => {
+    const div = $("#et-lista");
+    if (!lista.length) { div.innerHTML = '<div class="placeholder">Nenhum item na lista.</div>'; return; }
+    div.innerHTML = `
+      <div class="page-sub">📝 Lista (${lista.length} itens · ${lista.reduce((s, i) => s + i.quantidade, 0)} etiquetas)</div>
+      <table class="tabela"><thead><tr><th>Produto / Variação</th><th>Cód.</th><th>Qtd</th><th></th></tr></thead>
+      <tbody>${lista.map((it, i) => `<tr><td>${esc(it.produto_nome)} / ${esc(it.variacao_nome)}</td>
+        <td>${esc(it.variacao_cod)}</td><td>${it.quantidade}</td>
+        <td><button class="btn-sair et-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>
+      <div class="busca" style="margin-top:16px">
+        <select id="et-fmt" class="loja-sel" style="min-width:260px">${formatos.map((f) => `<option value="${esc(f.id)}">${esc(f.label)}</option>`).join("")}</select>
+        <button id="et-pdf">🖨️ Baixar PDF</button>
+        <button id="et-limpar" class="btn-sair">🗑️ Limpar</button>
+      </div>
+      <div id="et-msg"></div>`;
+    div.querySelectorAll(".et-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
+    $("#et-limpar").onclick = () => { lista.length = 0; renderLista(); };
+    $("#et-pdf").onclick = async () => {
+      const btn = $("#et-pdf"); btn.disabled = true; btn.textContent = "Gerando…";
+      try {
+        const r = await fetch("/api/etiquetas/pdf", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ formato: $("#et-fmt").value, itens: lista }),
+        });
+        if (!r.ok) throw new Error("Erro ao gerar PDF (" + r.status + ")");
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "etiquetas.pdf"; a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        $("#et-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+      } finally {
+        btn.disabled = false; btn.textContent = "🖨️ Baixar PDF";
+      }
+    };
+  };
+
+  const buscar = montarBuscaProdutos($("#et-prod"), (it) => { lista.push(it); renderLista(); }, { rotuloQtd: "Qtd etiquetas" });
+  $("#et-buscar").onclick = () => buscar($("#et-termo").value.trim());
+  $("#et-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar($("#et-termo").value.trim()); });
+  renderLista();
+}
+
+// Pedido de Compra (versão manual: monta itens, escolhe fornecedor/situação e registra)
+async function renderPedido(cont) {
+  const lista = [];
+  let situacoes = [];
+  try { situacoes = (await api("/api/situacoes_compras")).situacoes; } catch (e) {}
+  cont.innerHTML = `
+    <div class="page-title">🛒 Pedido de Compra</div>
+    <div class="page-sub">Monte o pedido, escolha o fornecedor e registre na GestãoClick</div>
+    <div class="busca">
+      <input id="pe-termo" type="text" placeholder="Buscar produto…" />
+      <button id="pe-buscar">Buscar</button>
+    </div>
+    <div id="pe-prod"></div>
+    <div id="pe-lista" style="margin-top:20px"></div>`;
+
+  const renderLista = () => {
+    const div = $("#pe-lista");
+    if (!lista.length) { div.innerHTML = '<div class="placeholder">Nenhum item no pedido.</div>'; return; }
+    div.innerHTML = `
+      <div class="page-sub">📝 Pedido (${lista.length} itens)</div>
+      <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th>Custo</th><th></th></tr></thead>
+      <tbody>${lista.map((it, i) => `<tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
+        <td>${it.quantidade}</td><td>${moeda(it.valor_custo)}</td>
+        <td><button class="btn-sair pe-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>
+      <div class="card" style="margin-top:16px;max-width:520px">
+        <div class="card-head">Dados do pedido</div>
+        <input id="pe-forn-termo" class="pe-in" placeholder="Buscar fornecedor…" />
+        <select id="pe-forn" class="loja-sel" style="width:100%;margin-bottom:8px"><option value="">— selecione um fornecedor —</option></select>
+        <select id="pe-sit" class="loja-sel" style="width:100%;margin-bottom:8px">
+          <option value="">— situação —</option>
+          ${situacoes.map((s) => `<option value="${esc(s.id)}">${esc(s.nome)}</option>`).join("")}</select>
+        <input id="pe-data" type="date" class="pe-in" value="${hoje()}" />
+        <input id="pe-obs" class="pe-in" placeholder="Observações (opcional)" />
+        <div class="busca"><button id="pe-registrar">✅ Registrar pedido</button>
+          <button id="pe-limpar" class="btn-sair">🗑️ Limpar</button></div>
+        <div id="pe-msg"></div>
+      </div>`;
+    div.querySelectorAll(".pe-in").forEach((i) =>
+      i.style.cssText = "display:block;width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
+    div.querySelectorAll(".pe-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
+    $("#pe-limpar").onclick = () => { lista.length = 0; renderLista(); };
+
+    // busca de fornecedor
+    let fornTimer;
+    $("#pe-forn-termo").addEventListener("input", () => {
+      clearTimeout(fornTimer);
+      fornTimer = setTimeout(async () => {
+        const termo = $("#pe-forn-termo").value.trim();
+        if (termo.length < 2) return;
+        try {
+          const d = await api("/api/fornecedores?termo=" + encodeURIComponent(termo));
+          $("#pe-forn").innerHTML = '<option value="">— selecione —</option>' +
+            d.fornecedores.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+        } catch (e) {}
+      }, 400);
+    });
+
+    $("#pe-registrar").onclick = async () => {
+      const btn = $("#pe-registrar"); btn.disabled = true; btn.textContent = "Registrando…";
+      try {
+        await apiPost("/api/pedido/registrar", {
+          fornecedor_id: $("#pe-forn").value, situacao_id: $("#pe-sit").value,
+          data_emissao: $("#pe-data").value, observacoes: $("#pe-obs").value,
+          loja: Estado.lojaId, itens: lista,
+        });
+        $("#pe-msg").innerHTML = '<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ Pedido registrado na GestãoClick!</div>';
+        lista.length = 0;
+        setTimeout(() => renderLista(), 1800);
+      } catch (err) {
+        $("#pe-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+      } finally {
+        btn.disabled = false; btn.textContent = "✅ Registrar pedido";
+      }
+    };
+  };
+
+  const buscar = montarBuscaProdutos($("#pe-prod"), (it) => { lista.push(it); renderLista(); }, { rotuloQtd: "Qtd", comCusto: true });
+  $("#pe-buscar").onclick = () => buscar($("#pe-termo").value.trim());
+  $("#pe-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar($("#pe-termo").value.trim()); });
+  renderLista();
 }
 
 // ── Arranca ────────────────────────────────────────────────────────
