@@ -5,6 +5,12 @@ from datetime import date, datetime
 import api
 from fpdf import FPDF
 
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _cache_produto(loja_id):
+    """Carrega cache de produtos do disco com cache em memória por 10 min."""
+    return api.carregar_cache(loja_id)
+
 # set_page_config DEVE ser a primeira chamada — antes do routing de versão
 st.set_page_config(
     page_title="Plug ERP", page_icon="⚡",
@@ -764,7 +770,7 @@ st.markdown("""<script>
 </script>""", unsafe_allow_html=True)
 
 # ── Carrega cache e clip ──
-cache = api.carregar_cache(loja_id)
+cache = _cache_produto(loja_id)
 clip  = st.session_state.get("clipboard")
 
 # ── Cabeçalho da página ──
@@ -1158,7 +1164,7 @@ if _pg == "dashboard":
     # Status das lojas
     cols_lojas = st.columns(len(api.LOJAS))
     for col, (lid, lnome) in zip(cols_lojas, api.LOJAS.items()):
-        c = api.carregar_cache(lid)
+        c = _cache_produto(lid)
         t = c.get("total", 0) if c else 0
         s = c.get("sincronizado_em", "")[:10] if c else "—"
         badge = '<span class="badge badge-green">● Online</span>' if c else '<span class="badge badge-red">● Sem cache</span>'
@@ -1696,7 +1702,7 @@ if _pg == "relatorios":
             loja_id_rel = None
             if loja_rel != "Todas":
                 loja_id_rel = next((lid for lid, ln in api.LOJAS.items() if ln == loja_rel), None)
-            c_rel = api.carregar_cache(loja_id_rel)
+            c_rel = _cache_produto(loja_id_rel)
             if c_rel:
                 prods = c_rel.get("produtos", [])
                 rows = []
@@ -1769,6 +1775,7 @@ if _pg == "sincronizacao":
             except Exception as e:
                 erros_sync.append(f"{lnome}: {e}")
         barra.progress(1.0)
+        _cache_produto.clear()  # invalida cache em memória após sync
         if erros_sync:
             status_txt.warning("Concluído com erros:\n" + "\n".join(erros_sync))
         else:
@@ -1778,7 +1785,7 @@ if _pg == "sincronizacao":
     st.markdown('<div class="erp-card">', unsafe_allow_html=True)
     st.markdown("**Status por loja**")
     for lid, lnome in api.LOJAS.items():
-        c = api.carregar_cache(lid)
+        c = _cache_produto(lid)
         if c:
             s = c.get("sincronizado_em", "")[:16].replace("T", " às ")
             st.markdown(f"✅ **{lnome}** — {c['total']} produtos — {s}")
@@ -4350,7 +4357,7 @@ if _pg == "estoque_loja":
     st.subheader("Estoque por Loja")
     st.caption("Consulte e edite o estoque de um produto em todas as lojas.")
 
-    cache_any = cache or api.carregar_cache(None)
+    cache_any = cache or _cache_produto(None)
     if not cache_any:
         st.warning("Sincronize os produtos primeiro.")
     else:
@@ -4462,7 +4469,7 @@ if _pg == "disponibilidade":
     st.caption("Controle em quais lojas cada produto está ativo. Selecionar um grupo pai inclui todos os subgrupos.")
 
     # Carrega caches de todas as lojas para comparar ativo real por loja
-    caches_por_loja = {lid: api.carregar_cache(lid) for lid in api.LOJAS}
+    caches_por_loja = {lid: _cache_produto(lid) for lid in api.LOJAS}
     cache_any = cache or next((c for c in caches_por_loja.values() if c), None)
 
     if not cache_any:
