@@ -1257,49 +1257,221 @@ async function renderEtiquetas(cont) {
   renderLista();
 }
 
-// Pedido de Compra (versão manual: monta itens, escolhe fornecedor/situação e registra)
+// Pedido de Compra — fiel ao Streamlit: WhatsApp/IA com kits + montagem manual + registro
 async function renderPedido(cont) {
-  const lista = [];
-  let situacoes = [];
+  const pedido = [];   // itens do catálogo
+  const avulsos = [];  // itens sem vínculo
+  let situacoes = [], kits = [];
   try { situacoes = (await api("/api/situacoes_compras")).situacoes; } catch (e) {}
+  try { kits = (await api("/api/pedido/kits")).kits; } catch (e) {}
+
   cont.innerHTML = `
     <div class="page-title">🛒 Pedido de Compra</div>
-    <div class="page-sub">Monte o pedido, escolha o fornecedor e registre na GestãoClick</div>
-    <div class="busca">
-      <input id="pe-termo" type="text" placeholder="Buscar produto…" />
-      <button id="pe-buscar">Buscar</button>
-    </div>
-    <div id="pe-prod"></div>
-    <div id="pe-lista" style="margin-top:20px"></div>`;
+    <div class="page-sub">Importe por WhatsApp/IA com kits, ou monte manualmente</div>
 
-  const renderLista = () => {
+    <details class="card" style="margin-bottom:16px" open>
+      <summary style="cursor:pointer;font-weight:600">🤖 Importar pedido via WhatsApp (IA)</summary>
+      <div style="margin-top:12px">
+        <textarea id="pw-texto" placeholder="Poco x3 - masculino e brilho&#10;X6 - femininas&#10;Note13pro4g - masculinas e femininas" style="width:100%;height:140px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none;font-family:inherit"></textarea>
+        <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--txt2);font-size:.85rem">⚙️ Regras personalizadas</summary>
+          <textarea id="pw-regras" placeholder="sl iphone = vr&#10;sl apple = vr" style="width:100%;height:60px;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;outline:none;font-family:inherit"></textarea></details>
+        <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--txt2);font-size:.85rem">➕ Itens avulsos diretos</summary>
+          <textarea id="pw-avulsos" placeholder="iPhone 16 / Carteira | 2&#10;Samsung A15 / Película" style="width:100%;height:60px;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;outline:none;font-family:inherit"></textarea></details>
+        <div class="busca" style="margin-top:10px">
+          <input id="pw-forn" placeholder="Fornecedor (opcional)" />
+          <button id="pw-gerar">✨ Gerar pré-pedido</button>
+        </div>
+        <div id="pw-review"></div>
+      </div>
+    </details>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head">Produtos cadastrados no sistema</div>
+      <div class="busca">
+        <input id="pe-termo" type="text" placeholder="Buscar produto (nome ou código)…" />
+        <button id="pe-buscar">Buscar</button>
+      </div>
+      <div id="pe-prod"></div>
+    </div>
+
+    <div id="pe-lista"></div>`;
+
+  // ── WhatsApp/IA ──
+  $("#pw-gerar").onclick = async () => {
+    const texto = $("#pw-texto").value, avul = $("#pw-avulsos").value;
+    if (!texto.trim() && !avul.trim()) return;
+    const btn = $("#pw-gerar"); btn.disabled = true; btn.textContent = "Analisando com IA…";
+    $("#pw-review").innerHTML = '<div class="loading">Analisando com IA… (pode levar alguns segundos)</div>';
+    try {
+      const d = await apiPost("/api/pedido/whatsapp", {
+        texto, regras: $("#pw-regras").value, avulsos: avul,
+        fornecedor: $("#pw-forn").value, loja: Estado.lojaId,
+      });
+      renderReview(d);
+    } catch (err) {
+      $("#pw-review").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = "✨ Gerar pré-pedido";
+    }
+  };
+
+  function renderReview(d) {
+    const achados = d.expandido.filter((l) => l._achado);
+    const falhos = d.expandido.filter((l) => !l._achado);
+    const forn = $("#pw-forn").value.trim() || "—";
+    let html = "";
+    if (d.nao_compreendidos && d.nao_compreendidos.length)
+      html += `<div class="aviso">⚠ ${d.nao_compreendidos.length} linha(s) não compreendida(s):<br>${d.nao_compreendidos.map(esc).join("<br>")}</div>`;
+    if (d.truncado_resto)
+      html += `<div class="aviso">⚠ Resposta truncada — cole o resto no campo acima e gere de novo:<br><textarea readonly style="width:100%;height:80px;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px">${esc(d.truncado_resto)}</textarea></div>`;
+
+    html += '<div class="page-sub" style="margin-top:12px">Pré-pedido gerado — selecione e ajuste</div>';
+    if (achados.length) {
+      html += `<table class="tabela" id="pw-ok"><thead><tr><th>✓</th><th>Aparelho</th><th>Kit</th><th>Variação</th><th>Qtd</th></tr></thead>
+        <tbody>${achados.map((l, i) => `<tr data-i="${i}">
+          <td><input type="checkbox" class="pw-ok-chk" checked></td>
+          <td>${esc(l.Aparelho)}</td><td>${esc(l.Kit)}</td><td>${esc(l["Variação"])}</td>
+          <td><input type="number" min="1" class="pw-ok-qtd" value="${l.Qtd}" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:5px 7px"></td>
+        </tr>`).join("")}</tbody></table>`;
+    }
+    if (falhos.length) {
+      html += `<div class="aviso" style="margin-top:10px">⚠ ${falhos.length} variação(ões) sem match no catálogo — marque para criar como avulso</div>
+        <table class="tabela" id="pw-fail"><thead><tr><th>Criar avulso</th><th>Descrição (editável)</th><th>Qtd</th></tr></thead>
+        <tbody>${falhos.map((l, i) => {
+          const desc = l._avulso_auto ? (l._desc_avulso || (l.Aparelho + " / " + l.Kit))
+            : (l.Aparelho + " / " + l.Kit + " / " + String(l["Variação"]).replace("⚠ ", "").replace(" não encontrado", ""));
+          return `<tr data-i="${i}">
+            <td><input type="checkbox" class="pw-fail-chk" ${l._avulso_auto ? "checked" : ""}></td>
+            <td><input type="text" class="pw-fail-desc" value="${esc(desc)}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:5px 7px"></td>
+            <td><input type="number" min="1" class="pw-fail-qtd" value="${l.Qtd}" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:5px 7px"></td>
+          </tr>`;
+        }).join("")}</tbody></table>`;
+    }
+    html += `<div class="busca" style="margin-top:12px"><button id="pw-add">➕ Adicionar ao pedido</button>
+      <button id="pw-clear" class="btn-sair">🗑 Limpar pré-pedido</button></div>`;
+    $("#pw-review").innerHTML = html;
+
+    $("#pw-clear").onclick = () => { $("#pw-review").innerHTML = ""; };
+    $("#pw-add").onclick = () => {
+      let n = 0;
+      document.querySelectorAll("#pw-ok tbody tr").forEach((tr) => {
+        if (tr.querySelector(".pw-ok-chk").checked) {
+          const meta = achados[+tr.dataset.i];
+          pedido.push({
+            fornecedor: forn, produto_id: meta._prod_id, produto_nome: meta._nome,
+            cod_interno: meta._cod, variacao_id: meta._var_id, variacao_cod: meta._var_cod,
+            variacao_nome: meta["Variação"],
+            quantidade: Number(tr.querySelector(".pw-ok-qtd").value) || 1,
+            valor_custo: String(meta._custo), observacao: meta._obs || "",
+          });
+          n++;
+        }
+      });
+      document.querySelectorAll("#pw-fail tbody tr").forEach((tr) => {
+        if (tr.querySelector(".pw-fail-chk").checked) {
+          avulsos.push({
+            fornecedor: forn, cod_interno: "AVULSO",
+            produto_nome: tr.querySelector(".pw-fail-desc").value, variacao_nome: "",
+            quantidade: Number(tr.querySelector(".pw-fail-qtd").value) || 1,
+            valor_custo: "0.00", observacao: "Criado via WhatsApp — sem vínculo com catálogo", _avulso: true,
+          });
+          n++;
+        }
+      });
+      $("#pw-review").innerHTML = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${n} itens adicionados ao pedido.</div>`;
+      renderLista();
+    };
+  }
+
+  // ── Montagem manual com botões de kit ──
+  const buscarManual = async (termo) => {
+    const prodDiv = $("#pe-prod");
+    prodDiv.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ termo, loja: Estado.lojaId });
+      const d = await api("/api/produtos/buscar?" + q.toString());
+      if (!d.produtos.length) { prodDiv.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      prodDiv.innerHTML = d.produtos.map((p, pi) => `
+        <div class="card" style="margin-bottom:10px" data-pid="${esc(p.id)}">
+          <div class="card-head">${esc(p.nome)} <span class="stat-lbl">${esc(p.codigo_interno)}</span></div>
+          <table class="tabela">
+            <thead><tr><th>Variação</th><th>Cód.</th><th>Estoque</th><th>Qtd a pedir</th></tr></thead>
+            <tbody>${p.variacoes.map((v, vi) => `<tr><td>${esc(v.nome)}</td><td>${esc(v.codigo)}</td><td>${v.estoque}</td>
+              <td><input type="number" min="0" class="pe-qtd" data-p="${pi}" data-v="${vi}" style="width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px"></td></tr>`).join("")}</tbody>
+          </table>
+          <div class="busca" style="margin-top:10px;flex-wrap:wrap">
+            <button class="pe-add" data-p="${pi}">➕ Adicionar manual</button>
+            ${kits.map((k) => `<button class="pe-kit btn-sair" data-p="${pi}" data-kit="${esc(k.kit)}">${esc(k.label)}</button>`).join("")}
+          </div>
+          <div class="pe-kit-msg" data-p="${pi}"></div>
+        </div>`).join("");
+
+      prodDiv.querySelectorAll(".pe-add").forEach((btn) => btn.onclick = () => {
+        const pi = +btn.dataset.p, p = d.produtos[pi]; let n = 0;
+        prodDiv.querySelectorAll(`.pe-qtd[data-p="${pi}"]`).forEach((inp) => {
+          const qtd = Number(inp.value);
+          if (qtd > 0) {
+            const v = p.variacoes[+inp.dataset.v];
+            pedido.push({ fornecedor: "—", produto_id: p.id, produto_nome: p.nome, cod_interno: p.codigo_interno,
+              variacao_id: v.id, variacao_cod: v.codigo, variacao_nome: v.nome, quantidade: qtd, valor_custo: "0.00" });
+            inp.value = ""; n++;
+          }
+        });
+        if (n) renderLista();
+      });
+      prodDiv.querySelectorAll(".pe-kit").forEach((btn) => btn.onclick = async () => {
+        const pi = +btn.dataset.p, p = d.produtos[pi];
+        const msg = prodDiv.querySelector(`.pe-kit-msg[data-p="${pi}"]`);
+        try {
+          const r = await apiPost("/api/pedido/kit", { produto_id: p.id, kit: btn.dataset.kit, loja: Estado.lojaId });
+          r.itens.forEach((it) => pedido.push(it));
+          let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.itens.length} adicionada(s).`;
+          if (r.nao_encontrados.length) m += ` Não encontradas: ${esc(r.nao_encontrados.join(", "))}`;
+          m += "</div>";
+          msg.innerHTML = m;
+          renderLista();
+        } catch (err) { msg.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      });
+    } catch (err) {
+      prodDiv.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#pe-buscar").onclick = () => buscarManual($("#pe-termo").value.trim());
+  $("#pe-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscarManual($("#pe-termo").value.trim()); });
+
+  // ── Lista do pedido + registro ──
+  function renderLista() {
     const div = $("#pe-lista");
-    if (!lista.length) { div.innerHTML = '<div class="placeholder">Nenhum item no pedido.</div>'; return; }
+    const todos = pedido.concat(avulsos);
+    if (!todos.length) { div.innerHTML = '<div class="placeholder">Nenhum item no pedido ainda.</div>'; return; }
     div.innerHTML = `
-      <div class="page-sub">📝 Pedido (${lista.length} itens)</div>
-      <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th>Custo</th><th></th></tr></thead>
-      <tbody>${lista.map((it, i) => `<tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
-        <td>${it.quantidade}</td><td>${moeda(it.valor_custo)}</td>
+      <div class="page-sub">📝 Pedido (${pedido.length} do catálogo · ${avulsos.length} avulso(s))</div>
+      <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th>Custo</th><th>Obs</th><th></th></tr></thead>
+      <tbody>${todos.map((it, i) => `<tr><td>${esc(it.produto_nome)}${it._avulso ? ' <span class="badge badge-red">avulso</span>' : ""}</td>
+        <td>${esc(it.variacao_nome || "—")}</td><td>${it.quantidade}</td><td>${moeda(it.valor_custo)}</td>
+        <td>${esc(it.observacao || "")}</td>
         <td><button class="btn-sair pe-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>
       <div class="card" style="margin-top:16px;max-width:520px">
-        <div class="card-head">Dados do pedido</div>
+        <div class="card-head">Registrar na GestãoClick (só itens do catálogo)</div>
         <input id="pe-forn-termo" class="pe-in" placeholder="Buscar fornecedor…" />
         <select id="pe-forn" class="loja-sel" style="width:100%;margin-bottom:8px"><option value="">— selecione um fornecedor —</option></select>
-        <select id="pe-sit" class="loja-sel" style="width:100%;margin-bottom:8px">
-          <option value="">— situação —</option>
+        <select id="pe-sit" class="loja-sel" style="width:100%;margin-bottom:8px"><option value="">— situação —</option>
           ${situacoes.map((s) => `<option value="${esc(s.id)}">${esc(s.nome)}</option>`).join("")}</select>
         <input id="pe-data" type="date" class="pe-in" value="${hoje()}" />
         <input id="pe-obs" class="pe-in" placeholder="Observações (opcional)" />
         <div class="busca"><button id="pe-registrar">✅ Registrar pedido</button>
-          <button id="pe-limpar" class="btn-sair">🗑️ Limpar</button></div>
+          <button id="pe-limpar" class="btn-sair">🗑️ Limpar tudo</button></div>
         <div id="pe-msg"></div>
       </div>`;
     div.querySelectorAll(".pe-in").forEach((i) =>
       i.style.cssText = "display:block;width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
-    div.querySelectorAll(".pe-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
-    $("#pe-limpar").onclick = () => { lista.length = 0; renderLista(); };
+    div.querySelectorAll(".pe-rem").forEach((b) => b.onclick = () => {
+      const i = +b.dataset.i;
+      if (i < pedido.length) pedido.splice(i, 1); else avulsos.splice(i - pedido.length, 1);
+      renderLista();
+    });
+    $("#pe-limpar").onclick = () => { pedido.length = 0; avulsos.length = 0; renderLista(); };
 
-    // busca de fornecedor
     let fornTimer;
     $("#pe-forn-termo").addEventListener("input", () => {
       clearTimeout(fornTimer);
@@ -1307,9 +1479,9 @@ async function renderPedido(cont) {
         const termo = $("#pe-forn-termo").value.trim();
         if (termo.length < 2) return;
         try {
-          const d = await api("/api/fornecedores?termo=" + encodeURIComponent(termo));
+          const dd = await api("/api/fornecedores?termo=" + encodeURIComponent(termo));
           $("#pe-forn").innerHTML = '<option value="">— selecione —</option>' +
-            d.fornecedores.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+            dd.fornecedores.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
         } catch (e) {}
       }, 400);
     });
@@ -1317,25 +1489,20 @@ async function renderPedido(cont) {
     $("#pe-registrar").onclick = async () => {
       const btn = $("#pe-registrar"); btn.disabled = true; btn.textContent = "Registrando…";
       try {
-        await apiPost("/api/pedido/registrar", {
+        const r = await apiPost("/api/pedido/registrar", {
           fornecedor_id: $("#pe-forn").value, situacao_id: $("#pe-sit").value,
           data_emissao: $("#pe-data").value, observacoes: $("#pe-obs").value,
-          loja: Estado.lojaId, itens: lista,
+          loja: Estado.lojaId, itens: pedido,
         });
         $("#pe-msg").innerHTML = '<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ Pedido registrado na GestãoClick!</div>';
-        lista.length = 0;
-        setTimeout(() => renderLista(), 1800);
       } catch (err) {
         $("#pe-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
       } finally {
         btn.disabled = false; btn.textContent = "✅ Registrar pedido";
       }
     };
-  };
+  }
 
-  const buscar = montarBuscaProdutos($("#pe-prod"), (it) => { lista.push(it); renderLista(); }, { rotuloQtd: "Qtd", comCusto: true });
-  $("#pe-buscar").onclick = () => buscar($("#pe-termo").value.trim());
-  $("#pe-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar($("#pe-termo").value.trim()); });
   renderLista();
 }
 

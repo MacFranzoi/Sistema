@@ -1008,8 +1008,8 @@ def situacoes_compras(request: Request):
 
 
 class PedidoItem(BaseModel):
-    produto_id: str
-    variacao_id: str
+    produto_id: str = ""
+    variacao_id: str = ""
     produto_nome: str = ""
     quantidade: int = 1
     valor_custo: str = "0.00"
@@ -1022,6 +1022,68 @@ class PedidoIn(BaseModel):
     observacoes: str = ""
     loja: str = ""
     itens: list[PedidoItem]
+
+
+class PedidoWppIn(BaseModel):
+    texto: str = ""
+    regras: str = ""
+    avulsos: str = ""
+    fornecedor: str = ""
+    reprocess_base: list = []
+    loja: str = ""
+
+
+@app.post("/api/pedido/whatsapp")
+def pedido_whatsapp(request: Request, dados: PedidoWppIn):
+    usuario_atual(request)
+    cache = api.carregar_cache(dados.loja or None) or api.carregar_cache(None)
+    if not cache:
+        raise HTTPException(status_code=400, detail="Sincronize os produtos primeiro.")
+    try:
+        return api.processar_pedido_whatsapp(
+            dados.texto, dados.regras, dados.avulsos, cache,
+            fornecedor=dados.fornecedor, reprocess_base=dados.reprocess_base,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/pedido/kits")
+def pedido_kits(request: Request):
+    usuario_atual(request)
+    # Botões de kit da página de Pedidos (rótulo → chave do kit em api.WPP_KITS)
+    return {"kits": [
+        {"label": "👔 Masculino", "kit": "masculino"},
+        {"label": "👗 Feminino", "kit": "feminino"},
+        {"label": "📦 Pacote Masc.", "kit": "pacote masculino"},
+        {"label": "📦 Pacote Fem.", "kit": "pacote feminino"},
+        {"label": "SL Masc.", "kit": "sl masculino"},
+        {"label": "SL Fem.", "kit": "sl feminino"},
+        {"label": "SL Pac. Masc.", "kit": "sl pacote masculino"},
+        {"label": "SL Pac. Fem.", "kit": "sl pacote feminino"},
+        {"label": "VR Masc.", "kit": "vr masculino"},
+        {"label": "VR Fem.", "kit": "vr feminino"},
+        {"label": "MagSafe", "kit": "magsafe"},
+        {"label": "✨ Brilho", "kit": "brilho"},
+        {"label": "Diversos Masc.", "kit": "diversos masculino"},
+    ]}
+
+
+class KitIn(BaseModel):
+    produto_id: str
+    kit: str
+    loja: str = ""
+
+
+@app.post("/api/pedido/kit")
+def pedido_kit(request: Request, dados: KitIn):
+    usuario_atual(request)
+    cache = api.carregar_cache(dados.loja or None) or api.carregar_cache(None)
+    prods = (cache or {}).get("produtos", [])
+    produto = next((p for p in prods if str(p.get("id")) == str(dados.produto_id)), None)
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado no cache.")
+    return api.expandir_kit_em_produto(produto, dados.kit)
 
 
 @app.post("/api/pedido/registrar")

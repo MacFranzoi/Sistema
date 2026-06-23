@@ -1410,6 +1410,655 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
 
 
 # ──────────────────────────────────────────────
+# Pedido de compra via WhatsApp/IA — LÓGICA COMPLETA (kits, cores, seções)
+# Extraído verbatim do app.py para ser reutilizado pelo Streamlit e pelo v2.
+# ──────────────────────────────────────────────
+
+# Kits espelho EXATO dos botões da página de Pedidos.
+# Simples = busca a cor no nome da variação; Lista = todos os termos devem estar presentes.
+WPP_KITS = {
+    # ── Aveludada ──
+    "masculino":          [("preto", 2), ("marrom", 1), ("azul marinho", 1), ("cinza chumbo", 1)],
+    "feminino":           [("lilás", 1), ("marsala", 1), ("marrom", 1)],
+    "pacote masculino":   [("preto", 3), ("azul marinho", 2), ("verde militar", 1),
+                           ("marrom", 1), ("cinza chumbo", 2)],
+    "pacote feminino":    [("lilás", 2), ("pink", 1), ("rosa", 1), ("marsala", 2),
+                           ("vinho", 1), ("roxo", 1), ("marrom", 1), ("nude", 1)],
+    # ── Silicone Líquido ──
+    "sl masculino":       [(["preto", "silicone"], 2), (["marrom", "silicone"], 1),
+                           (["azul marinho", "silicone"], 1), (["cinza chumbo", "silicone"], 1)],
+    "sl feminino":        [(["lilás", "silicone"], 1), (["marsala", "silicone"], 1),
+                           (["marrom", "silicone"], 1)],
+    "sl pacote masculino":[(["preto", "silicone"], 3), (["azul marinho", "silicone"], 2),
+                           (["verde militar", "silicone"], 1), (["marrom", "silicone"], 1),
+                           (["cinza chumbo", "silicone"], 2)],
+    "sl pacote feminino": [(["lilás", "silicone"], 2), (["pink", "silicone"], 1),
+                           (["rosa", "silicone"], 1), (["marsala", "silicone"], 2),
+                           (["vinho", "silicone"], 1), (["roxo", "silicone"], 1),
+                           (["marrom", "silicone"], 1), (["nude", "silicone"], 1)],
+    # ── Very Rio ── (mesmas cores do SL, observação "Very Rio")
+    "vr masculino":       [(["preto", "silicone"], 2), (["marrom", "silicone"], 1),
+                           (["azul marinho", "silicone"], 1), (["cinza chumbo", "silicone"], 1)],
+    "vr feminino":        [(["lilás", "silicone"], 1), (["marsala", "silicone"], 1),
+                           (["marrom", "silicone"], 1)],
+    "vr pacote masculino":[(["preto", "silicone"], 3), (["azul marinho", "silicone"], 2),
+                           (["verde militar", "silicone"], 1), (["marrom", "silicone"], 1),
+                           (["cinza chumbo", "silicone"], 2)],
+    "vr pacote feminino": [(["lilás", "silicone"], 2), (["pink", "silicone"], 1),
+                           (["rosa", "silicone"], 1), (["marsala", "silicone"], 2),
+                           (["vinho", "silicone"], 1), (["roxo", "silicone"], 1),
+                           (["marrom", "silicone"], 1), (["nude", "silicone"], 1)],
+    # ── MagSafe ──
+    "magsafe":            [(["129,99", "magsafe"], 3)],
+    # ── Diversos ──
+    "brilho":             [(["59,99", "diversos"], 3)],
+    "diversos masculino": [(["39,99", "diversos"], 3)],
+}
+# Kits sem cores predefinidas → viram avulso com descrição
+WPP_KITS_AVULSO = {"carteira", "película", "pelicula", "couro", "clear", "transparente",
+                   "vidro", "anti-impacto", "anti impacto", "capinha", "strass",
+                   "avulso cor", "outro"}
+
+
+def processar_pedido_whatsapp(wpp_texto: str, wpp_regras: str = "",
+                              wpp_avulsos_diretos_txt: str = "", cache: dict = None,
+                              fornecedor: str = "", reprocess_base: list = None) -> dict:
+    """
+    Processa o texto colado do WhatsApp e devolve os itens expandidos (kits × cores),
+    EXATAMENTE com a mesma lógica da página de Pedidos do Streamlit.
+
+    Retorna: {
+      "expandido":         [linhas com _achado True/False, Aparelho, Kit, Variação, Qtd, _prod_id, _var_id, ...],
+      "nao_compreendidos": ["• \"linha\" — motivo", ...],
+      "truncado_resto":    "texto que a IA não processou (se houve truncamento)" ou "",
+    }
+    """
+    import json as _json, re as _re, os as _os
+
+    cache = cache or {}
+    reprocess_base = reprocess_base or []
+
+    # Parseia regras personalizadas: "sl iphone = vr" → [("sl","iphone","vr"), ...]
+    _regras_kit = []
+    for _rl in (wpp_regras or "").splitlines():
+        _rl = _rl.strip().lower()
+        _rm = _re.match(r'^([a-záéíóúãõ\s]+?)\s+([a-záéíóúãõ\s]+?)\s*=\s*([a-záéíóúãõ\s]+)$', _rl)
+        if _rm:
+            _regras_kit.append((_rm.group(1).strip(), _rm.group(2).strip(), _rm.group(3).strip()))
+
+    # ── Pré-processamento do texto do WhatsApp ──
+    _SECOES_MARCA  = {"motorola", "samsung", "apple", "iphone", "xiaomi", "poco", "realme"}
+    _SECOES_SPACE  = {"space", "space 2"}
+    _SECOES_TRANSP = {"transparente", "transparente básica", "transparente basica",
+                      "transparente básica pedido", "transparente basica pedido"}
+
+    def _strip_wpp_linha(ln):
+        return _re.sub(
+            r'^\[\d{1,2}/\d{1,2}/\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*[^:]+:\s*',
+            '', ln
+        ).strip()
+
+    def _expandir_barra(ln, marca=""):
+        m = _re.match(r'^(Edge\s*\d+)\s*/\s*(\d+\s*\w*)(.*)$', ln, _re.I)
+        if m:
+            e1, e2, rest = m.groups()
+            return [f"{e1.strip()}{rest}", f"Edge {e2.strip()}{rest}"]
+        m = _re.match(r'^([A-Za-z]*)(\d+)/(\d+)(.*)$', ln)
+        if m:
+            pfx, n1, n2, rest = m.groups()
+            return [f"{pfx or marca}{n1}{rest}", f"{pfx or marca}{n2}{rest}"]
+        return [ln]
+
+    _linhas_ia = []
+    _avulsos_diretos = []
+
+    for _av_ln in (wpp_avulsos_diretos_txt or "").splitlines():
+        _av_ln = _av_ln.strip()
+        if not _av_ln:
+            continue
+        if "|" in _av_ln:
+            _av_desc, _av_qtd_s = _av_ln.rsplit("|", 1)
+            try:
+                _av_qtd = int(_av_qtd_s.strip())
+            except ValueError:
+                _av_qtd = 1
+            _av_desc = _av_desc.strip()
+        else:
+            _av_desc = _av_ln.strip()
+            _av_qtd = 1
+        if _av_desc:
+            _avulsos_diretos.append({"desc": _av_desc, "qtd": _av_qtd, "kit": "avulso"})
+
+    _secao = ""
+    _marca = ""
+    for _ln_raw in (wpp_texto or "").splitlines():
+        _ln = _strip_wpp_linha(_ln_raw).strip()
+        if not _ln:
+            continue
+        _ln_low = _ln.lower().strip().rstrip(':').strip()
+        if _ln_low in _SECOES_MARCA:
+            _secao = "marca"; _marca = _ln_low; continue
+        if _ln_low in _SECOES_SPACE:
+            _secao = "space"; _marca = ""; continue
+        if _ln_low in _SECOES_TRANSP:
+            _secao = "transparente"; _marca = ""; continue
+        if _ln_low in ("motorola", "samsung", "apple", "iphone"):
+            _secao = "marca"; _marca = _ln_low; continue
+
+        if _secao == "space":
+            for _exp in _expandir_barra(_ln):
+                _m_sp = _re.match(r'^(.+?)\s*\+\s*(\d+)\s*$', _exp.strip())
+                if _m_sp:
+                    _mod_sp, _qtd_sp = _m_sp.group(1).strip(), int(_m_sp.group(2))
+                    _nome_sp = _mod_sp if _re.search(r'[A-Za-z]', _mod_sp) else f"iPhone {_mod_sp}"
+                    _avulsos_diretos.append({"desc": f"{_nome_sp} / Space 2", "qtd": _qtd_sp, "kit": "space 2"})
+            continue
+
+        if _secao == "transparente":
+            for _exp in _expandir_barra(_ln, _marca):
+                _m_tr = _re.match(r'^(.+?)\s+(\d+)\s*$', _exp.strip())
+                if _m_tr:
+                    _mod_tr, _qtd_tr = _m_tr.group(1).strip(), int(_m_tr.group(2))
+                    if _marca == "motorola" and not _re.search(r'edge|moto', _mod_tr, _re.I):
+                        _mod_tr = f"Motorola {_mod_tr}"
+                    elif _marca == "apple" and not _re.search(r'ip|iphone', _mod_tr, _re.I):
+                        _mod_tr = f"iPhone {_mod_tr}"
+                    _avulsos_diretos.append({"desc": f"{_mod_tr} / Transparente", "qtd": _qtd_tr, "kit": "transparente"})
+            continue
+
+        for _exp in _expandir_barra(_ln):
+            if _marca in ("motorola",) and not _re.search(r'edge|moto|motorola', _exp, _re.I):
+                _linhas_ia.append(f"[Motorola] {_exp}")
+            elif _marca in ("apple", "iphone") and not _re.search(r'ip|iphone|apple', _exp, _re.I):
+                _linhas_ia.append(f"[Apple] {_exp}")
+            else:
+                _linhas_ia.append(_exp)
+
+    _texto_proc = "\n".join(_linhas_ia)
+
+    _prods_all = cache.get("produtos", [])
+    _catalogo_txt = "\n".join(
+        f"{_p.get('codigo_interno','')} | {_p.get('nome','')}"
+        for _p in _prods_all if _p.get("codigo_interno") and _p.get("nome")
+    )[:12000]
+    _kits_disponiveis = list(WPP_KITS.keys())
+
+    _prompt = f"""Você é assistente de compras de uma loja de capas para celular no Brasil.
+As pessoas anotam os modelos com abreviações e erros de digitação. Seu trabalho é identificar o modelo correto.
+
+Pedido recebido (pré-processado — timestamps e nomes removidos, modelos com barra já expandidos):
+{_texto_proc}
+
+Catálogo de aparelhos (cod_interno | nome):
+{_catalogo_txt}
+
+Kits disponíveis: {_kits_disponiveis}
+
+SEÇÕES ESPECIAIS — linhas prefixadas pelo pré-processador:
+- "[Space] modelo +N" → kit="brilho", quantidade=N (ex: "[Space] 15 +5" = iPhone 15, brilho, qtd 5)
+- "[Space] modelo +N" sem marca → iPhone
+- "[Transparente] modelo N" → kit="transparente", quantidade=N (ex: "[Transparente] A07 5" = Samsung A07, transparente, qtd 5)
+- "[Motorola] modelo kits" → prefixe o modelo com "Motorola" se não tiver marca
+- "[Apple] modelo kits" → é iPhone
+- "[SEÇÃO: X]" → linha de cabeçalho, ignore (não gere entrada)
+- Cores específicas mencionadas isoladas (ex: "laranja", "azul marinho", "branca com prata", "strass") → kit="avulso cor" com a cor na descrição
+
+ABREVIAÇÕES DE MODELOS — decodifique antes de buscar:
+Motorola EDGE: "Ed"/"ED"/"edge" + número = EDGE [número]. Exemplos:
+  Ed20=EDGE 20, Ed30=EDGE 30, Ed30f/Ed30fus=EDGE 30 Fusion, Ed30n/Ed30neo=EDGE 30 Neo,
+  Ed40=EDGE 40, Ed40n/Ed40neo=EDGE 40 Neo, Ed50=EDGE 50, Ed50n=EDGE 50 Neo,
+  Ed50f=EDGE 50 Fusion, Ed5050=EDGE 50, Ed60=EDGE 60, Ed60p/Ed60pro=EDGE 60 Pro,
+  Ed70=EDGE 70, Ed70u/Ed70ultra=EDGE 70 Ultra, Ed70f=EDGE 70 Fusion
+Sufixos: "pro/pró/p" → Pro | "ultra/ul/u" → Ultra | "neo/n" → Neo | "fusion/fus/f" → Fusion | "plus/+" → Plus
+Motorola G: "G" + número (G23, G32, G53, G54, G60, G60S...)
+Samsung A: "A" + número (A01, A02, A03, A04, A13, A14, A23, A24, A33, A34, A51, A52, A53, A54, A72, A73...)
+Samsung Note: "Note" + número
+Xiaomi/Poco: "X6"=Poco X6, "X6pro"=Poco X6 Pro, "Redmi"=Redmi [número], "Note13"=Redmi Note 13...
+iPhone: "ip"/"iph"/"iphone" + número (ip15=iPhone 15, ip15pm=iPhone 15 Pro Max...)
+Outros: ignore acentos e espaços extras, tente o modelo mais próximo do catálogo
+
+ABREVIAÇÕES DE KITS — mapeie para o nome exato:
+  "masc/masculina/masculinas/masculinos/m" → "masculino"
+  "fem/feminina/femininas/femininos/f" → "feminino"
+  "pac masc/pacote masc/pm" → "pacote masculino"
+  "pac fem/pacote fem/pf" → "pacote feminino"
+  "sl masc/silicone masc/slm/silicone liquido masc/silicone líquido masc" → "sl masculino"
+  "sl fem/silicone fem/slf/silicone liquido fem/silicone líquido fem" → "sl feminino"
+  "sl pac masc/slpm/silicone liquido pac masc" → "sl pacote masculino"
+  "sl pac fem/slpf/silicone liquido pac fem" → "sl pacote feminino"
+  "sl/silicone/silicone liquido/silicone líquido" sozinho (sem masc/fem) → gere 2 entradas: "sl pacote masculino" + "sl pacote feminino"
+  "very rio masc/vr masc/vrm" → "vr masculino"
+  "very rio fem/vr fem/vrf" → "vr feminino"
+  "vr pac masc/vrpm" → "vr pacote masculino"
+  "vr pac fem/vrpf" → "vr pacote feminino"
+  "very rio/vr" sozinho → gere 2 entradas: "vr pacote masculino" + "vr pacote feminino"
+  "magsafe/mag safe/ms" → "magsafe"
+  "brilho/brilhos/br/bri/glitter/div br/diversos br" → "brilho"
+  "div masc/diversos masc/dm" → "diversos masculino"
+  "diversas/diverse" sozinho → kit="avulso cor", descricao_avulso="Diversos"
+  "diversas [preço]" / "[preço] diversas" → kit="avulso cor", descricao_avulso="R$[preço] / Diversos"
+    Ex: "59,99 diversas" → descricao_avulso="R$59,99 / Diversos"
+  "space 2 [cor]" / "[cor] space 2" → kit="avulso cor", descricao_avulso="[cor] / Space 2"
+    Ex: "space 2 preta" → descricao_avulso="preta / Space 2" | "marsala space 2" → descricao_avulso="marsala / Space 2"
+  "carteira/cart/wallet/porta cartão/porta cartao" → "carteira"  (avulso)
+  "película/pelicula/peliculas/pel" → "película"  (avulso)
+  "couro/leather" → "couro"  (avulso)
+  "clear/transparente/cristal/básica/basica/transparente básica" → "transparente"  (avulso)
+  "strass/pedras/brilhinho" → "strass"  (avulso)
+  Qualquer tipo de produto não listado acima → use o nome exato como kit (será criado como avulso)
+Se a linha pedir 2+ kits, gere uma entrada por kit para o mesmo aparelho.
+
+REGRA SOBRE CORES — válida sempre, inclusive em texto normal:
+Palavras de cor (preta/preto, roxa/roxo, amarela/amarelo, branca, verde, lilás, rosa, vinho, nude, dourada, vermelha, etc.)
+NUNCA são kits. São SEMPRE kit="avulso cor" com descricao_avulso=a cor falada (sem normalizar gênero — o sistema normaliza).
+Cores NUNCA viram "masculino" ou "feminino". A regra "kit ambíguo → masculino" não se aplica a cores.
+"amarelo" / "amarela" → kit="avulso cor", descricao_avulso="amarela" (NUNCA "brilho"!)
+
+ACESSÓRIOS — produto não-capa (suporte, cabo, fone, carregador, powerbank, película, controle, etc.) + quantidade:
+→ use kit="acessorio", cod_interno=código_exato_do_catálogo, quantidade_fixa=N
+  Ex: "SPC-22 dois" → {{"cod_interno":"SPC-22","kit":"acessorio","quantidade_fixa":2}}
+  Ex: "suporte magsafe três" → busca no catálogo → kit="acessorio", quantidade_fixa=3
+  Ex: "cabo tipo c um" → busca no catálogo → kit="acessorio", quantidade_fixa=1
+Apenas use kit="acessorio" quando tiver certeza que é um acessório, não uma capa/kit de cores.
+
+TRANSCRIÇÃO DE VOZ / DITADO — quando o texto é fala contínua sem pontuação:
+1. MODELO: "a" + número = Samsung A[número] ("a 06"=A06, "a 53"=A53). Nunca artigo.
+   Outros: "iphone 15"=iPhone 15, "edge 30"=Edge 30, "g 54"=Moto G54.
+2. MÚLTIPLOS MODELOS em sequência: ao detectar novo modelo, inicia entradas para ele.
+3. QUANTIDADES por extenso — sempre quantidade, nunca artigo:
+   "um/uma"=1, "dois/duas"=2, "três"=3, "quatro"=4, "cinco"=5, "seis"=6, "sete"=7, "oito"=8, "nove"=9, "dez"=10
+4. [número] + [cor] → kit="avulso cor", descricao_avulso=cor no singular, quantidade_fixa=número
+   Normalize apenas plural: pretas→"preta", brancos→"branco", roxas→"roxa", amarelas→"amarela", lilases→"lilás"
+   NÃO converta gênero (roxa≠roxo para o prompt; o sistema faz a normalização automaticamente)
+5. [número] + [kit] → kit=nome mapeado, quantidade_fixa=número
+6. Kit nomeado (masculino, brilho, sl, vr, etc.) sem número → quantidade_fixa=1
+7. Uma entrada JSON por par modelo+cor ou modelo+kit
+
+Exemplo A — kits e cores mistos: "A 07 diversos masculino a 06 brilho a 53 uma preta duas vermelhas uma vinho"
+→ A07 | kit="diversos masculino" | qtd=1
+→ A06 | kit="brilho" | qtd=1
+→ A53 | kit="avulso cor" descricao_avulso="preta" | qtd=1
+→ A53 | kit="avulso cor" descricao_avulso="vermelha" | qtd=2
+→ A53 | kit="avulso cor" descricao_avulso="vinho" | qtd=1
+
+Exemplo B — só cores: "A 06 duas pretas uma verde militar duas lilás a 07 brilho duas pretas uma branca"
+→ A06 | kit="avulso cor" descricao_avulso="preta" | qtd=2
+→ A06 | kit="avulso cor" descricao_avulso="verde militar" | qtd=1
+→ A06 | kit="avulso cor" descricao_avulso="lilás" | qtd=2
+→ A07 | kit="brilho" | qtd=1
+→ A07 | kit="avulso cor" descricao_avulso="preta" | qtd=2
+→ A07 | kit="avulso cor" descricao_avulso="branca" | qtd=1
+
+EXCLUSÕES: "menos [cor]" / "exceto [cor]" / "sem [cor]" / "tira [cor]" → inclua em excluir_cores.
+Ex: "Ed30neo - brilho e masculina menos preta" → excluir_cores: ["preto"]
+
+CASOS ESPECIAIS:
+- "não temos nenhuma" / "estoque zerado" / "zeramos" / "acabou" / "sem estoque" na linha → significa pedir TODOS os kits: gere 4 entradas para o modelo: kit="masculino", kit="feminino", kit="brilho", kit="diversos masculino"
+- "preta apenas" / "só preta" / "somente preta" JUNTO de um kit (ex: "A54 masculino só preta") → use kit="masculino" com excluir_cores=["marrom","azul marinho","cinza chumbo"]. ATENÇÃO: "duas pretas" ou "uma preta" em ditado NÃO é isso — é avulso cor.
+- Linha que fala de AUSÊNCIA mas não pede nada (ex: "Edge 60 estoque zerado") → processe normalmente com os 4 kits
+
+HERANÇA DE MODELO — REGRA CRÍTICA:
+Uma vez que um modelo é mencionado, TODOS os itens seguintes pertencem a ele até que um NOVO modelo seja explicitamente nomeado.
+Ex: "iPhone 15 Pro Max, 5 MagSafe, 3 SL masculino, 2 brilho" → os 3 itens são do iPhone 15 Pro Max.
+NUNCA crie uma entrada com nome_produto="SL", "MG", "MagSafe", "masculino" ou qualquer kit/variação — o nome é SEMPRE o aparelho.
+Quando um novo kit ou quantidade aparecer sem novo modelo, use o modelo anterior como nome_produto.
+
+NOME DO PRODUTO — REGRA ABSOLUTA:
+nome_produto = SOMENTE o nome do aparelho (ex: "iPhone 15 Pro Max", "Samsung A54"). NUNCA inclua "SL", "MG", "magsafe", "silicone", "masculino", "feminino", preço ou qualquer outro dado no nome. O nome do modelo termina no número/geração (ex: "Pro Max", "S24+") e tudo mais é kit.
+
+ORDEM DOS TOKENS — FLEXÍVEL:
+A ordem entre modelo, kit, quantidade e preço pode variar. "8, MagSafe, 129,99" = "MagSafe, 129,99, 8" = "129,99, 8, MagSafe". Interprete independentemente da ordem.
+
+SL / Silicone Líquido → kit="sl ..." APENAS quando o usuário disser explicitamente "silicone", "sl", "silicone líquido". NUNCA inferir SL a partir de outros kits ou preços.
+
+PREÇO EXPLÍCITO → extraia no campo "preco" (ex: "129,99" ou "R$129,99" → preco="129,99"). SEMPRE use vírgula, nunca ponto. Para kits sem preço explícito, deixe preco=null.
+
+POSTURA — REGRA ABSOLUTA:
+- Se o modelo existir no catálogo com nome parecido, use-o com confianca "baixa".
+- Se o modelo NÃO existir de jeito nenhum no catálogo (nenhum nome próximo), marque cod_interno: null e nao_compreendido: false — o sistema vai criar como item avulso automaticamente.
+- nao_compreendido: true SOMENTE para linhas completamente ilegíveis (emoji puro, linha em branco, texto aleatório sem modelo nem kit).
+- Kit ambíguo (texto que pode ser kit mas não é claramente uma cor) → prefira "masculino". Cores NUNCA são kits.
+- Nunca escreva justificativas — apenas processe.
+
+Para seções Space e Transparente, o campo "quantidade_fixa" deve conter a quantidade explícita da linha (ex: +5 → 5, "A07 5" → 5). Para kits normais deixe null.
+
+Exemplo C — herança de modelo com preços diferentes:
+"iPhone 15 Pro Max, Diversos, R$99,99, 10, MagSafe, R$129,99, 8, MagSafe, R$159,99, 3"
+→ iPhone 15 Pro Max | kit="avulso cor" descricao_avulso="R$99,99 / Diversos" | qtd=10
+→ iPhone 15 Pro Max | kit="magsafe" | qtd=8 | preco="129,99"
+→ iPhone 15 Pro Max | kit="magsafe" | qtd=3 | preco="159,99"
+
+Retorne SOMENTE JSON válido, sem markdown:
+[{{"modelo_digitado":"...","cod_interno":"...ou null","nome_produto":"...ou null","kit":"...ou null","descricao_avulso":"...ou null","excluir_cores":[],"quantidade_fixa":null,"preco":null,"confianca":"alta|media|baixa","nao_compreendido":false,"motivo":""}}]
+
+O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nome da cor (ex: "preta", "verde militar", "lilás"). Para outros kits, deixe null."""
+
+    _truncado_resto = ""
+    _parsed = []
+    if _texto_proc.strip():
+        _ant_key = _get_anthropic_key()
+        if not _ant_key:
+            raise Exception("Configure ANTHROPIC_API_KEY.")
+        import anthropic as _ant
+        _client = _ant.Anthropic(api_key=_ant_key, max_retries=3)
+        _msg = _client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8192,
+            messages=[{"role": "user", "content": _prompt}],
+        )
+        _raw = _msg.content[0].text.strip()
+        _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
+        _json_str = _m.group() if _m else _raw
+        try:
+            _parsed = _json.loads(_json_str)
+        except _json.JSONDecodeError:
+            _ultimo_ok = _json_str.rfind('},')
+            if _ultimo_ok == -1:
+                _ultimo_ok = _json_str.rfind('}')
+            if _ultimo_ok > 0:
+                _json_rec = _json_str[:_ultimo_ok + 1] + ']'
+                _parsed = _json.loads(_json_rec)
+                _modelos_proc = {(e.get("modelo_digitado") or "").strip().lower() for e in _parsed}
+                _linhas_orig = [l for l in _texto_proc.splitlines() if l.strip()]
+                _resto = []
+                _encontrados = 0
+                for _lo in reversed(_linhas_orig):
+                    if _lo.strip().lower() in _modelos_proc and _encontrados < len(_parsed):
+                        _encontrados += 1
+                    else:
+                        _resto.insert(0, _lo)
+                _truncado_resto = "\n".join(_resto) if _resto else ""
+            else:
+                raise
+
+    # ── Expansão (cor × qtd) usando os kits ──
+    _prods_map_ci   = {p.get("codigo_interno", "").lower(): p for p in _prods_all}
+    _prods_map_nome = {p.get("nome", "").lower().strip(): p for p in _prods_all}
+    _linhas_expandidas = []
+
+    def _achar_produto(cod, nome_ai):
+        if cod:
+            p = _prods_map_ci.get(cod.lower())
+            if p:
+                return p
+        if not nome_ai:
+            return None
+        _nl = nome_ai.lower().strip()
+        p = _prods_map_nome.get(_nl)
+        if p:
+            return p
+        _match_curto = None
+        for _k, _p in _prods_map_nome.items():
+            if _k in _nl:
+                if _match_curto is None or len(_k) > len(_match_curto[0]):
+                    _match_curto = (_k, _p)
+        if _match_curto:
+            return _match_curto[1]
+        _candidatos = sorted(
+            [(_k, _p) for _k, _p in _prods_map_nome.items() if _nl in _k],
+            key=lambda x: len(x[0])
+        )
+        if _candidatos:
+            return _candidatos[0][1]
+        return None
+
+    _KIT_CONTAMINANTES_EXATOS = [
+        r"\bsl\s+mg\b", r"\bmagsafe\b", r"\bsilicone\s+l[ií]quido\b",
+        r"\baveludad[ao]\b", r"\bvery\s+rio\b", r"\bmasculino\b", r"\bfeminino\b",
+    ]
+
+    def _limpar_nome_produto(nome: str) -> str:
+        n = nome.strip()
+        for _pat in _KIT_CONTAMINANTES_EXATOS:
+            n = _re.sub(_pat, "", n, flags=_re.IGNORECASE).strip(" ,/-")
+        return n.strip()
+
+    _nao_compreendidos = []
+    _ultimo_modelo = ""
+    for _entry in _parsed:
+        _cod = _entry.get("cod_interno") or ""
+        _nome_raw = _entry.get("nome_produto") or _entry.get("modelo_digitado", "")
+        _nome = _limpar_nome_produto(_nome_raw)
+        if not _nome and _ultimo_modelo:
+            _nome = _ultimo_modelo
+        elif _nome:
+            _ultimo_modelo = _nome
+        _kit = (_entry.get("kit") or "").lower()
+        _conf = _entry.get("confianca", "baixa")
+        _excluir = [x.lower().strip() for x in _entry.get("excluir_cores", [])]
+        _qtd_fixa = _entry.get("quantidade_fixa")
+        _nao_comp = _entry.get("nao_compreendido", False)
+        _motivo = _entry.get("motivo", "")
+        _nome_lower = _nome.lower()
+
+        for _r_kit, _r_palavra, _r_sub in _regras_kit:
+            if _kit.startswith(_r_kit) and _r_palavra in _nome_lower:
+                _kit = _kit.replace(_r_kit, _r_sub, 1)
+                break
+
+        if _nao_comp or not _kit:
+            _nao_compreendidos.append(f"• \"{_entry.get('modelo_digitado','')}\" — {_motivo or 'não identificado'}")
+            continue
+
+        if _kit == "acessorio":
+            _prod_ac = _achar_produto(_cod, _nome)
+            _qtd_ac = int(_qtd_fixa) if _qtd_fixa else 1
+            if _prod_ac:
+                _variacoes_ac = _prod_ac.get("variacoes", [])
+                _var_ac = _variacoes_ac[0].get("variacao", {}) if _variacoes_ac else {}
+                _linhas_expandidas.append({
+                    "✓": True, "_cod": _prod_ac.get("codigo_interno", ""),
+                    "_nome": _prod_ac.get("nome", ""), "_kit": "acessorio", "_conf": "alta",
+                    "_achado": True, "_avulso_auto": False, "_obs": "",
+                    "_var_id": _var_ac.get("id", ""), "_var_cod": _var_ac.get("codigo", ""),
+                    "_prod_id": _prod_ac.get("id", ""),
+                    "_custo": float(_prod_ac.get("valor_custo") or 0),
+                    "Aparelho": _prod_ac.get("nome", ""), "Kit": "Acessório",
+                    "Variação": _var_ac.get("nome", "") or "—",
+                    "Qtd": _qtd_ac, "Status": "✓",
+                    "_desc_avulso": _prod_ac.get("nome", ""),
+                })
+            else:
+                _linhas_expandidas.append({
+                    "✓": False, "_cod": _cod, "_nome": _nome or _cod,
+                    "_kit": "acessorio", "_conf": "baixa", "_achado": False,
+                    "_avulso_auto": True, "_obs": "",
+                    "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                    "Aparelho": _nome or _cod, "Kit": "Acessório",
+                    "Variação": f"⚠ {_cod or _nome} não encontrado",
+                    "Qtd": _qtd_ac, "Status": "⚠",
+                    "_desc_avulso": f"{_cod or _nome}",
+                })
+            continue
+
+        if _kit in WPP_KITS_AVULSO or _kit not in WPP_KITS:
+            _prod_obj_av = _achar_produto(_cod, _nome)
+            _nome_av = _prod_obj_av.get("nome", _nome) if _prod_obj_av else _nome
+            _desc_avulso_extra = _entry.get("descricao_avulso") or ""
+            _qtd_av = int(_qtd_fixa) if _qtd_fixa else 1
+
+            _var_match_av = None
+            if _kit == "avulso cor" and _desc_avulso_extra and _prod_obj_av:
+                _cor_busca = _desc_avulso_extra.lower().strip().replace("-", " ")
+                if "/" in _cor_busca:
+                    _termos_multi = [t.strip() for t in _cor_busca.split("/")]
+                    for _v in _prod_obj_av.get("variacoes", []):
+                        _vn = _v.get("variacao", {}).get("nome", "").lower()
+                        if all(t in _vn for t in _termos_multi):
+                            _var_match_av = _v.get("variacao", {})
+                            break
+                else:
+                    _cor_variantes = {_cor_busca}
+                    _genero_map = {
+                        "preta": "preto", "branca": "branco", "vermelha": "vermelho",
+                        "dourada": "dourado", "rosada": "rosado", "cinza": "cinza",
+                        "lilás": "lilas", "lilas": "lilás",
+                        "roxa": "roxo", "amarela": "amarelo",
+                        "diversas": "diversos", "fúcsia": "fucsia", "fucsia": "fúcsia",
+                        "azuis": "azul", "verdes": "verde",
+                        "clara": "claro", "escura": "escuro",
+                    }
+                    if _cor_busca in _genero_map:
+                        _cor_variantes.add(_genero_map[_cor_busca])
+                    _palavras = _cor_busca.split()
+                    if len(_palavras) > 1 and _palavras[-1] in _genero_map:
+                        _cor_variantes.add(" ".join(_palavras[:-1] + [_genero_map[_palavras[-1]]]))
+                    if _cor_busca.endswith("s") and len(_cor_busca) > 3:
+                        _cor_variantes.add(_cor_busca[:-1])
+                    for _v in _prod_obj_av.get("variacoes", []):
+                        _vn = _v.get("variacao", {}).get("nome", "").lower()
+                        if any(c in _vn for c in _cor_variantes):
+                            _var_match_av = _v.get("variacao", {})
+                            break
+
+            if _var_match_av:
+                _desc_av = f"{_nome_av} / {_desc_avulso_extra.title()}"
+                _linhas_expandidas.append({
+                    "✓": True, "_cod": _prod_obj_av.get("codigo_interno", ""),
+                    "_nome": _nome_av, "_kit": _kit, "_conf": _conf,
+                    "_achado": True, "_avulso_auto": False, "_obs": "",
+                    "_var_id": _var_match_av.get("id", ""),
+                    "_var_cod": _var_match_av.get("codigo", ""),
+                    "_prod_id": _prod_obj_av.get("id", ""),
+                    "_custo": float(_prod_obj_av.get("valor_custo") or 0),
+                    "Aparelho": _nome_av, "Kit": _desc_avulso_extra.title(),
+                    "Variação": _var_match_av.get("nome", _desc_avulso_extra.title()),
+                    "Qtd": _qtd_av, "Status": "✓",
+                    "_desc_avulso": _desc_av,
+                })
+            else:
+                if _kit == "avulso cor" and _desc_avulso_extra:
+                    _desc_av = f"{_nome_av} / {_desc_avulso_extra.title()}"
+                else:
+                    _desc_av = f"{_nome_av} / {_kit.title()}"
+                    if _desc_avulso_extra:
+                        _desc_av += f" {_desc_avulso_extra.title()}"
+                _linhas_expandidas.append({
+                    "✓": False, "_cod": _cod, "_nome": _nome_av,
+                    "_kit": _kit, "_conf": _conf, "_achado": False,
+                    "_avulso_auto": True, "_obs": "",
+                    "_var_id": "", "_var_cod": "",
+                    "_prod_id": _prod_obj_av.get("id", "") if _prod_obj_av else "",
+                    "_custo": 0.0,
+                    "Aparelho": _nome_av, "Kit": _kit.title(),
+                    "Variação": f"⚠ {_desc_av}",
+                    "Qtd": _qtd_av, "Status": "⚠",
+                    "_desc_avulso": _desc_av,
+                })
+            continue
+
+        _cores_kit_base = WPP_KITS.get(_kit, [])
+        _preco_raw = (_entry.get("preco") or "").strip().replace("R$", "").strip()
+        _preco_entry = _re.sub(r"(\d+)\.(\d{2})$", lambda m: m.group(1) + "," + m.group(2), _preco_raw)
+        if _preco_entry and _cores_kit_base:
+            _cores_kit = []
+            for _t_orig, _q_k in _cores_kit_base:
+                _t_list = _t_orig if isinstance(_t_orig, list) else [_t_orig]
+                _t_new = [_preco_entry if _re.match(r"^\d+[.,]\d{2}$", t) else t for t in _t_list]
+                _cores_kit.append((_t_new, _q_k))
+        else:
+            _cores_kit = _cores_kit_base
+        _prod_obj = _achar_produto(_cod, _nome)
+        if not _prod_obj:
+            _desc_av = f"{_nome} / {_kit.title()}"
+            _linhas_expandidas.append({
+                "✓": False, "_cod": "", "_nome": _nome,
+                "_kit": _kit, "_conf": _conf, "_achado": False,
+                "_avulso_auto": True,
+                "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+                "Aparelho": _nome, "Kit": _kit.title(),
+                "Variação": f"⚠ {_desc_av}", "Qtd": 1, "Status": "⚠",
+                "_desc_avulso": _desc_av, "_obs": "",
+            })
+            continue
+        _cod = _prod_obj.get("codigo_interno", _cod)
+        _nome = _prod_obj.get("nome", _nome)
+
+        for _cor, _qtd in _cores_kit:
+            if _qtd_fixa:
+                _qtd = int(_qtd_fixa)
+            _cor_lower = (_cor if isinstance(_cor, str) else " ".join(_cor)).lower()
+            if any(_ex in _cor_lower or _cor_lower in _ex for _ex in _excluir):
+                continue
+            _termos = [_cor] if isinstance(_cor, str) else _cor
+            _var_match = None
+            for _v in _prod_obj.get("variacoes", []):
+                _vd = _v.get("variacao", {})
+                _vn = _vd.get("nome", "").lower()
+                if all(t.lower() in _vn for t in _termos):
+                    _var_match = _vd
+                    break
+            _encontrado = _var_match is not None and bool(_cod) and _prod_obj is not None
+            _obs_kit = ("Very Rio" if _kit.startswith("vr ") else ("MagSafe" if _kit == "magsafe" else ""))
+            _desc_av_var = f"{_nome} / {_kit.title()} / {'/'.join(_termos)}"
+            _linhas_expandidas.append({
+                "✓": _encontrado, "_cod": _cod, "_nome": _nome, "_kit": _kit, "_conf": _conf,
+                "_achado": _encontrado, "_avulso_auto": not _encontrado, "_obs": _obs_kit,
+                "_var_id": _var_match.get("id", "") if _var_match else "",
+                "_var_cod": _var_match.get("codigo", "") if _var_match else "",
+                "_prod_id": _prod_obj.get("id", "") if _prod_obj else "",
+                "_custo": float(_prod_obj.get("valor_custo") or 0) if _prod_obj else 0.0,
+                "Aparelho": _nome, "Kit": _kit.title(),
+                "Variação": _var_match.get("nome", "") if _var_match else f"⚠ {'/'.join(_termos)} não encontrado",
+                "Qtd": _qtd, "Status": "✓" if _encontrado else "⚠",
+                "_desc_avulso": _desc_av_var,
+            })
+
+    for _av in _avulsos_diretos:
+        _linhas_expandidas.append({
+            "✓": False, "_cod": "", "_nome": _av["desc"],
+            "_kit": _av["kit"], "_conf": "alta",
+            "_achado": False, "_avulso_auto": True, "_obs": "",
+            "_var_id": "", "_var_cod": "", "_prod_id": "", "_custo": 0.0,
+            "Aparelho": _av["desc"], "Kit": _av["kit"].title(),
+            "Variação": f"⚠ {_av['desc']}", "Qtd": _av["qtd"], "Status": "⚠",
+            "_desc_avulso": _av["desc"],
+        })
+
+    return {
+        "expandido": reprocess_base + _linhas_expandidas,
+        "nao_compreendidos": _nao_compreendidos,
+        "truncado_resto": _truncado_resto,
+    }
+
+
+def expandir_kit_em_produto(produto: dict, kit_nome: str) -> dict:
+    """
+    Aplica um kit nomeado (masculino, feminino, sl masculino, magsafe, etc.) a UM produto
+    do cache, casando cada cor com a variação correspondente — mesma lógica de _adicionar_kit.
+    Retorna {"itens": [...], "nao_encontrados": ["preto", ...]}.
+    """
+    cores_qtds = WPP_KITS.get(kit_nome, [])
+    itens, nao_encontrados = [], []
+    variacoes = produto.get("variacoes", [])
+    custo = produto.get("valor_custo", "0.00")
+    for cor, qtd in cores_qtds:
+        termos = [cor] if isinstance(cor, str) else cor
+        achou = None
+        for v in variacoes:
+            vd = v.get("variacao", {})
+            vn = (vd.get("nome") or "").lower()
+            if all(t.lower() in vn for t in termos):
+                achou = vd
+                break
+        if achou:
+            itens.append({
+                "produto_id": produto.get("id", ""),
+                "produto_nome": produto.get("nome", ""),
+                "cod_interno": produto.get("codigo_interno", ""),
+                "variacao_id": achou.get("id", ""),
+                "variacao_cod": achou.get("codigo", ""),
+                "variacao_nome": achou.get("nome", ""),
+                "estoque_atual": int(float(achou.get("estoque", 0) or 0)),
+                "quantidade": qtd,
+                "valor_custo": str(custo),
+            })
+        else:
+            nao_encontrados.append("+".join(termos) if isinstance(cor, list) else cor)
+    return {"itens": itens, "nao_encontrados": nao_encontrados}
+
+
+# ──────────────────────────────────────────────
 # Armazenamento de fotos de entrada (90 dias)
 # ──────────────────────────────────────────────
 _FOTOS_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fotos_entrada")
