@@ -271,18 +271,7 @@ def vendas(
         items = dados.get("data", dados.get("pedidos", []))
     else:
         items = dados or []
-    def _simplificar_venda(v):
-        if isinstance(v, dict) and "pedido" in v:
-            v = v["pedido"]
-        return {
-            "id": v.get("id", ""),
-            "numero": v.get("numero", "") or v.get("id", ""),
-            "data": (v.get("data_emissao", "") or v.get("data", ""))[:10],
-            "cliente": v.get("nome_cliente", "") or v.get("cliente", ""),
-            "total": v.get("valor_total", 0) or v.get("total", 0),
-            "status": v.get("situacao", "") or v.get("status", ""),
-        }
-    return {"vendas": [_simplificar_venda(v) for v in items if isinstance(v, dict)], "pagina": pagina}
+    return {"vendas": [_simplificar_pedido(v) for v in items if isinstance(v, dict)], "pagina": pagina}
 
 
 # ── Orçamentos ────────────────────────────────────────────────────────────────
@@ -307,18 +296,147 @@ def orcamentos(
         items = dados.get("data", dados.get("orcamentos", []))
     else:
         items = dados or []
-    def _simplificar_orcamento(o):
-        if isinstance(o, dict) and "orcamento" in o:
-            o = o["orcamento"]
+    return {"orcamentos": [_simplificar_pedido(o) for o in items if isinstance(o, dict)], "pagina": pagina}
+
+
+def _nome_de(obj, *chaves):
+    """Pega o primeiro campo não-vazio; aceita também sub-dict {'nome': ...}."""
+    for k in chaves:
+        v = obj.get(k)
+        if isinstance(v, dict):
+            v = v.get("nome", "")
+        if v:
+            return v
+    return ""
+
+
+def _simplificar_pedido(v):
+    """Vendas e orçamentos compartilham a mesma estrutura na GestãoClick."""
+    if isinstance(v, dict) and "pedido" in v and isinstance(v["pedido"], dict):
+        v = v["pedido"]
+    return {
+        "id": v.get("id", ""),
+        "numero": v.get("numero", "") or v.get("id", ""),
+        "data": (v.get("data_emissao", "") or v.get("data", ""))[:10],
+        "cliente": _nome_de(v, "cliente_nome", "nome_cliente", "cliente"),
+        "total": v.get("valor_total", 0) or v.get("total", 0),
+        "status": v.get("status", "") or v.get("situacao", ""),
+    }
+
+
+# ── Histórico de Compras ──────────────────────────────────────────────────────
+@app.get("/api/compras")
+def compras(
+    request: Request,
+    loja: str = Query(default=""),
+    data_ini: str = Query(default=""),
+    data_fim: str = Query(default=""),
+    pagina: int = Query(default=1),
+):
+    usuario_atual(request)
+    dados = api.buscar_compras(
+        data_ini=data_ini or None,
+        data_fim=data_fim or None,
+        loja_id=loja or None,
+        pagina=pagina,
+        limite=50,
+    )
+    if isinstance(dados, dict):
+        items = dados.get("data", dados.get("pedidos", []))
+    else:
+        items = dados or []
+    def _simplificar_compra(c):
+        if isinstance(c, dict) and "pedido" in c and isinstance(c["pedido"], dict):
+            c = c["pedido"]
         return {
-            "id": o.get("id", ""),
-            "numero": o.get("numero", "") or o.get("id", ""),
-            "data": (o.get("data_emissao", "") or o.get("data", ""))[:10],
-            "cliente": o.get("nome_cliente", "") or o.get("cliente", ""),
-            "total": o.get("valor_total", 0) or o.get("total", 0),
-            "status": o.get("situacao", "") or o.get("status", ""),
+            "id": c.get("id", ""),
+            "numero": c.get("numero", "") or c.get("id", ""),
+            "data": (c.get("data_emissao", "") or c.get("data", ""))[:10],
+            "fornecedor": _nome_de(c, "fornecedor_nome", "fornecedor"),
+            "total": c.get("valor_total", 0) or 0,
+            "status": c.get("status", ""),
+            "nfe": c.get("numero_nfe", ""),
         }
-    return {"orcamentos": [_simplificar_orcamento(o) for o in items if isinstance(o, dict)], "pagina": pagina}
+    lista = [_simplificar_compra(c) for c in items if isinstance(c, dict)]
+    total = sum(float(c["total"] or 0) for c in lista)
+    return {"compras": lista, "total_valor": total, "pagina": pagina}
+
+
+# ── Financeiro (contas a receber / a pagar) ──────────────────────────────────
+def _simplificar_conta(x, tipo):
+    """tipo='receber' usa cliente; 'pagar' usa fornecedor."""
+    valor = float(x.get("valor") or x.get("valor_total") or 0)
+    pago = float(x.get("valor_pago") or 0)
+    quitado = str(x.get("situacao_id", "")) == "2" or str(x.get("pago", "")) == "1"
+    nome = _nome_de(x, "cliente_nome", "cliente") if tipo == "receber" else _nome_de(x, "fornecedor_nome", "fornecedor")
+    return {
+        "descricao": x.get("descricao") or x.get("historico", ""),
+        "nome": nome,
+        "vencimento": (x.get("data_vencimento") or "")[:10],
+        "valor": valor,
+        "pago": pago,
+        "quitado": quitado,
+    }
+
+
+@app.get("/api/financeiro")
+def financeiro(
+    request: Request,
+    tipo: str = Query(default="receber"),
+    data_ini: str = Query(default=""),
+    data_fim: str = Query(default=""),
+):
+    usuario_atual(request)
+    if tipo == "pagar":
+        dados = api.buscar_contas_pagar(data_ini=data_ini or None, data_fim=data_fim or None, limite=200)
+    else:
+        dados = api.buscar_contas_receber(data_ini=data_ini or None, data_fim=data_fim or None, limite=200)
+    if not isinstance(dados, list):
+        dados = dados.get("data", []) if isinstance(dados, dict) else []
+    contas = [_simplificar_conta(x, tipo) for x in dados if isinstance(x, dict)]
+    total = sum(c["valor"] for c in contas)
+    total_pago = sum(c["pago"] for c in contas)
+    return {
+        "contas": contas,
+        "total": total,
+        "pago": total_pago,
+        "aberto": total - total_pago,
+        "tipo": tipo,
+    }
+
+
+# ── Relatório de vendas (resumo por período) ─────────────────────────────────
+@app.get("/api/rel_vendas")
+def rel_vendas(
+    request: Request,
+    loja: str = Query(default=""),
+    data_ini: str = Query(default=""),
+    data_fim: str = Query(default=""),
+):
+    usuario_atual(request)
+    dados = api.buscar_vendas(
+        data_ini=data_ini or None,
+        data_fim=data_fim or None,
+        loja_id=loja or None,
+        limite=500,
+    )
+    if not isinstance(dados, list):
+        dados = dados.get("data", []) if isinstance(dados, dict) else []
+    vendas_l = [_simplificar_pedido(v) for v in dados if isinstance(v, dict)]
+    total = sum(float(v["total"] or 0) for v in vendas_l)
+    qtd = len(vendas_l)
+    # agrega por dia (para gráfico)
+    por_dia = {}
+    for v in vendas_l:
+        por_dia[v["data"]] = por_dia.get(v["data"], 0) + float(v["total"] or 0)
+    serie = [{"data": k, "valor": por_dia[k]} for k in sorted(por_dia)]
+    return {
+        "vendas": vendas_l,
+        "total": total,
+        "qtd": qtd,
+        "ticket_medio": (total / qtd) if qtd else 0,
+        "serie": serie,
+    }
 
 
 # ── Diagnóstico (mostra se as credenciais estão configuradas) ────────────────

@@ -229,6 +229,19 @@ const PAGINAS = {
     campos: ["numero", "data", "cliente", "total_fmt", "status"],
     formatTotal: true,
   }),
+
+  compras_hist: async (cont) => renderPeriodo(cont, {
+    titulo: "📦 Histórico de Compras",
+    sub: "Pedidos de compra",
+    endpoint: "/api/compras",
+    chave: "compras",
+    colunas: ["Nº", "Data", "Fornecedor", "Total", "Status", "NF-e"],
+    campos: ["numero", "data", "fornecedor", "total_fmt", "status", "nfe"],
+    formatTotal: true,
+  }),
+
+  financeiro: async (cont) => renderFinanceiro(cont),
+  relatorios: async (cont) => renderRelatorios(cont),
 };
 
 // View de estoque (busca ao vivo)
@@ -363,6 +376,115 @@ async function renderPeriodo(cont, { titulo, sub, endpoint, chave, colunas, camp
     }
   };
   $("#per-buscar").onclick = buscar;
+  buscar();
+}
+
+const moeda = (n) => "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Financeiro: abas Receber / Pagar
+async function renderFinanceiro(cont) {
+  cont.innerHTML = `
+    <div class="page-title">💳 Financeiro</div>
+    <div class="page-sub">Contas a receber e a pagar</div>
+    <div class="submenu" style="position:static;padding:0;border:none;margin-bottom:16px">
+      <button class="sub-item ativo" data-fin="receber">💰 A Receber</button>
+      <button class="sub-item" data-fin="pagar">💸 A Pagar</button>
+    </div>
+    <div class="busca" style="align-items:center">
+      <label style="color:var(--txt2);font-size:.85rem">De</label>
+      <input id="fin-ini" type="date" value="${diasAtras(30)}" style="flex:none;width:150px" />
+      <label style="color:var(--txt2);font-size:.85rem">Até</label>
+      <input id="fin-fim" type="date" value="${diasFrente(30)}" style="flex:none;width:150px" />
+      <button id="fin-buscar">Buscar</button>
+    </div>
+    <div id="fin-resultado"><div class="loading">Carregando…</div></div>`;
+
+  let tipo = "receber";
+  const buscar = async () => {
+    const res = $("#fin-resultado");
+    res.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ tipo, data_ini: $("#fin-ini").value, data_fim: $("#fin-fim").value });
+      const d = await api("/api/financeiro?" + q.toString());
+      const ehReceber = tipo === "receber";
+      const linhas = d.contas.map((c) => `
+        <tr><td>${esc(c.descricao)}</td><td>${esc(c.nome)}</td><td>${esc(c.vencimento)}</td>
+        <td>${moeda(c.valor)}</td><td>${moeda(c.pago)}</td>
+        <td>${c.quitado ? '<span class="badge badge-green">✅ Pago</span>' : '<span class="badge badge-red">⏳ Aberto</span>'}</td></tr>`).join("");
+      res.innerHTML = `
+        <div class="stats">
+          <div class="stat"><div class="stat-val" style="color:var(--acc2)">${moeda(d.total)}</div><div class="stat-lbl">Total a ${ehReceber ? "receber" : "pagar"}</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--green)">${moeda(d.pago)}</div><div class="stat-lbl">${ehReceber ? "Recebido" : "Pago"}</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--red)">${moeda(d.aberto)}</div><div class="stat-lbl">Em aberto</div></div>
+        </div>
+        ${d.contas.length ? `<table class="tabela">
+          <thead><tr><th>Descrição</th><th>${ehReceber ? "Cliente" : "Fornecedor"}</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Situação</th></tr></thead>
+          <tbody>${linhas}</tbody></table>` : '<div class="placeholder">Nenhuma conta no período.</div>'}`;
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+
+  cont.querySelectorAll("[data-fin]").forEach((b) => {
+    b.onclick = () => {
+      tipo = b.dataset.fin;
+      cont.querySelectorAll("[data-fin]").forEach((x) => x.classList.toggle("ativo", x === b));
+      buscar();
+    };
+  });
+  $("#fin-buscar").onclick = buscar;
+  buscar();
+}
+
+function diasFrente(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+
+// Relatórios: vendas por período (resumo + gráfico simples de barras)
+async function renderRelatorios(cont) {
+  cont.innerHTML = `
+    <div class="page-title">📊 Relatórios</div>
+    <div class="page-sub">Vendas por período</div>
+    <div class="busca" style="align-items:center">
+      <label style="color:var(--txt2);font-size:.85rem">De</label>
+      <input id="rel-ini" type="date" value="${diasAtras(30)}" style="flex:none;width:150px" />
+      <label style="color:var(--txt2);font-size:.85rem">Até</label>
+      <input id="rel-fim" type="date" value="${hoje()}" style="flex:none;width:150px" />
+      <button id="rel-buscar">Gerar</button>
+    </div>
+    <div id="rel-resultado"><div class="loading">Carregando…</div></div>`;
+
+  const buscar = async () => {
+    const res = $("#rel-resultado");
+    res.innerHTML = '<div class="loading">Gerando…</div>';
+    try {
+      const q = new URLSearchParams({ loja: Estado.lojaId, data_ini: $("#rel-ini").value, data_fim: $("#rel-fim").value });
+      const d = await api("/api/rel_vendas?" + q.toString());
+      const maxV = Math.max(1, ...d.serie.map((s) => s.valor));
+      const barras = d.serie.map((s) => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="width:90px;color:var(--txt2);font-size:.75rem;flex-shrink:0">${esc(s.data)}</div>
+          <div style="flex:1;background:var(--bg);border-radius:4px;overflow:hidden">
+            <div style="width:${(s.valor / maxV * 100).toFixed(1)}%;min-width:2px;height:20px;background:linear-gradient(90deg,var(--acc),var(--acc2))"></div>
+          </div>
+          <div style="width:110px;text-align:right;font-size:.78rem">${moeda(s.valor)}</div>
+        </div>`).join("");
+      const linhas = d.vendas.map((v) => `
+        <tr><td>${esc(v.data)}</td><td>${esc(v.numero)}</td><td>${esc(v.cliente)}</td>
+        <td>${moeda(v.total)}</td><td>${esc(v.status)}</td></tr>`).join("");
+      res.innerHTML = `
+        <div class="stats">
+          <div class="stat"><div class="stat-val">${d.qtd}</div><div class="stat-lbl">Pedidos</div></div>
+          <div class="stat"><div class="stat-val" style="color:var(--green)">${moeda(d.total)}</div><div class="stat-lbl">Faturamento</div></div>
+          <div class="stat"><div class="stat-val">${moeda(d.ticket_medio)}</div><div class="stat-lbl">Ticket médio</div></div>
+        </div>
+        ${d.serie.length ? `<div class="card" style="margin-bottom:20px"><div class="card-head">📈 Vendas por dia</div>${barras}</div>` : ""}
+        ${d.vendas.length ? `<table class="tabela">
+          <thead><tr><th>Data</th><th>Nº</th><th>Cliente</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody>${linhas}</tbody></table>` : '<div class="placeholder">Nenhuma venda no período.</div>'}`;
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#rel-buscar").onclick = buscar;
   buscar();
 }
 
