@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-multipart
+# As libs abaixo são usadas pelo api.py (reaproveitado da raiz)
+requests
+pandas
+openpyxl
+fpdf2
+anthropic
+Pillow
+apscheduler
