@@ -702,11 +702,6 @@ section[data-testid="stMain"] {{
     from {{ opacity: 0.15; }}
     to   {{ opacity: 1; }}
 }}
-/* Oculta o input ponte de navegação JS */
-[data-testid="stTextInput"]:has(input[aria-label="__nav_bridge__"]) {{
-    display: none !important; height: 0 !important; overflow: hidden !important;
-}}
-
 /* Barra de marca: oculta no desktop, visível só no mobile */
 .plug-mobiletop {{ display: none; }}
 
@@ -932,68 +927,13 @@ _stc.html("""
     doc.documentElement.style.setProperty('--plug-header-h', h + 'px');
   }
   ajustarPadding();
-  // ── Intercepta cliques nos links do nav (SPA: sem reload) ──
-  function interceptNav() {
-    doc.querySelectorAll('.nav-item[href]').forEach(function(a) {
-      if (a.dataset.navBound) return;
-      a.dataset.navBound = '1';
-      a.addEventListener('click', function(e) {
-        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-        e.preventDefault();
-        var url = new URL(a.getAttribute('href'), win.location.href);
-        var p = url.searchParams.get('p');
-        if (!p) return;
-        win.history.pushState({}, '', url.href);
-        // Busca o bridge com retry (pode não estar no DOM ainda)
-        findAndTriggerBridge(p, 30);
-      });
-    });
-  }
-
-  function findAndTriggerBridge(p, attempts) {
-    // Procura input com aria-label "⚡nav⚡" ou qualquer input próximo ao plugHeader
-    var bridge = null;
-    doc.querySelectorAll('input[type="text"]').forEach(function(inp) {
-      var lbl = inp.getAttribute('aria-label') || '';
-      var parentLbl = (inp.closest('[data-testid="stTextInput"]') || {}).querySelector
-                    ? (inp.closest('[data-testid="stTextInput"]').querySelector('label') || {}).textContent || ''
-                    : '';
-      if (lbl.indexOf('nav') !== -1 || parentLbl.indexOf('nav') !== -1) {
-        bridge = inp;
-      }
-    });
-    if (!bridge && attempts > 0) {
-      setTimeout(function(){ findAndTriggerBridge(p, attempts - 1); }, 100);
-      return;
-    }
-    if (!bridge) return;
-    var setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
-    setter.call(bridge, p);
-    bridge.dispatchEvent(new Event('input', {bubbles: true}));
-  }
-
-  // Aplica e re-aplica após reruns
-  interceptNav();
-  new MutationObserver(function(){ interceptNav(); })
-    .observe(doc.body, {childList: true, subtree: true});
-
   new ResizeObserver(ajustarPadding).observe(hdr);
 })(20);
 </script>
 """, height=0)
 
 
-@st.fragment
 def _main_content():
-    # ── Bridge de navegação JS: input oculto que o JS escreve para mudar de página ──
-    _nav_bridge_val = st.text_input("⚡nav⚡", key="_nav_bridge",
-                                     label_visibility="hidden", value="")
-    if (_nav_bridge_val
-            and _nav_bridge_val in [m[0] for m in _MENU_VISIVEL]
-            and _nav_bridge_val != st.session_state.pagina):
-        st.session_state.pagina = _nav_bridge_val
-        st.rerun()
-
     # Trata navegação via query param
     _pids_validas_nav = [m[0] for m in _MENU_VISIVEL]
     _p_url = st.query_params.get("p", "")
