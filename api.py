@@ -2022,6 +2022,50 @@ O campo "descricao_avulso" deve ser preenchido quando kit="avulso cor" com o nom
     }
 
 
+def mapa_codigos_barras(cache: dict) -> dict:
+    """Constrói o índice código→(produto, variação) usado na Entrada — mesma lógica do app.py."""
+    bc_map = {}
+    for p in (cache or {}).get("produtos", []):
+        cb = (p.get("codigo_barra") or "").strip()
+        if cb:
+            bc_map[cb] = (p, None)
+        for v in p.get("variacoes", []):
+            vd = v.get("variacao", {})
+            for field in ("codigo_barra", "codigo_barras", "ean"):
+                vcb = (vd.get(field) or "").strip()
+                if vcb:
+                    bc_map[vcb] = (p, vd)
+            vc = (vd.get("codigo") or "").strip()
+            if vc:
+                bc_map[vc] = (p, vd)
+    return bc_map
+
+
+def buscar_codigo_entrada(cache: dict, codigo: str) -> dict:
+    """
+    Procura um código (de barras ou da variação) no cache.
+    Retorna {"status": "achado"|"multipla"|"nao_encontrado", "produto": {...}, "variacao": {...}|None,
+             "variacoes": [...] quando precisa escolher}.
+    """
+    codigo = (codigo or "").strip()
+    bc_map = mapa_codigos_barras(cache)
+    match = bc_map.get(codigo)
+    if not match:
+        return {"status": "nao_encontrado"}
+    prod, var = match
+    prod_min = {"id": prod.get("id", ""), "nome": prod.get("nome", ""), "codigo_interno": prod.get("codigo_interno", "")}
+    if var:
+        return {"status": "achado", "produto": prod_min,
+                "variacao": {"id": var.get("id", ""), "nome": var.get("nome", ""), "codigo": var.get("codigo", "")}}
+    variacoes = [v.get("variacao", {}) for v in prod.get("variacoes", [])]
+    if len(variacoes) == 1:
+        v = variacoes[0]
+        return {"status": "achado", "produto": prod_min,
+                "variacao": {"id": v.get("id", ""), "nome": v.get("nome", ""), "codigo": v.get("codigo", "")}}
+    return {"status": "multipla", "produto": prod_min,
+            "variacoes": [{"id": v.get("id", ""), "nome": v.get("nome", ""), "codigo": v.get("codigo", "")} for v in variacoes]}
+
+
 def expandir_kit_em_produto(produto: dict, kit_nome: str) -> dict:
     """
     Aplica um kit nomeado (masculino, feminino, sl masculino, magsafe, etc.) a UM produto

@@ -245,16 +245,8 @@ const PAGINAS = {
   sincronizacao: async (cont) => renderSincronizacao(cont),
   precos: async (cont) => renderPrecos(cont),
   disponibilidade: async (cont) => renderDisponibilidade(cont),
-  acerto: async (cont) => renderAjusteEstoque(cont, {
-    titulo: "🔧 Acerto de Estoque",
-    sub: "Define o valor absoluto do estoque (inventário/correção)",
-    modo: "set", rotuloQtd: "Qtd correta", botao: "📊 Confirmar acerto",
-  }),
-  entrada: async (cont) => renderAjusteEstoque(cont, {
-    titulo: "📥 Entrada de Mercadoria",
-    sub: "Soma ao estoque atual",
-    modo: "soma", rotuloQtd: "Qtd a somar", botao: "📥 Confirmar entrada",
-  }),
+  acerto: async (cont) => renderAcerto(cont),
+  entrada: async (cont) => renderEntrada(cont),
   novo_modelo: async (cont) => renderNovoProduto(cont),
   clonar_modelo: async (cont) => renderClonar(cont),
   usuarios: async (cont) => renderUsuarios(cont),
@@ -720,107 +712,364 @@ async function renderDisponibilidade(cont) {
 }
 
 // Ajuste de estoque (Acerto = set, Entrada = soma) — busca, monta lista, confirma
-async function renderAjusteEstoque(cont, { titulo, sub, modo, rotuloQtd, botao }) {
-  const lojaNome = Estado.lojaId
-    ? (Estado.lojas.find((l) => l.id === Estado.lojaId) || {}).nome
-    : null;
-  const lista = []; // {produto_id, produto_nome, variacao_id, variacao_nome, variacao_cod, quantidade}
+// ── Helpers compartilhados de Entrada/Acerto ───────────────────────────────
+function lojaNomeAtual() {
+  return Estado.lojaId ? (Estado.lojas.find((l) => l.id === Estado.lojaId) || {}).nome : null;
+}
+
+// Soma à lista (acumula quantidade se a variação já existe — igual ao _bc_add_item)
+function addItemLista(lista, item) {
+  if (item.variacao_id) {
+    const ex = lista.find((x) => x.variacao_id === item.variacao_id);
+    if (ex) { ex.quantidade = (ex.quantidade || 1) + (item.quantidade || 1); return; }
+  }
+  lista.push(item);
+}
+
+// Gera o PDF de etiquetas a partir de uma lista de itens (usa o endpoint /api/etiquetas/pdf)
+async function baixarEtiquetasDeLista(itens, formato, msgEl) {
+  try {
+    const r = await fetch("/api/etiquetas/pdf", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ formato, itens }),
+    });
+    if (!r.ok) throw new Error("Erro ao gerar PDF (" + r.status + ")");
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "etiquetas.pdf"; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) { if (msgEl) msgEl.innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+}
+
+// Painel de carregar lista salva (por tipo)
+async function painelCarregarLista(tipo, onCarregar, anchor) {
+  try {
+    const d = await api("/api/listas?tipo=" + encodeURIComponent(tipo));
+    if (!d.listas.length) return;
+    const det = el(`<details class="card" style="margin-bottom:12px"><summary style="cursor:pointer">📂 Carregar lista salva (${d.listas.length})</summary>
+      <div style="margin-top:8px" id="cl-${tipo}"></div></details>`);
+    anchor.appendChild(det);
+    det.querySelector(`#cl-${tipo}`).innerHTML = d.listas.map((l) => `
+      <div class="busca" style="align-items:center">
+        <span style="flex:1">${esc(l.nome)} <span class="stat-lbl">${esc(l.loja_nome)} · ${l.n_itens} itens · ${esc(l.criado_em)}</span></span>
+        <button class="cl-load" data-arq="${esc(l.arquivo)}">Carregar</button></div>`).join("");
+    det.querySelectorAll(".cl-load").forEach((b) => b.onclick = async () => {
+      const dd = await api("/api/listas/" + encodeURIComponent(b.dataset.arq));
+      onCarregar(dd.itens_raw || dd.itens);
+    });
+  } catch (e) {}
+}
+
+// ── Entrada de Mercadoria (fiel: código, scanner, WhatsApp, NF-e, Excel, aprovação) ──
+async function renderEntrada(cont) {
+  const lista = [];
+  const lojaNome = lojaNomeAtual();
+  const fmtEtiq = "pimaco_a4351";
 
   cont.innerHTML = `
-    <div class="page-title">${titulo}</div>
-    <div class="page-sub">${esc(sub)}</div>
+    <div class="page-title">📥 Entrada de Mercadoria</div>
+    <div class="page-sub">Soma as quantidades ao estoque atual</div>
     ${lojaNome ? `<div class="card" style="margin-bottom:12px">🏪 Loja: <b>${esc(lojaNome)}</b></div>`
                : '<div class="aviso">Selecione uma loja no topo antes de confirmar.</div>'}
-    <div class="busca">
-      <input id="aj-termo" type="text" placeholder="Buscar produto (nome ou código)…" />
-      <button id="aj-buscar">Buscar</button>
+    <div id="ent-carregar"></div>
+
+    <div class="submenu" style="position:static;padding:0;border:none;margin-bottom:12px">
+      <button class="sub-item ativo" data-modo="codigo">⌨️ Código</button>
+      <button class="sub-item" data-modo="scanner">📷 Scanner</button>
+      <button class="sub-item" data-modo="busca">🔍 Buscar produto</button>
+      <button class="sub-item" data-modo="wpp">🤖 WhatsApp IA</button>
+      <button class="sub-item" data-modo="import">📥 NF-e / Excel</button>
     </div>
-    <div id="aj-prod"></div>
-    <div id="aj-lista" style="margin-top:20px"></div>`;
+    <div id="ent-modo"></div>
+    <div id="ent-lista" style="margin-top:20px"></div>`;
 
-  const renderLista = () => {
-    const div = $("#aj-lista");
-    if (!lista.length) { div.innerHTML = '<div class="placeholder">Nenhum item na lista ainda.</div>'; return; }
-    div.innerHTML = `
-      <div class="page-sub">📝 Lista (${lista.length} itens)</div>
-      <table class="tabela">
-        <thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th></th></tr></thead>
-        <tbody>${lista.map((it, i) => `
-          <tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
-          <td class="estoque-num">${it.quantidade}</td>
-          <td><button class="btn-sair aj-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody>
-      </table>
-      <div class="busca" style="margin-top:16px">
-        <button id="aj-limpar" class="btn-sair">🗑️ Limpar</button>
-        <button id="aj-confirmar">${botao}</button>
-      </div>
-      <div id="aj-msg"></div>`;
-    div.querySelectorAll(".aj-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
-    $("#aj-limpar").onclick = () => { lista.length = 0; renderLista(); };
-    $("#aj-confirmar").onclick = confirmar;
+  painelCarregarLista("entrada", (itens) => { itens.forEach((i) => addItemLista(lista, i)); renderLista(); }, $("#ent-carregar"));
+
+  // ── alternância de modo ──
+  let modo = "codigo";
+  const modos = {
+    codigo: modoCodigo, scanner: modoScanner, busca: modoBusca, wpp: modoWpp, import: modoImport,
   };
+  cont.querySelectorAll("[data-modo]").forEach((b) => b.onclick = () => {
+    modo = b.dataset.modo;
+    cont.querySelectorAll("[data-modo]").forEach((x) => x.classList.toggle("ativo", x === b));
+    modos[modo]();
+  });
 
-  const confirmar = async () => {
-    if (!Estado.lojaId) { $("#aj-msg").innerHTML = '<div class="aviso">Selecione uma loja no topo.</div>'; return; }
-    if (!lista.length) return;
-    const btn = $("#aj-confirmar"); btn.disabled = true; btn.textContent = "Enviando…";
-    try {
-      const r = await apiPost("/api/estoque/ajustar", { loja: Estado.lojaId, modo, itens: lista });
-      let msg = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.aplicados} ajuste(s) aplicado(s).</div>`;
-      if (r.erros.length) msg += `<div class="aviso">${r.erros.map((e) => esc(e.produto + " / " + e.variacao + ": " + e.erro)).join("<br>")}</div>`;
-      $("#aj-msg").innerHTML = msg;
-      if (!r.erros.length) { lista.length = 0; renderLista(); $("#aj-msg").innerHTML = msg; }
-    } catch (err) {
-      $("#aj-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
-    } finally {
-      btn.disabled = false; btn.textContent = botao;
-    }
-  };
+  // ── Código manual ──
+  function modoCodigo() {
+    $("#ent-modo").innerHTML = `
+      <div class="busca"><input id="ec-cod" placeholder="Digite/bipe o código da etiqueta…" autofocus />
+        <button id="ec-add">➕ Adicionar</button></div>
+      <div id="ec-msg"></div>`;
+    const add = async () => {
+      const codigo = $("#ec-cod").value.trim();
+      if (!codigo) return;
+      try {
+        const d = await api("/api/entrada/codigo?" + new URLSearchParams({ codigo, loja: Estado.lojaId }));
+        tratarCodigo(d, $("#ec-msg"), () => { $("#ec-cod").value = ""; $("#ec-cod").focus(); });
+      } catch (err) { $("#ec-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    };
+    $("#ec-add").onclick = add;
+    $("#ec-cod").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+  }
 
-  const buscar = async () => {
-    const prodDiv = $("#aj-prod");
-    prodDiv.innerHTML = '<div class="loading">Buscando…</div>';
-    try {
-      const q = new URLSearchParams({ termo: $("#aj-termo").value.trim(), loja: Estado.lojaId });
-      const d = await api("/api/produtos/buscar?" + q.toString());
-      if (!d.produtos.length) { prodDiv.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
-      prodDiv.innerHTML = d.produtos.map((p, pi) => `
-        <div class="card" style="margin-bottom:10px">
-          <div class="card-head">${esc(p.nome)} <span class="stat-lbl">${esc(p.codigo_interno)}</span></div>
-          <table class="tabela">
-            <thead><tr><th>Variação</th><th>Cód.</th><th>Estoque atual</th><th>${esc(rotuloQtd)}</th></tr></thead>
-            <tbody>${p.variacoes.map((v, vi) => `
-              <tr><td>${esc(v.nome)}</td><td>${esc(v.codigo)}</td><td>${v.estoque}</td>
-              <td><input type="number" min="0" class="aj-qtd" data-p="${pi}" data-v="${vi}" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px"></td></tr>`).join("")}</tbody>
-          </table>
-          <div class="busca" style="margin-top:10px"><button class="aj-add" data-p="${pi}">➕ Adicionar à lista</button></div>
-        </div>`).join("");
-
-      prodDiv.querySelectorAll(".aj-add").forEach((btn) => {
-        btn.onclick = () => {
-          const pi = +btn.dataset.p;
-          const p = d.produtos[pi];
-          let n = 0;
-          prodDiv.querySelectorAll(`.aj-qtd[data-p="${pi}"]`).forEach((inp) => {
-            const qtd = Number(inp.value);
-            if (qtd > 0) {
-              const v = p.variacoes[+inp.dataset.v];
-              lista.push({
-                produto_id: p.id, produto_nome: p.nome,
-                variacao_id: v.id, variacao_nome: v.nome, quantidade: qtd,
-              });
-              inp.value = ""; n++;
-            }
-          });
-          if (n) renderLista();
-        };
+  function tratarCodigo(d, msgEl, onOk) {
+    if (d.status === "nao_encontrado") { msgEl.innerHTML = '<div class="aviso">Código não encontrado.</div>'; return; }
+    if (d.status === "achado") {
+      addItemLista(lista, {
+        produto_id: d.produto.id, produto_nome: d.produto.nome, cod_interno: d.produto.codigo_interno,
+        variacao_id: d.variacao.id, variacao_cod: d.variacao.codigo, variacao_nome: d.variacao.nome, quantidade: 1,
       });
-    } catch (err) {
-      prodDiv.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+      msgEl.innerHTML = `<div class="stat-lbl">✓ ${esc(d.produto.nome)} / ${esc(d.variacao.nome)}</div>`;
+      renderLista(); if (onOk) onOk(); return;
     }
-  };
-  $("#aj-buscar").onclick = buscar;
-  $("#aj-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+    if (d.status === "multipla") {
+      msgEl.innerHTML = `<div class="card"><b>${esc(d.produto.nome)}</b> — qual variação?<div class="busca" style="flex-wrap:wrap;margin-top:8px">
+        ${d.variacoes.map((v, i) => `<button class="ec-var btn-sair" data-i="${i}">${esc(v.nome)}</button>`).join("")}</div></div>`;
+      msgEl.querySelectorAll(".ec-var").forEach((b) => b.onclick = () => {
+        const v = d.variacoes[+b.dataset.i];
+        addItemLista(lista, { produto_id: d.produto.id, produto_nome: d.produto.nome, cod_interno: d.produto.codigo_interno,
+          variacao_id: v.id, variacao_cod: v.codigo, variacao_nome: v.nome, quantidade: 1 });
+        msgEl.innerHTML = ""; renderLista(); if (onOk) onOk();
+      });
+    }
+  }
+
+  // ── Scanner ao vivo (BarcodeDetector nativo) ──
+  function modoScanner() {
+    if (!("BarcodeDetector" in window)) {
+      $("#ent-modo").innerHTML = '<div class="aviso">Este navegador não tem leitor de código nativo. Use o modo Código ou abra no Chrome/Android.</div>';
+      return;
+    }
+    $("#ent-modo").innerHTML = `
+      <div class="card"><video id="ec-video" style="width:100%;max-width:420px;border-radius:8px;background:#000"></video>
+      <div id="ec-scan-msg" class="stat-lbl" style="margin-top:8px">Aponte para o código de barras…</div></div>`;
+    const video = $("#ec-video");
+    const detector = new window.BarcodeDetector();
+    let stream, parado = false, ultimo = "", ultimoT = 0;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then((s) => {
+      stream = s; video.srcObject = s; video.play();
+      const loop = async () => {
+        if (parado) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) {
+            const cod = codes[0].rawValue.trim();
+            const agora = Date.now();
+            if (!(cod === ultimo && agora - ultimoT < 2500)) {
+              ultimo = cod; ultimoT = agora;
+              const d = await api("/api/entrada/codigo?" + new URLSearchParams({ codigo: cod, loja: Estado.lojaId }));
+              tratarCodigo(d, $("#ec-scan-msg"));
+            }
+          }
+        } catch (e) {}
+        requestAnimationFrame(loop);
+      };
+      loop();
+    }).catch(() => { $("#ec-scan-msg").innerHTML = '<div class="aviso">Não foi possível acessar a câmera.</div>'; });
+    // para a câmera ao trocar de modo/página
+    const obs = new MutationObserver(() => {
+      if (!document.body.contains(video)) { parado = true; if (stream) stream.getTracks().forEach((t) => t.stop()); obs.disconnect(); }
+    });
+    obs.observe($("#conteudo"), { childList: true, subtree: true });
+  }
+
+  // ── Buscar produto ──
+  function modoBusca() {
+    $("#ent-modo").innerHTML = `<div class="busca"><input id="eb-termo" placeholder="Buscar produto…" />
+      <button id="eb-buscar">Buscar</button></div><div id="eb-prod"></div>`;
+    const buscar = montarBuscaProdutos($("#eb-prod"), (it) => { addItemLista(lista, it); renderLista(); }, { rotuloQtd: "Qtd entrada" });
+    $("#eb-buscar").onclick = () => buscar($("#eb-termo").value.trim());
+    $("#eb-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar($("#eb-termo").value.trim()); });
+  }
+
+  // ── WhatsApp IA ──
+  function modoWpp() {
+    $("#ent-modo").innerHTML = `
+      <textarea id="ew-txt" placeholder="Chegaram 5 POCO X3 aveludada preta, 3 iPhone 14 silicone azul…" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px;outline:none;font-family:inherit"></textarea>
+      <div class="busca" style="margin-top:8px"><button id="ew-gerar">✨ Identificar com IA</button></div>
+      <div id="ew-msg"></div>`;
+    $("#ew-gerar").onclick = async () => {
+      const texto = $("#ew-txt").value.trim();
+      if (!texto) return;
+      const btn = $("#ew-gerar"); btn.disabled = true; btn.textContent = "Analisando…";
+      try {
+        const d = await apiPost("/api/entrada/whatsapp", { texto, loja: Estado.lojaId });
+        d.adicionados.forEach((i) => addItemLista(lista, i));
+        let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${d.adicionados.length} adicionado(s).</div>`;
+        if (d.nao_encontrados.length) m += `<div class="aviso">⚠ ${d.nao_encontrados.length} não encontrado(s): ${d.nao_encontrados.map((n) => esc(n.cod_interno + "/" + n.variacao_nome + " x" + n.quantidade)).join(", ")}</div>`;
+        $("#ew-msg").innerHTML = m; renderLista();
+      } catch (err) { $("#ew-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      finally { btn.disabled = false; btn.textContent = "✨ Identificar com IA"; }
+    };
+  }
+
+  // ── NF-e / Excel ──
+  function modoImport() {
+    $("#ent-modo").innerHTML = `
+      <div class="card" style="margin-bottom:10px">
+        <div class="card-head">📄 Nota Fiscal (XML)</div>
+        <input id="ei-nfe" type="file" accept=".xml" />
+        <div id="ei-nfe-msg"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">📊 Excel</div>
+        <div class="busca"><a id="ei-tpl" href="/api/entrada/template?tipo=entrada" class="btn-sair" style="text-decoration:none">⬇️ Planilha-modelo</a></div>
+        <input id="ei-xls" type="file" accept=".xlsx,.xls" style="margin-top:8px" />
+        <div id="ei-xls-msg"></div>
+      </div>`;
+    $("#ei-nfe").onchange = async () => {
+      const f = $("#ei-nfe").files[0]; if (!f) return;
+      const fd = new FormData(); fd.append("arquivo", f); fd.append("loja", Estado.lojaId);
+      $("#ei-nfe-msg").innerHTML = '<div class="loading">Lendo NF-e…</div>';
+      try {
+        const r = await fetch("/api/entrada/importar-nfe", { method: "POST", credentials: "same-origin", body: fd });
+        if (!r.ok) throw new Error((await r.json()).detail || "Erro");
+        const d = await r.json();
+        d.match.forEach((i) => addItemLista(lista, i));
+        let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${d.match.length} produto(s) da NF-e adicionado(s).</div>`;
+        if (d.sem_match.length) m += `<div class="aviso">⚠ ${d.sem_match.length} sem correspondência: ${d.sem_match.map((s) => esc(s.desc + " x" + s.quantidade)).join(", ")}</div>`;
+        $("#ei-nfe-msg").innerHTML = m; renderLista();
+      } catch (err) { $("#ei-nfe-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    };
+    $("#ei-xls").onchange = async () => {
+      const f = $("#ei-xls").files[0]; if (!f) return;
+      const fd = new FormData(); fd.append("arquivo", f); fd.append("tipo", "entrada"); fd.append("loja", Estado.lojaId);
+      $("#ei-xls-msg").innerHTML = '<div class="loading">Importando…</div>';
+      try {
+        const r = await fetch("/api/entrada/importar-excel", { method: "POST", credentials: "same-origin", body: fd });
+        if (!r.ok) throw new Error((await r.json()).detail || "Erro");
+        const d = await r.json();
+        d.ok.forEach((i) => addItemLista(lista, i));
+        let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${d.ok.length} importado(s).</div>`;
+        if (d.sem_match.length) m += `<div class="aviso">⚠ ${d.sem_match.length} sem correspondência no catálogo.</div>`;
+        $("#ei-xls-msg").innerHTML = m; renderLista();
+      } catch (err) { $("#ei-xls-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    };
+  }
+
+  // ── Lista + ações ──
+  function renderLista() {
+    const div = $("#ent-lista");
+    if (!lista.length) { div.innerHTML = '<div class="placeholder">Adicione produtos à lista.</div>'; return; }
+    const podeConfirmar = Estado.me.pode_aprovar;
+    div.innerHTML = `
+      <div class="page-sub">📝 Lista de entrada (${lista.length} itens · ${lista.reduce((s, i) => s + (i.quantidade || 1), 0)} unidades)</div>
+      <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th></th></tr></thead>
+      <tbody>${lista.map((it, i) => `<tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
+        <td class="estoque-num">${it.quantidade}</td><td><button class="btn-sair en-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>
+      <div class="busca" style="margin-top:12px;flex-wrap:wrap">
+        <input id="en-lista-nome" placeholder="Nome p/ salvar lista" />
+        <button id="en-salvar" class="btn-sair">💾 Salvar lista</button>
+        ${podeConfirmar ? '<button id="en-confirmar">📊 Confirmar diretamente</button>' : ""}
+        <button id="en-aprovar" ${podeConfirmar ? 'class="btn-sair"' : ""}>📤 Enviar para aprovação</button>
+        <button id="en-etiq" class="btn-sair">🏷️ Etiquetas</button>
+        <button id="en-limpar" class="btn-sair">🗑️ Limpar</button>
+      </div>
+      <div id="en-msg"></div>`;
+    div.querySelector("#en-lista-nome").style.cssText = "background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;outline:none";
+    div.querySelectorAll(".en-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
+    $("#en-limpar").onclick = () => { lista.length = 0; renderLista(); };
+    $("#en-etiq").onclick = () => baixarEtiquetasDeLista(lista, fmtEtiq, $("#en-msg"));
+    $("#en-salvar").onclick = async () => {
+      const nome = $("#en-lista-nome").value.trim();
+      if (!nome) { $("#en-msg").innerHTML = '<div class="aviso">Dê um nome à lista.</div>'; return; }
+      try { await apiPost("/api/listas", { nome, tipo: "entrada", itens: lista, loja: Estado.lojaId });
+        $("#en-msg").innerHTML = '<div class="stat-lbl">✓ Lista salva.</div>'; }
+      catch (err) { $("#en-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    };
+    if (podeConfirmar) $("#en-confirmar").onclick = async () => {
+      if (!Estado.lojaId) { $("#en-msg").innerHTML = '<div class="aviso">Selecione uma loja no topo.</div>'; return; }
+      const btn = $("#en-confirmar"); btn.disabled = true; btn.textContent = "Confirmando…";
+      try {
+        const r = await apiPost("/api/estoque/ajustar", { loja: Estado.lojaId, modo: "soma", itens: lista });
+        let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.aplicados} estoque(s) somado(s).</div>`;
+        if (r.erros.length) m += `<div class="aviso">${r.erros.map((e) => esc(e.produto + "/" + e.variacao + ": " + e.erro)).join("<br>")}</div>`;
+        $("#en-msg").innerHTML = m;
+        if (!r.erros.length) { lista.length = 0; renderLista(); $("#ent-lista").querySelector("#en-msg")?.remove(); }
+      } catch (err) { $("#en-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      finally { if ($("#en-confirmar")) { btn.disabled = false; btn.textContent = "📊 Confirmar diretamente"; } }
+    };
+    $("#en-aprovar").onclick = async () => {
+      if (!Estado.lojaId) { $("#en-msg").innerHTML = '<div class="aviso">Selecione uma loja no topo.</div>'; return; }
+      const btn = $("#en-aprovar"); btn.disabled = true; btn.textContent = "Enviando…";
+      try {
+        const r = await apiPost("/api/entrada/aprovacao", { itens: lista, loja: Estado.lojaId });
+        $("#en-msg").innerHTML = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ Enviada para aprovação (${esc(r.id)}).</div>`;
+        lista.length = 0; setTimeout(renderLista, 1500);
+      } catch (err) { $("#en-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      finally { if ($("#en-aprovar")) { btn.disabled = false; btn.textContent = "📤 Enviar para aprovação"; } }
+    };
+  }
+
+  modoCodigo();
+  renderLista();
+}
+
+// ── Acerto de Estoque (fiel: busca, lista, salvar, confirmar SET, etiquetas) ──
+async function renderAcerto(cont) {
+  const lista = [];
+  const lojaNome = lojaNomeAtual();
+  const fmtEtiq = "pimaco_a4351";
+  cont.innerHTML = `
+    <div class="page-title">🔧 Acerto de Estoque</div>
+    <div class="page-sub">Define o valor absoluto do estoque (inventário/correção)</div>
+    ${lojaNome ? `<div class="card" style="margin-bottom:12px">🏪 Loja: <b>${esc(lojaNome)}</b></div>`
+               : '<div class="aviso">Selecione uma loja no topo antes de confirmar.</div>'}
+    <div id="ac-carregar"></div>
+    <div class="busca"><input id="ac-termo" placeholder="Buscar produto…" /><button id="ac-buscar">Buscar</button></div>
+    <div id="ac-prod"></div>
+    <div id="ac-lista" style="margin-top:20px"></div>`;
+
+  painelCarregarLista("acerto", (itens) => { itens.forEach((i) => addItemLista(lista, i)); renderLista(); }, $("#ac-carregar"));
+
+  const buscar = montarBuscaProdutos($("#ac-prod"), (it) => { addItemLista(lista, it); renderLista(); }, { rotuloQtd: "Qtd correta" });
+  $("#ac-buscar").onclick = () => buscar($("#ac-termo").value.trim());
+  $("#ac-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar($("#ac-termo").value.trim()); });
+
+  function renderLista() {
+    const div = $("#ac-lista");
+    if (!lista.length) { div.innerHTML = '<div class="placeholder">Adicione produtos à lista.</div>'; return; }
+    div.innerHTML = `
+      <div class="page-sub">📝 Lista de acerto (${lista.length} itens)</div>
+      <table class="tabela"><thead><tr><th>Produto</th><th>Variação</th><th>Qtd correta</th><th></th></tr></thead>
+      <tbody>${lista.map((it, i) => `<tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
+        <td class="estoque-num">${it.quantidade}</td><td><button class="btn-sair ac-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>
+      <div class="busca" style="margin-top:12px;flex-wrap:wrap">
+        <input id="ac-lista-nome" placeholder="Nome p/ salvar lista" />
+        <button id="ac-salvar" class="btn-sair">💾 Salvar lista</button>
+        <button id="ac-confirmar">📊 Confirmar acerto</button>
+        <button id="ac-etiq" class="btn-sair">🏷️ Etiquetas</button>
+        <button id="ac-limpar" class="btn-sair">🗑️ Limpar</button>
+      </div>
+      <div id="ac-msg"></div>`;
+    div.querySelector("#ac-lista-nome").style.cssText = "background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;outline:none";
+    div.querySelectorAll(".ac-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
+    $("#ac-limpar").onclick = () => { lista.length = 0; renderLista(); };
+    $("#ac-etiq").onclick = () => baixarEtiquetasDeLista(lista, fmtEtiq, $("#ac-msg"));
+    $("#ac-salvar").onclick = async () => {
+      const nome = $("#ac-lista-nome").value.trim();
+      if (!nome) { $("#ac-msg").innerHTML = '<div class="aviso">Dê um nome à lista.</div>'; return; }
+      try { await apiPost("/api/listas", { nome, tipo: "acerto", itens: lista, loja: Estado.lojaId });
+        $("#ac-msg").innerHTML = '<div class="stat-lbl">✓ Lista salva.</div>'; }
+      catch (err) { $("#ac-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+    };
+    $("#ac-confirmar").onclick = async () => {
+      if (!Estado.lojaId) { $("#ac-msg").innerHTML = '<div class="aviso">Selecione uma loja no topo.</div>'; return; }
+      const btn = $("#ac-confirmar"); btn.disabled = true; btn.textContent = "Confirmando…";
+      try {
+        const r = await apiPost("/api/estoque/ajustar", { loja: Estado.lojaId, modo: "set", itens: lista });
+        let m = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.aplicados} estoque(s) definido(s).</div>`;
+        if (r.erros.length) m += `<div class="aviso">${r.erros.map((e) => esc(e.produto + "/" + e.variacao + ": " + e.erro)).join("<br>")}</div>`;
+        $("#ac-msg").innerHTML = m;
+        if (!r.erros.length) { lista.length = 0; renderLista(); }
+      } catch (err) { $("#ac-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`; }
+      finally { if ($("#ac-confirmar")) { btn.disabled = false; btn.textContent = "📊 Confirmar acerto"; } }
+    };
+  }
   renderLista();
 }
 

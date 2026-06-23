@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import api  # noqa: E402
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query  # noqa: E402
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query, UploadFile, File, Form  # noqa: E402
 from fastapi.responses import JSONResponse, FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
@@ -125,13 +125,17 @@ def me(request: Request):
         {"id": m[0], "icone": m[1], "rotulo": m[2], "categoria": m[3]}
         for m in MENU if m[0] in paginas
     ]
+    setor = info.get("setor", "vendas")
+    setores = api.carregar_setores()
+    pode_aprovar = setor == "admin" or "aprovacoes" in setores.get(setor, {}).get("paginas", [])
     return {
         "usuario": user,
         "nome": info.get("nome", user),
-        "setor": info.get("setor", "vendas"),
+        "setor": setor,
         "paginas": paginas,
         "menu": menu,
         "cat_icones": CAT_ICONS,
+        "pode_aprovar": pode_aprovar,
     }
 
 
@@ -936,20 +940,39 @@ def listas_listar(request: Request, tipo: str = Query(default="")):
     return {"listas": out}
 
 
+class ListaSalvarIn(BaseModel):
+    nome: str
+    tipo: str
+    itens: list
+    loja: str = ""
+
+
+@app.post("/api/listas")
+def listas_salvar(request: Request, dados: ListaSalvarIn):
+    usuario_atual(request)
+    if not dados.nome.strip():
+        raise HTTPException(status_code=400, detail="Dê um nome à lista.")
+    loja_nome = api.LOJAS.get(dados.loja, "") if dados.loja else ""
+    api.salvar_lista(dados.nome.strip(), dados.tipo, dados.itens,
+                     loja_id=dados.loja or None, loja_nome=loja_nome)
+    return {"ok": True}
+
+
 @app.get("/api/listas/{arquivo}")
 def listas_ver(request: Request, arquivo: str):
     usuario_atual(request)
     d = api.carregar_lista(arquivo)
     if not d:
         raise HTTPException(status_code=404, detail="Lista não encontrada.")
+    raw = d.get("itens", [])
     itens = [
         {"produto": i.get("produto_nome", ""), "variacao": i.get("variacao_nome", ""),
          "codigo": i.get("variacao_cod", "") or i.get("cod_interno", ""), "qtd": i.get("quantidade", "")}
-        for i in d.get("itens", [])
+        for i in raw
     ]
     return {
         "nome": d.get("nome", arquivo), "tipo": d.get("tipo", ""),
-        "loja_nome": d.get("loja_nome", ""), "itens": itens,
+        "loja_nome": d.get("loja_nome", ""), "itens": itens, "itens_raw": raw,
     }
 
 
@@ -1104,6 +1127,138 @@ def pedido_registrar(request: Request, dados: PedidoIn):
         return {"ok": True, "resultado": res}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Entrada de Mercadoria ─────────────────────────────────────────────────────
+class EntradaWppIn(BaseModel):
+    texto: str = ""
+    loja: str = ""
+
+
+@app.post("/api/entrada/whatsapp")
+def entrada_whatsapp(request: Request, dados: EntradaWppIn):
+    usuario_atual(request)
+    cache = api.carregar_cache(dados.loja or None) or api.carregar_cache(None)
+    if not cache:
+        raise HTTPException(status_code=400, detail="Sincronize os produtos primeiro.")
+    cat_resumo = "\n".join(
+        f"{p.get('codigo_interno','')} | {p.get('nome','')}"
+        for p in cache.get("produtos", [])[:300]
+    )
+    try:
+        resultado = api.parse_entrada_whatsapp(dados.texto, cat_resumo)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    ci_map = {p.get("codigo_interno", "").lower(): p for p in cache.get("produtos", [])}
+    adicionados, nao_encontrados = [], []
+    for wi in resultado:
+        wprod = ci_map.get((wi.get("cod_interno") or "").lower())
+        if wprod:
+            wvar_nome = (wi.get("variacao_nome") or "").lower()
+            wvar = None
+            for wv in wprod.get("variacoes", []):
+                wvd = wv["variacao"]
+                if wvar_nome in (wvd.get("nome", "") or "").lower():
+                    wvar = wvd
+                    break
+            if not wvar and wprod.get("variacoes"):
+                wvar = wprod["variacoes"][0]["variacao"]
+            if wvar:
+                adicionados.append({
+                    "produto_id": wprod.get("id", ""), "produto_nome": wprod.get("nome", ""),
+                    "cod_interno": wprod.get("codigo_interno", ""),
+                    "variacao_id": wvar.get("id", ""), "variacao_cod": wvar.get("codigo", ""),
+                    "variacao_nome": wvar.get("nome", ""), "quantidade": wi.get("quantidade", 1),
+                })
+                continue
+        nao_encontrados.append({
+            "cod_interno": wi.get("cod_interno", ""), "variacao_nome": wi.get("variacao_nome", ""),
+            "quantidade": wi.get("quantidade", 1),
+        })
+    return {"adicionados": adicionados, "nao_encontrados": nao_encontrados}
+
+
+@app.get("/api/entrada/codigo")
+def entrada_codigo(request: Request, codigo: str = Query(...), loja: str = Query(default="")):
+    usuario_atual(request)
+    cache = api.carregar_cache(loja or None) or api.carregar_cache(None)
+    if not cache:
+        raise HTTPException(status_code=400, detail="Sincronize os produtos primeiro.")
+    return api.buscar_codigo_entrada(cache, codigo)
+
+
+@app.post("/api/entrada/importar-excel")
+async def entrada_importar_excel(request: Request, arquivo: UploadFile = File(...),
+                                 tipo: str = Form(default="entrada"), loja: str = Form(default="")):
+    usuario_atual(request)
+    cache = api.carregar_cache(loja or None) or api.carregar_cache(None)
+    conteudo = await arquivo.read()
+    try:
+        ok, sem = api.importar_excel_itens(conteudo, tipo, cache or {})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": ok, "sem_match": sem}
+
+
+@app.post("/api/entrada/importar-nfe")
+async def entrada_importar_nfe(request: Request, arquivo: UploadFile = File(...), loja: str = Form(default="")):
+    usuario_atual(request)
+    cache = api.carregar_cache(loja or None) or api.carregar_cache(None)
+    conteudo = await arquivo.read()
+    try:
+        itens = api.importar_nfe_xml(conteudo, cache or {})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    match = [{k: v for k, v in i.items() if not k.startswith("_")} for i in itens if i.get("_matched")]
+    nmatch = [{"desc": i.get("_nfe_desc", ""), "quantidade": i.get("quantidade", 1)} for i in itens if not i.get("_matched")]
+    return {"match": match, "sem_match": nmatch}
+
+
+@app.get("/api/entrada/template")
+def entrada_template(request: Request, tipo: str = Query(default="entrada")):
+    usuario_atual(request)
+    buf = api.gerar_template_excel(tipo)
+    conteudo = buf.read() if hasattr(buf, "read") else buf
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="modelo_{tipo}.xlsx"'},
+    )
+
+
+class EntradaAprovacaoIn(BaseModel):
+    itens: list
+    obs: str = ""
+    loja: str = ""
+
+
+@app.post("/api/entrada/aprovacao")
+def entrada_aprovacao(request: Request, dados: EntradaAprovacaoIn):
+    user = usuario_atual(request)
+    if not dados.loja:
+        raise HTTPException(status_code=400, detail="Selecione uma loja antes de enviar.")
+    if not dados.itens:
+        raise HTTPException(status_code=400, detail="Lista vazia.")
+    usuarios = api.carregar_usuarios()
+    nome = usuarios.get(user, {}).get("nome", user)
+    loja_nome = api.LOJAS.get(dados.loja, "")
+    entrada_id = api.salvar_entrada_para_aprovacao(
+        itens=dados.itens, usuario=user, nome_usuario=nome,
+        loja_id=str(dados.loja), loja_nome=loja_nome, obs=dados.obs,
+    )
+    try:
+        aprovadores = api.usuarios_com_permissao("aprovacoes", usuarios, api.carregar_setores())
+        aprovadores = [u for u in aprovadores if u != user]
+        if aprovadores:
+            api.criar_notificacao(
+                para_usuarios=aprovadores, tipo="aprovacao_solicitada",
+                titulo="Nova lista aguarda aprovação",
+                corpo=f"{nome} enviou {len(dados.itens)} item(ns) para aprovação — loja {loja_nome}",
+                pagina="aprovacoes", de_usuario=user,
+            )
+    except Exception:
+        pass
+    return {"ok": True, "id": entrada_id}
 
 
 # ── Diagnóstico (mostra se as credenciais estão configuradas) ────────────────
