@@ -245,6 +245,18 @@ const PAGINAS = {
   sincronizacao: async (cont) => renderSincronizacao(cont),
   precos: async (cont) => renderPrecos(cont),
   disponibilidade: async (cont) => renderDisponibilidade(cont),
+  acerto: async (cont) => renderAjusteEstoque(cont, {
+    titulo: "🔧 Acerto de Estoque",
+    sub: "Define o valor absoluto do estoque (inventário/correção)",
+    modo: "set", rotuloQtd: "Qtd correta", botao: "📊 Confirmar acerto",
+  }),
+  entrada: async (cont) => renderAjusteEstoque(cont, {
+    titulo: "📥 Entrada de Mercadoria",
+    sub: "Soma ao estoque atual",
+    modo: "soma", rotuloQtd: "Qtd a somar", botao: "📥 Confirmar entrada",
+  }),
+  novo_modelo: async (cont) => renderNovoProduto(cont),
+  clonar_modelo: async (cont) => renderClonar(cont),
 };
 
 // View de estoque (busca ao vivo)
@@ -700,6 +712,236 @@ async function renderDisponibilidade(cont) {
   };
   $("#dp-buscar").onclick = buscar;
   $("#dp-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+}
+
+// Ajuste de estoque (Acerto = set, Entrada = soma) — busca, monta lista, confirma
+async function renderAjusteEstoque(cont, { titulo, sub, modo, rotuloQtd, botao }) {
+  const lojaNome = Estado.lojaId
+    ? (Estado.lojas.find((l) => l.id === Estado.lojaId) || {}).nome
+    : null;
+  const lista = []; // {produto_id, produto_nome, variacao_id, variacao_nome, variacao_cod, quantidade}
+
+  cont.innerHTML = `
+    <div class="page-title">${titulo}</div>
+    <div class="page-sub">${esc(sub)}</div>
+    ${lojaNome ? `<div class="card" style="margin-bottom:12px">🏪 Loja: <b>${esc(lojaNome)}</b></div>`
+               : '<div class="aviso">Selecione uma loja no topo antes de confirmar.</div>'}
+    <div class="busca">
+      <input id="aj-termo" type="text" placeholder="Buscar produto (nome ou código)…" />
+      <button id="aj-buscar">Buscar</button>
+    </div>
+    <div id="aj-prod"></div>
+    <div id="aj-lista" style="margin-top:20px"></div>`;
+
+  const renderLista = () => {
+    const div = $("#aj-lista");
+    if (!lista.length) { div.innerHTML = '<div class="placeholder">Nenhum item na lista ainda.</div>'; return; }
+    div.innerHTML = `
+      <div class="page-sub">📝 Lista (${lista.length} itens)</div>
+      <table class="tabela">
+        <thead><tr><th>Produto</th><th>Variação</th><th>Qtd</th><th></th></tr></thead>
+        <tbody>${lista.map((it, i) => `
+          <tr><td>${esc(it.produto_nome)}</td><td>${esc(it.variacao_nome)}</td>
+          <td class="estoque-num">${it.quantidade}</td>
+          <td><button class="btn-sair aj-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody>
+      </table>
+      <div class="busca" style="margin-top:16px">
+        <button id="aj-limpar" class="btn-sair">🗑️ Limpar</button>
+        <button id="aj-confirmar">${botao}</button>
+      </div>
+      <div id="aj-msg"></div>`;
+    div.querySelectorAll(".aj-rem").forEach((b) => b.onclick = () => { lista.splice(+b.dataset.i, 1); renderLista(); });
+    $("#aj-limpar").onclick = () => { lista.length = 0; renderLista(); };
+    $("#aj-confirmar").onclick = confirmar;
+  };
+
+  const confirmar = async () => {
+    if (!Estado.lojaId) { $("#aj-msg").innerHTML = '<div class="aviso">Selecione uma loja no topo.</div>'; return; }
+    if (!lista.length) return;
+    const btn = $("#aj-confirmar"); btn.disabled = true; btn.textContent = "Enviando…";
+    try {
+      const r = await apiPost("/api/estoque/ajustar", { loja: Estado.lojaId, modo, itens: lista });
+      let msg = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ ${r.aplicados} ajuste(s) aplicado(s).</div>`;
+      if (r.erros.length) msg += `<div class="aviso">${r.erros.map((e) => esc(e.produto + " / " + e.variacao + ": " + e.erro)).join("<br>")}</div>`;
+      $("#aj-msg").innerHTML = msg;
+      if (!r.erros.length) { lista.length = 0; renderLista(); $("#aj-msg").innerHTML = msg; }
+    } catch (err) {
+      $("#aj-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = botao;
+    }
+  };
+
+  const buscar = async () => {
+    const prodDiv = $("#aj-prod");
+    prodDiv.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ termo: $("#aj-termo").value.trim(), loja: Estado.lojaId });
+      const d = await api("/api/produtos/buscar?" + q.toString());
+      if (!d.produtos.length) { prodDiv.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      prodDiv.innerHTML = d.produtos.map((p, pi) => `
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-head">${esc(p.nome)} <span class="stat-lbl">${esc(p.codigo_interno)}</span></div>
+          <table class="tabela">
+            <thead><tr><th>Variação</th><th>Cód.</th><th>Estoque atual</th><th>${esc(rotuloQtd)}</th></tr></thead>
+            <tbody>${p.variacoes.map((v, vi) => `
+              <tr><td>${esc(v.nome)}</td><td>${esc(v.codigo)}</td><td>${v.estoque}</td>
+              <td><input type="number" min="0" class="aj-qtd" data-p="${pi}" data-v="${vi}" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--txt);padding:6px 8px"></td></tr>`).join("")}</tbody>
+          </table>
+          <div class="busca" style="margin-top:10px"><button class="aj-add" data-p="${pi}">➕ Adicionar à lista</button></div>
+        </div>`).join("");
+
+      prodDiv.querySelectorAll(".aj-add").forEach((btn) => {
+        btn.onclick = () => {
+          const pi = +btn.dataset.p;
+          const p = d.produtos[pi];
+          let n = 0;
+          prodDiv.querySelectorAll(`.aj-qtd[data-p="${pi}"]`).forEach((inp) => {
+            const qtd = Number(inp.value);
+            if (qtd > 0) {
+              const v = p.variacoes[+inp.dataset.v];
+              lista.push({
+                produto_id: p.id, produto_nome: p.nome,
+                variacao_id: v.id, variacao_nome: v.nome, quantidade: qtd,
+              });
+              inp.value = ""; n++;
+            }
+          });
+          if (n) renderLista();
+        };
+      });
+    } catch (err) {
+      prodDiv.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#aj-buscar").onclick = buscar;
+  $("#aj-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+  renderLista();
+}
+
+// Novo Produto
+async function renderNovoProduto(cont) {
+  const grupos = await carregarGrupos();
+  const variacoes = []; // {nome, codigo}
+  cont.innerHTML = `
+    <div class="page-title">➕ Novo Produto</div>
+    <div class="page-sub">Cadastra um modelo com variações na GestãoClick</div>
+    <div class="cards" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+      <div class="card">
+        <input id="np-nome" placeholder="Nome do produto *" class="np-in" />
+        <input id="np-cod" placeholder="Código interno *" class="np-in" />
+        ${selectGrupos("np-grupo", grupos)}
+      </div>
+      <div class="card">
+        <input id="np-custo" placeholder="Valor de custo (R$)" value="0.00" class="np-in" />
+        <input id="np-venda" placeholder="Valor de venda (R$)" value="0.00" class="np-in" />
+        <label style="color:var(--txt2);font-size:.85rem;display:flex;align-items:center;gap:6px;margin-top:8px">
+          <input id="np-ativo" type="checkbox" checked> Produto ativo</label>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head">Variações</div>
+      <div class="busca">
+        <input id="np-var-nome" placeholder="Nome da variação (ex: Preto)" />
+        <input id="np-var-cod" placeholder="Código (ex: IP18PM0001)" />
+        <button id="np-var-add">➕</button>
+      </div>
+      <div id="np-var-lista"></div>
+    </div>
+    <div class="busca"><button id="np-salvar">✅ Cadastrar produto</button></div>
+    <div id="np-msg"></div>`;
+
+  cont.querySelectorAll(".np-in").forEach((i) =>
+    i.style.cssText = "display:block;width:100%;margin-bottom:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px 12px;outline:none");
+
+  const renderVars = () => {
+    $("#np-var-lista").innerHTML = variacoes.length ? `
+      <table class="tabela"><thead><tr><th>Variação</th><th>Código</th><th></th></tr></thead>
+      <tbody>${variacoes.map((v, i) => `<tr><td>${esc(v.nome)}</td><td>${esc(v.codigo)}</td>
+        <td><button class="btn-sair np-var-rem" data-i="${i}">✕</button></td></tr>`).join("")}</tbody></table>`
+      : '<div class="placeholder">Adicione pelo menos uma variação.</div>';
+    $("#np-var-lista").querySelectorAll(".np-var-rem").forEach((b) =>
+      b.onclick = () => { variacoes.splice(+b.dataset.i, 1); renderVars(); });
+  };
+  $("#np-var-add").onclick = () => {
+    const nome = $("#np-var-nome").value.trim();
+    if (!nome) return;
+    variacoes.push({ nome, codigo: $("#np-var-cod").value.trim() });
+    $("#np-var-nome").value = ""; $("#np-var-cod").value = "";
+    renderVars();
+  };
+  $("#np-salvar").onclick = async () => {
+    const btn = $("#np-salvar"); btn.disabled = true; btn.textContent = "Cadastrando…";
+    try {
+      const r = await apiPost("/api/produtos/criar", {
+        nome: $("#np-nome").value.trim(), codigo_interno: $("#np-cod").value.trim(),
+        grupo_id: $("#np-grupo").value, valor_custo: $("#np-custo").value.trim() || "0.00",
+        valor_venda: $("#np-venda").value.trim() || "0.00", ativo: $("#np-ativo").checked,
+        loja: Estado.lojaId, variacoes: variacoes.map((v) => ({ nome: v.nome, codigo: v.codigo, estoque: "0" })),
+      });
+      $("#np-msg").innerHTML = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ Produto cadastrado! Sincronize para vê-lo na lista.</div>`;
+      variacoes.length = 0; renderVars();
+      $("#np-nome").value = ""; $("#np-cod").value = "";
+    } catch (err) {
+      $("#np-msg").innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = "✅ Cadastrar produto";
+    }
+  };
+  renderVars();
+}
+
+// Clonar Produto
+async function renderClonar(cont) {
+  cont.innerHTML = `
+    <div class="page-title">🔁 Clonar Produto</div>
+    <div class="page-sub">Copia as variações de um modelo existente para um novo</div>
+    <div class="busca">
+      <input id="cl-termo" type="text" placeholder="Buscar modelo de origem…" />
+      <button id="cl-buscar">Buscar</button>
+    </div>
+    <div id="cl-resultado"><div class="placeholder">Busque o modelo que servirá de base.</div></div>`;
+
+  const buscar = async () => {
+    const res = $("#cl-resultado");
+    res.innerHTML = '<div class="loading">Buscando…</div>';
+    try {
+      const q = new URLSearchParams({ termo: $("#cl-termo").value.trim(), loja: Estado.lojaId });
+      const d = await api("/api/produtos/buscar?" + q.toString());
+      if (!d.produtos.length) { res.innerHTML = '<div class="placeholder">Nenhum produto encontrado.</div>'; return; }
+      res.innerHTML = d.produtos.map((p, i) => `
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-head">${esc(p.nome)} <span class="stat-lbl">${esc(p.codigo_interno)} · ${p.variacoes.length} variações</span></div>
+          <div class="busca">
+            <input class="cl-novo-nome" data-i="${i}" placeholder="Nome do novo modelo" />
+            <input class="cl-novo-cod" data-i="${i}" placeholder="Código interno" />
+            <button class="cl-clonar" data-i="${i}">🔁 Clonar</button>
+          </div>
+          <div class="cl-msg" data-i="${i}"></div>
+        </div>`).join("");
+      res.querySelectorAll(".cl-clonar").forEach((btn) => {
+        btn.onclick = async () => {
+          const i = btn.dataset.i, p = d.produtos[+i];
+          const nome = res.querySelector(`.cl-novo-nome[data-i="${i}"]`).value.trim();
+          const cod = res.querySelector(`.cl-novo-cod[data-i="${i}"]`).value.trim();
+          const msg = res.querySelector(`.cl-msg[data-i="${i}"]`);
+          btn.disabled = true; btn.textContent = "Clonando…";
+          try {
+            await apiPost("/api/produtos/clonar", { produto_id: p.id, novo_nome: nome, novo_codigo: cod, loja: Estado.lojaId });
+            msg.innerHTML = `<div class="aviso" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#86efac">✅ '${esc(nome)}' criado! Sincronize para vê-lo.</div>`;
+          } catch (err) {
+            msg.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+          } finally {
+            btn.disabled = false; btn.textContent = "🔁 Clonar";
+          }
+        };
+      });
+    } catch (err) {
+      res.innerHTML = `<div class="aviso">${esc(err.message)}</div>`;
+    }
+  };
+  $("#cl-buscar").onclick = buscar;
+  $("#cl-termo").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
 }
 
 // ── Arranca ────────────────────────────────────────────────────────

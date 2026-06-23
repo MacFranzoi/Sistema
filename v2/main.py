@@ -624,6 +624,127 @@ def disponibilidade_salvar(request: Request, dados: DispIn):
     return {"aplicadas": ok, "erros": erros}
 
 
+# ── Busca de produtos no cache (com variações) — usado por Acerto/Entrada ─────
+@app.get("/api/produtos/buscar")
+def produtos_buscar(
+    request: Request,
+    termo: str = Query(default=""),
+    loja: str = Query(default=""),
+):
+    usuario_atual(request)
+    cache = api.carregar_cache(loja or None) or api.carregar_cache(None)
+    prods = api.buscar_produtos(termo, cache or {})
+    out = []
+    for p in prods:
+        variacoes = []
+        for v in sorted(p.get("variacoes", []), key=lambda v: v.get("variacao", {}).get("codigo", "") or ""):
+            vd = v.get("variacao", {})
+            variacoes.append({
+                "id": vd.get("id", ""),
+                "codigo": vd.get("codigo", ""),
+                "nome": vd.get("nome", "") or "(sem nome)",
+                "estoque": float(vd.get("estoque", 0) or 0),
+            })
+        out.append({
+            "id": p.get("id", ""),
+            "nome": p.get("nome", ""),
+            "codigo_interno": p.get("codigo_interno", ""),
+            "variacoes": variacoes,
+        })
+    return {"produtos": out}
+
+
+class AjusteItem(BaseModel):
+    produto_id: str
+    produto_nome: str = ""
+    variacao_id: str
+    variacao_nome: str = ""
+    quantidade: float
+
+
+class AjusteIn(BaseModel):
+    loja: str = ""
+    modo: str = "set"          # 'set' = acerto, 'soma' = entrada
+    itens: list[AjusteItem]
+
+
+@app.post("/api/estoque/ajustar")
+def estoque_ajustar(request: Request, dados: AjusteIn):
+    usuario_atual(request)
+    if not dados.loja:
+        raise HTTPException(status_code=400, detail="Selecione uma loja antes de confirmar.")
+    entradas = [
+        {"produto_id": it.produto_id, "produto_nome": it.produto_nome,
+         "variacao_id": it.variacao_id, "variacao_nome": it.variacao_nome,
+         "quantidade": it.quantidade}
+        for it in dados.itens
+    ]
+    modo = "soma" if dados.modo == "soma" else "set"
+    res = api.atualizar_estoque_lote(entradas, loja_id=dados.loja, modo=modo)
+    ok = [r for r in res if r.get("ok")]
+    erros = [{"produto": r.get("produto_nome", ""), "variacao": r.get("variacao_nome", ""), "erro": r.get("erro", "")}
+             for r in res if not r.get("ok")]
+    return {"aplicados": len(ok), "erros": erros}
+
+
+# ── Novo produto ──────────────────────────────────────────────────────────────
+class VariacaoNova(BaseModel):
+    nome: str
+    codigo: str = ""
+    estoque: str = "0"
+
+
+class ProdutoNovoIn(BaseModel):
+    nome: str
+    codigo_interno: str
+    grupo_id: str = ""
+    valor_custo: str = "0.00"
+    valor_venda: str = "0.00"
+    ativo: bool = True
+    loja: str = ""
+    variacoes: list[VariacaoNova]
+
+
+@app.post("/api/produtos/criar")
+def produtos_criar(request: Request, dados: ProdutoNovoIn):
+    usuario_atual(request)
+    if not dados.nome or not dados.codigo_interno:
+        raise HTTPException(status_code=400, detail="Nome e código interno são obrigatórios.")
+    if not dados.variacoes:
+        raise HTTPException(status_code=400, detail="Adicione pelo menos uma variação.")
+    try:
+        res = api.criar_produto(
+            nome=dados.nome, codigo_interno=dados.codigo_interno, grupo_id=dados.grupo_id,
+            valor_custo=dados.valor_custo, valor_venda=dados.valor_venda,
+            ativo="1" if dados.ativo else "0",
+            variacoes=[v.model_dump() for v in dados.variacoes],
+            loja_id=dados.loja or None,
+        )
+        return {"ok": True, "resultado": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Clonar produto ────────────────────────────────────────────────────────────
+class CloneIn(BaseModel):
+    produto_id: str
+    novo_nome: str
+    novo_codigo: str
+    loja: str = ""
+
+
+@app.post("/api/produtos/clonar")
+def produtos_clonar(request: Request, dados: CloneIn):
+    usuario_atual(request)
+    if not dados.novo_nome or not dados.novo_codigo:
+        raise HTTPException(status_code=400, detail="Preencha o nome e o código.")
+    try:
+        res = api.clonar_produto(dados.produto_id, dados.novo_nome, dados.novo_codigo, loja_id=dados.loja or None)
+        return {"ok": True, "resultado": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ── Diagnóstico (mostra se as credenciais estão configuradas) ────────────────
 @app.get("/api/diagnostico")
 def diagnostico(request: Request):
