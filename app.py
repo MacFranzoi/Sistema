@@ -2491,9 +2491,9 @@ def _main_content():
                             st.session_state["ent_bc_notfound_arg"] = _bc_str
                             st.rerun()
                     else:
-                        # Nenhum barcode no frame — avisa o componente
-                        st.session_state["ent_bc_notfound_arg"] = "frame"
-                        st.rerun()
+                        # Nenhum barcode neste frame — NÃO faz rerun (senão a câmera
+                        # remonta e pisca branco a cada frame). Só ignora e segue.
+                        pass
 
             # ── Confirmação de duplicata ──────────────────────────────────────────
             if "ent_bc_confirm" in st.session_state:

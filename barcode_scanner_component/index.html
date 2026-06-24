@@ -159,7 +159,7 @@ function resetStatus() {
 
 document.getElementById("btn-capture").addEventListener("click", () => {
   setBusy(false);
-  capture();
+  capture(true);   // manual = pode enviar frame pro Python (fallback)
 });
 
 // BarcodeDetector nativo (iOS 17+, Chrome/Android) — decodifica instantaneamente no JS
@@ -172,7 +172,7 @@ const _detector = (() => {
   } catch(_) { return null; }
 })();
 
-async function capture() {
+async function capture(manual) {
   if (busy || video.readyState < 2 || video.paused) return;
   setBusy(true);
 
@@ -188,7 +188,9 @@ async function capture() {
   canvas.height = sh;
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
 
-  // Tenta decodificar no JS (instantâneo — sem round-trip ao servidor)
+  // Tenta decodificar no JS (instantâneo — sem round-trip ao servidor).
+  // Só faz ST.send (que re-roda o Streamlit) quando ACHA um código — assim
+  // a câmera não remonta/pisca a cada frame do scan automático.
   if (_detector) {
     try {
       const results = await _detector.detect(canvas);
@@ -201,9 +203,18 @@ async function capture() {
         return;
       }
     } catch(_) {}
+    // Detector existe mas não achou nada neste frame: não envia nada.
+    setBusy(false);
+    return;
   }
 
-  // Fallback: envia frame para Python decodificar
+  // Sem BarcodeDetector nativo: só envia o frame pro Python quando o usuário
+  // clica em "Ler agora" (manual). No scan automático fica só na câmera, sem
+  // re-rodar o app a cada 2s (que causava o piscar branco).
+  if (!manual) {
+    setBusy(false);
+    return;
+  }
   status.className   = "sending";
   status.textContent = "🔍 Lendo código...";
   const frame = canvas.toDataURL("image/jpeg", 0.92);
