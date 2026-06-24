@@ -4795,7 +4795,20 @@ def _main_content():
                     "Estoque-alvo por cor", min_value=0, max_value=999, value=2, step=1, key="sug_alvo",
                     help="Considera em falta tudo abaixo deste nível.")
 
-                if st.button("✨ Gerar sugestão", type="primary", key="sug_gerar", use_container_width=True):
+                _cg1, _cg2 = st.columns([3, 1])
+                with _cg2:
+                    if st.button("🔍 Testar vendas", key="sug_diag", use_container_width=True,
+                                 help="Verifica se a API está retornando vendas da loja no período."):
+                        with st.spinner("Consultando vendas da loja…"):
+                            try:
+                                _diag = api.diagnostico_vendas(dias=int(_sg_dias), loja_id=loja_id)
+                                st.json(_diag)
+                            except Exception as _de:
+                                st.error(f"Erro no diagnóstico: {_de}")
+                with _cg1:
+                    _btn_ger = st.button("✨ Gerar sugestão", type="primary",
+                                         key="sug_gerar", use_container_width=True)
+                if _btn_ger:
                     if not cache:
                         st.warning("Sincronize os produtos primeiro.")
                     else:

@@ -1641,20 +1641,40 @@ def grupos_de_aparelhos(loja_id=None, limiar=0.5):
     return sorted(aparelhos)
 
 
-def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativos=True):
+# Tipos de variação que NÃO são capa (películas, vidros, etc.) — excluídos
+# quando o usuário não escolhe um tipo específico.
+_TIPOS_NAO_CAPA = {
+    "pelicula", "película", "peli", "hidrogel", "vidro", "vidro 3d", "3d",
+    "fch", "full", "privacidade", "fosca", "ceramica", "cerâmica",
+    "nano", "gel", "cabo", "fone", "carregador", "suporte",
+}
+
+
+def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativos=True,
+                               apenas_capas=True):
     """
     Varre o cache de produtos e devolve a lista achatada de variações,
-    opcionalmente filtrada por grupo (nome_grupo) e/ou tipo de capa
-    (ex.: 'Aveludada', 'Silicone'), buscado dentro do nome da variação.
+    filtrada por grupo (nome_grupo) e/ou tipo de capa (ex.: 'Aveludada').
+
+    - Sem `grupo` específico, restringe aos grupos de APARELHOS (capinhas),
+      nunca acessórios.
+    - Com `apenas_capas=True` e sem `tipo` específico, exclui variações cujo
+      tipo não seja capa (película, vidro, hidrogel...).
     """
     cache = carregar_cache(loja_id) or {}
     grupo_l = (grupo or "").strip().lower()
     tipo_l = (tipo or "").strip().lower()
+    grupos_validos = None
+    if not grupo_l:
+        grupos_validos = {g.lower() for g in grupos_de_aparelhos(loja_id)}
     out = []
     for p in cache.get("produtos", []) or []:
         if somente_ativos and str(p.get("ativo", "1")) not in ("1", "True", "true"):
             continue
-        if grupo_l and grupo_l not in (p.get("nome_grupo", "") or "").lower():
+        g_nome = (p.get("nome_grupo", "") or "")
+        if grupo_l and grupo_l not in g_nome.lower():
+            continue
+        if grupos_validos is not None and g_nome.lower() not in grupos_validos:
             continue
         for v in p.get("variacoes", []) or []:
             vd = v.get("variacao", v) if isinstance(v, dict) else {}
@@ -1662,6 +1682,9 @@ def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativ
             if tipo_l and tipo_l not in nome.lower():
                 continue
             cor, vtipo = _extrair_cor_tipo(nome)
+            # Sem tipo escolhido: descarta o que não for capa.
+            if apenas_capas and not tipo_l and vtipo in _TIPOS_NAO_CAPA:
+                continue
             try:
                 est = int(float(vd.get("estoque", 0) or 0))
             except (TypeError, ValueError):
@@ -1717,42 +1740,84 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
     por_var, por_cor = {}, {}
     n_pedidos = n_itens = 0
 
-    pagina = 1
-    while pagina <= max_paginas:
-        params = {"limite": limite, "pagina": pagina,
-                  "data_inicio": data_ini, "data_fim": data_fim}
-        if situacao_id:
-            params["situacao_id"] = situacao_id
-        r = _get("vendas", params=params, loja_id=loja_id)
-        data = r.get("data", []) if isinstance(r, dict) else (r or [])
-        if not data:
-            break
-        for v in data:
-            n_pedidos += 1
-            for it in (v.get("produtos") or []):
-                prod = it.get("produto", it) if isinstance(it, dict) else {}
-                try:
-                    qtd = float(prod.get("quantidade") or 0)
-                except (TypeError, ValueError):
-                    qtd = 0.0
-                if qtd <= 0:
-                    continue
-                vid = str(prod.get("variacao_id") or "")
-                nome = prod.get("nome_produto") or nome_por_vid.get(vid, "") or ""
-                n_itens += 1
-                if vid:
-                    por_var[vid] = por_var.get(vid, 0) + qtd
-                cor, _ = _extrair_cor_tipo(nome)
-                if cor:
-                    por_cor[cor] = por_cor.get(cor, 0) + qtd
-        # Paginação pelo meta da GestãoClick.
-        meta = r.get("meta", {}) if isinstance(r, dict) else {}
-        if not meta.get("proxima_pagina"):
-            break
-        pagina += 1
+    # A GestãoClick separa vendas normais (tipo=produto, o padrão) das vendas
+    # de balcão (tipo=vendas_balcao). Varremos os dois para não perder nada.
+    for vtipo in (None, "vendas_balcao"):
+        pagina = 1
+        while pagina <= max_paginas:
+            params = {"limite": limite, "pagina": pagina,
+                      "data_inicio": data_ini, "data_fim": data_fim}
+            if situacao_id:
+                params["situacao_id"] = situacao_id
+            if vtipo:
+                params["tipo"] = vtipo
+            try:
+                r = _get("vendas", params=params, loja_id=loja_id)
+            except Exception:
+                break
+            data = r.get("data", []) if isinstance(r, dict) else (r or [])
+            if not data:
+                break
+            for v in data:
+                n_pedidos += 1
+                for it in (v.get("produtos") or []):
+                    prod = it.get("produto", it) if isinstance(it, dict) else {}
+                    try:
+                        qtd = float(prod.get("quantidade") or 0)
+                    except (TypeError, ValueError):
+                        qtd = 0.0
+                    if qtd <= 0:
+                        continue
+                    vid = str(prod.get("variacao_id") or "")
+                    nome = prod.get("nome_produto") or nome_por_vid.get(vid, "") or ""
+                    n_itens += 1
+                    if vid:
+                        por_var[vid] = por_var.get(vid, 0) + qtd
+                    cor, _ = _extrair_cor_tipo(nome)
+                    if cor:
+                        por_cor[cor] = por_cor.get(cor, 0) + qtd
+            meta = r.get("meta", {}) if isinstance(r, dict) else {}
+            if not meta.get("proxima_pagina"):
+                break
+            pagina += 1
 
     return {"por_variacao": por_var, "por_cor": por_cor,
             "pedidos": n_pedidos, "itens": n_itens}
+
+
+def diagnostico_vendas(dias=30, loja_id=None):
+    """
+    Diagnóstico rápido: quantas vendas/itens a API retornou no período para a
+    loja, e amostra dos campos. Útil para depurar 'não pegou as vendas'.
+    """
+    from datetime import date as _date, timedelta as _td
+    d_ini = str(_date.today() - _td(days=dias))
+    d_fim = str(_date.today())
+    out = {"loja_id": loja_id, "data_ini": d_ini, "data_fim": d_fim, "por_tipo": {}}
+    for vtipo in (None, "vendas_balcao"):
+        try:
+            params = {"limite": 50, "pagina": 1, "data_inicio": d_ini, "data_fim": d_fim}
+            if vtipo:
+                params["tipo"] = vtipo
+            r = _get("vendas", params=params, loja_id=loja_id)
+            data = r.get("data", []) if isinstance(r, dict) else (r or [])
+            meta = r.get("meta", {}) if isinstance(r, dict) else {}
+            amostra = {}
+            if data:
+                prods = data[0].get("produtos") or []
+                amostra = {
+                    "nome_loja": data[0].get("nome_loja"),
+                    "situacao": data[0].get("nome_situacao"),
+                    "qtd_produtos_na_venda": len(prods),
+                    "exemplo_produto": (prods[0].get("produto") if prods else None),
+                }
+            out["por_tipo"][vtipo or "produto"] = {
+                "total_registros": meta.get("total_registros", len(data)),
+                "amostra": amostra,
+            }
+        except Exception as e:
+            out["por_tipo"][vtipo or "produto"] = {"erro": str(e)}
+    return out
 
 
 def _distribuir_quantidade(itens, total, chave="score"):
