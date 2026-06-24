@@ -10,6 +10,11 @@ _started = False
 _lock = threading.Lock()
 
 
+def esta_rodando():
+    """True se o scheduler de tarefas em background foi iniciado."""
+    return _started
+
+
 def _sincronizar_todas_lojas():
     """Sincroniza cache de produtos de todas as lojas via API GestãoClick."""
     try:
