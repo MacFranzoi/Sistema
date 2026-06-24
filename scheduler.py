@@ -126,9 +126,8 @@ def start():
             misfire_grace_time=300,
         )
 
-        # Atualização rápida de estoque a cada N minutos (env SYNC_ESTOQUE_MIN,
-        # default 5) — monitora mudanças de estoque ao vivo.
-        _estoque_min = max(1, int(os.environ.get("SYNC_ESTOQUE_MIN", "5")))
+        # Atualização rápida de estoque a cada N minutos (env SYNC_ESTOQUE_MIN, default 1) — monitora mudanças de estoque ao vivo.
+        _estoque_min = max(1, int(os.environ.get("SYNC_ESTOQUE_MIN", "1")))
         sched.add_job(
             _atualizar_estoque_cache,
             IntervalTrigger(minutes=_estoque_min),
@@ -146,8 +145,8 @@ def start():
         )
 
         # Monitor de vendas INCREMENTAL a cada N minutos (só o dia de hoje,
-        # leve). Configurável via SYNC_VENDAS_MIN (default 5).
-        _venda_min = max(1, int(os.environ.get("SYNC_VENDAS_MIN", "5")))
+        # leve). Configurável via SYNC_VENDAS_MIN (default 1).
+        _venda_min = max(1, int(os.environ.get("SYNC_VENDAS_MIN", "1")))
         sched.add_job(
             _sincronizar_vendas_todas_lojas,
             IntervalTrigger(minutes=_venda_min),
