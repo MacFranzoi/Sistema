@@ -2167,7 +2167,7 @@ def _parse_valor(v):
         return 0.0
 
 
-def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2):
+def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2, max_modelos=9999, qtd_por_modelo=0):
     """
     Distribui `total` priorizando MODELOS que mais venderam:
 
@@ -2205,9 +2205,31 @@ def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2):
         por_modelo.items(),
         key=lambda kv: _venda_modelo(kv[1]),
         reverse=True,
-    )
+    )[:max_modelos]  # limita aos top N modelos mais vendidos
 
     restante = total
+
+    if qtd_por_modelo > 0:
+        # Modo FIXO: cada modelo recebe exatamente qtd_por_modelo unidades,
+        # distribuídas entre suas cores (por popularidade/déficit).
+        for modelo, grupo in modelos_ranqueados:
+            cota_modelo = min(qtd_por_modelo, max_por_variacao * len(grupo))
+            cores_ordenadas = sorted(
+                grupo,
+                key=lambda x: (int(x.get("deficit", 0) > 0),
+                               float(x.get("vendas", 0) or 0),
+                               float(x.get("vendas_cor", 0) or 0)),
+                reverse=True,
+            )
+            alocado = 0
+            for it in cores_ordenadas:
+                if alocado >= cota_modelo:
+                    break
+                dar = min(max_por_variacao, cota_modelo - alocado)
+                it["quantidade"] = dar
+                alocado += dar
+        return itens
+
     # Rodadas: cada rodada oferece até max_por_variacao slots por modelo.
     # Modelos mais vendidos são atendidos primeiro.
     for rodada in range(max_por_variacao):
@@ -2235,14 +2257,13 @@ def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2):
                     restante -= 1
 
     return itens
-    return itens
 
 
 def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
                              custo_base=None, orcamento=None, usar_cache_vendas=True,
-                             max_por_variacao=2):
+                             max_por_variacao=2, qtd_por_modelo=0, max_modelos=20):
     """
     Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
     (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
@@ -2269,27 +2290,56 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
     if not variacoes:
         return {"ok": False, "erro": "Nenhuma variação encontrada para o filtro informado.",
                 "itens": [], "resumo": {}}
+
+    # Modo "capas por modelo": quantidade_total é derivada de qtd_por_modelo × modelos.
+    qtd_por_modelo = int(qtd_por_modelo or 0)
+    max_modelos = int(max_modelos or 20)
+    if qtd_por_modelo > 0:
+        n_modelos = min(max_modelos, len({v["produto_nome"] for v in variacoes}))
+        quantidade_total = qtd_por_modelo * n_modelos
+
     if quantidade_total <= 0:
-        return {"ok": False, "erro": "Informe uma quantidade total ou um orçamento + custo base.",
+        return {"ok": False, "erro": "Informe uma quantidade total, orçamento + custo base, ou capas por modelo.",
                 "itens": [], "resumo": {}}
 
     vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0}
     vendas_ok = False
     vendas_fonte = ""
     if usar_vendas and quantidade_total > 0:
-        # 1) Prefere o cache de vendas já sincronizado (rápido, sem bater na API).
+        from datetime import date as _date, timedelta as _td
+        _d_fim = str(_date.today())
+        _d_ini = str(_date.today() - _td(days=dias_vendas))
+
+        # 1) Tenta reconstruir por_variacao/por_cor do período usando a lista
+        #    cacheada (mais preciso que o agregado de 180 dias do cache).
+        if usar_cache_vendas:
+            _lista_cache = carregar_vendas_lista(loja_id)
+            if _lista_cache:
+                _lista = [v for v in _lista_cache.get("lista", [])
+                          if _d_ini <= (v.get("data") or "") <= _d_fim]
+                # A lista tem só cabeçalhos (sem itens/variacao_id) — não serve
+                # para por_variacao, mas podemos checar se o período está coberto.
+                # Se a lista existe, usa o cache de totais (180 dias) com aviso,
+                # ou busca ao vivo para o período exato.
+                pass  # continua para busca por_variacao abaixo
+
         if usar_cache_vendas:
             cv = carregar_cache_vendas(loja_id)
             if cv and (cv.get("por_variacao") or cv.get("por_cor")):
-                vendas = cv
-                vendas_ok = True
-                vendas_fonte = f"cache ({cv.get('sincronizado_em', '')[:10]})"
-        # 2) Sem cache: consulta ao vivo.
+                # O cache tem 180 dias. Se o período pedido é ≥ 150 dias, usa direto.
+                # Se é menor, faz query ao vivo para respeitar o período.
+                if dias_vendas >= 150:
+                    vendas = cv
+                    vendas_ok = True
+                    vendas_fonte = f"cache 180d ({cv.get('sincronizado_em', '')[:10]})"
+
+        # 2) Período menor que 150 dias OU sem cache → consulta ao vivo no período exato.
         if not vendas_ok:
             try:
-                vendas = vendas_por_variacao(dias_vendas, loja_id)
+                vendas = vendas_por_variacao(dias_vendas, loja_id,
+                                             data_ini=_d_ini, data_fim=_d_fim)
                 vendas_ok = bool(vendas["por_variacao"] or vendas["por_cor"])
-                vendas_fonte = "ao vivo"
+                vendas_fonte = f"ao vivo {dias_vendas}d"
             except Exception as e:
                 vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
 
@@ -2323,8 +2373,12 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
     # Distribuição MODEL-FIRST: rankeia modelos por vendas, dentro de cada
     # modelo distribui pelas cores com mais déficit/popularidade.
     # Sem sinal de vendas cai para distribuição simples por score.
+    _mpr = max_por_variacao or 2
     if vendas_ok:
-        _distribuir_por_modelo_e_cor(variacoes, quantidade_total, max_por_variacao=max_por_variacao or 2)
+        _distribuir_por_modelo_e_cor(variacoes, quantidade_total,
+                                     max_por_variacao=_mpr,
+                                     max_modelos=max_modelos if qtd_por_modelo > 0 else 9999,
+                                     qtd_por_modelo=qtd_por_modelo)
     else:
         _distribuir_quantidade(variacoes, quantidade_total, chave="score")
 
@@ -2416,7 +2470,8 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
 
 def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                       dias_vendas=30, estoque_alvo=0, custo_base=None, orcamento=None,
-                      instrucao_extra="", max_candidatos=120, max_por_variacao=2):
+                      instrucao_extra="", max_candidatos=120, max_por_variacao=2,
+                      qtd_por_modelo=0, max_modelos=20):
     """
     Versão por IA: a Claude monta a lista de compra escolhendo os MODELOS que
     mais saem e as melhores cores, respeitando a quantidade/orçamento.
@@ -2430,6 +2485,7 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         dias_vendas=dias_vendas, usar_vendas=True, estoque_alvo=estoque_alvo,
         custo_base=custo_base, orcamento=orcamento, incluir_sem_pedido=True,
         max_por_variacao=0,  # sem cap aqui — a IA faz a distribuição final
+        qtd_por_modelo=qtd_por_modelo, max_modelos=max_modelos,
     )
     if not base.get("ok"):
         return base

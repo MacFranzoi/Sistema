@@ -4916,6 +4916,21 @@ def _main_content():
                     "Estoque-alvo por cor", min_value=0, max_value=999, value=2, step=1, key="sug_alvo",
                     help="Considera em falta tudo abaixo deste nível.")
 
+                _sgA, _sgB = st.columns(2)
+                _sg_qtd_modelo = _sgA.number_input(
+                    "Capas por modelo (meta)", min_value=0, max_value=500, value=0, step=1,
+                    key="sug_qtd_modelo",
+                    help="Quantas capas no total quer de cada modelo (distribuídas entre as cores). "
+                         "Ex.: 10 = pede 10 capas do Galaxy S24, 10 do iPhone 16, etc. "
+                         "Se preenchido, ignora a quantidade total acima.")
+                _sg_max_modelos = _sgB.number_input(
+                    "Máx. modelos no pedido", min_value=1, max_value=200, value=20, step=1,
+                    key="sug_max_modelos",
+                    help="Limita quantos modelos diferentes entram no pedido (os mais vendidos primeiro).")
+                if _sg_qtd_modelo > 0:
+                    st.caption(f"📋 Meta: **{_sg_qtd_modelo} capas × até {_sg_max_modelos} modelos** "
+                               f"= até **{_sg_qtd_modelo * _sg_max_modelos} unidades** no pedido.")
+
                 _cg1, _cg2 = st.columns([3, 1])
                 with _cg2:
                     if st.button("🔍 Testar vendas", key="sug_diag", use_container_width=True,
@@ -4935,8 +4950,13 @@ def _main_content():
                     else:
                         with st.spinner("Analisando estoque e vendas da loja…"):
                             try:
+                                # Se definiu "capas por modelo", a quantidade total
+                                # é calculada automaticamente (qtd_modelo × max_modelos).
+                                _qtd_total_calc = int(_sg_qtd)
+                                if _sg_qtd_modelo > 0:
+                                    _qtd_total_calc = 0  # será ignorada, qtd_por_modelo domina
                                 _kw = dict(
-                                    quantidade_total=int(_sg_qtd),
+                                    quantidade_total=_qtd_total_calc,
                                     orcamento=float(_sg_orc),
                                     custo_base=float(_sg_custo),
                                     grupo=None if _sg_grupo == "(todos)" else _sg_grupo,
@@ -4944,6 +4964,8 @@ def _main_content():
                                     loja_id=_sg_loja_id,
                                     dias_vendas=int(_sg_dias),
                                     estoque_alvo=int(_sg_alvo),
+                                    qtd_por_modelo=int(_sg_qtd_modelo),
+                                    max_modelos=int(_sg_max_modelos),
                                 )
                                 if _sg_usar_ia:
                                     _sg_res = api.sugerir_pedido_ia(**_kw)
