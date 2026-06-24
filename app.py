@@ -164,6 +164,21 @@ html, body, [class*="css"] {{
 }}
 .main .block-container {{ padding: 26px 32px 40px !important; max-width: 100% !important; }}
 
+/* ── MOBILE: evita o zoom automático do iOS ao focar campos ──
+   O Safari/iOS dá zoom quando a fonte do campo é < 16px. Forçando 16px
+   no celular o zoom não dispara (mantendo o pinch-zoom manual). */
+@media (max-width: 768px) {{
+    input, textarea, select,
+    [data-baseweb="input"] input,
+    [data-baseweb="textarea"] textarea,
+    [data-baseweb="select"] input,
+    .stTextInput input, .stNumberInput input,
+    .stTextArea textarea, .stDateInput input,
+    .stChatInput textarea {{
+        font-size: 16px !important;
+    }}
+}}
+
 /* ── SEM TRANSIÇÕES / SEM ANIMAÇÕES ── */
 *, *::before, *::after {{ animation: none !important; }}
 /* força esquema de cores claro independente do sistema */
