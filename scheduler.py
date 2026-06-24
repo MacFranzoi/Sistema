@@ -67,6 +67,21 @@ def _atualizar_estoque_cache():
         logger.error(f"Erro atualização estoque: {e}")
 
 
+def _sincronizar_vendas_todas_lojas():
+    """Sincroniza o cache de vendas (últimos ~6 meses) de cada loja."""
+    try:
+        import api
+        for loja_id in list(api.LOJAS.keys()) + [None]:
+            try:
+                cv = api.sincronizar_vendas(loja_id, dias=180)
+                logger.info(f"Vendas sincronizadas: loja={loja_id} "
+                            f"({cv.get('pedidos', 0)} vendas, {cv.get('itens', 0)} itens)")
+            except Exception as e:
+                logger.warning(f"Falha sync vendas loja={loja_id}: {e}")
+    except Exception as e:
+        logger.error(f"Erro na sincronização de vendas: {e}")
+
+
 def start():
     """Inicia o scheduler em background. Chama apenas uma vez."""
     global _started
@@ -108,8 +123,17 @@ def start():
             replace_existing=True,
         )
 
+        # Sync de vendas todo dia às 5h (alimenta o pedido automático)
+        sched.add_job(
+            _sincronizar_vendas_todas_lojas,
+            CronTrigger(hour=5, minute=0),
+            id="sync_vendas_diario",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+
         sched.start()
-        logger.info("Scheduler iniciado: sync 2h, estoque 15min, sync diário 6h")
+        logger.info("Scheduler iniciado: sync 2h, estoque 15min, sync diário 6h, vendas 5h")
 
     except ImportError:
         logger.warning("APScheduler não instalado — tarefas automáticas desativadas")
