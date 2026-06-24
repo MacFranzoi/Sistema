@@ -29,6 +29,24 @@ if st.session_state.get("version") == "beta":
     st.stop()
 
 
+def badge_sync(loja_id, mostrar_vendas=True):
+    """Mostra a última atualização de estoque/vendas da loja."""
+    try:
+        s = api.status_sincronizacao(loja_id)
+    except Exception:
+        return
+    def _fmt(ts):
+        return ts[:16].replace("T", " ") if ts else "nunca"
+    partes = [f"📦 Estoque: **{_fmt(s.get('produtos_em'))}**"]
+    if mostrar_vendas:
+        vp = s.get("vendas_periodo", ("", ""))
+        partes.append(
+            f"🧾 Vendas: **{_fmt(s.get('vendas_em'))}**"
+            + (f" ({s.get('vendas_pedidos', 0)} vendas)" if s.get('vendas_em') else "")
+        )
+    st.caption("🕒 Última atualização — " + " · ".join(partes))
+
+
 def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
     import os
     FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
@@ -1677,6 +1695,7 @@ def _main_content():
     # ─────────────────────────────────────────────────────────────────
     if _pg == "vendas":
 
+        badge_sync(loja_id)
         vf1, vf2, vf3 = st.columns([1, 1, 1])
         d_ini_v = vf1.date_input("De", value=date.today() - timedelta(days=30), key="v_ini")
         d_fim_v = vf2.date_input("Até", value=date.today(), key="v_fim")
@@ -3542,6 +3561,7 @@ def _main_content():
     # ══════════════════════════════════════════════
     if _pg == "pedido":
         st.subheader("Pedido de Compra ao Fornecedor")
+        badge_sync(loja_id)
 
         # ── Importação via WhatsApp + IA ──────────────────────────────
         # Kits espelho EXATO dos botões da página de Pedidos
@@ -4752,6 +4772,8 @@ def _main_content():
                 _sg_loja_id = _lojas_map.get(_sg_loja_nome)  # None = Todas
 
                 # Status do cache de vendas sincronizado.
+                with st.container():
+                    badge_sync(_sg_loja_id)
                 _cv_info = api.carregar_cache_vendas(_sg_loja_id)
                 _cs1, _cs2 = st.columns([3, 1])
                 if _cv_info:
@@ -5737,6 +5759,7 @@ def _main_content():
 
         st.subheader("Estoque por Loja")
         st.caption("Consulte e edite o estoque de um produto em todas as lojas.")
+        badge_sync(loja_id)
 
         cache_any = cache or api.carregar_cache(None)
         if not cache_any:

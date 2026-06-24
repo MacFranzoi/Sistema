@@ -1746,6 +1746,20 @@ def cache_vendas_path(loja_id=None):
 def carregar_cache_vendas(loja_id=None):
     p = cache_vendas_path(loja_id)
     if not os.path.exists(p):
+        # Cold start: tenta recuperar do GitHub (persistido pelo scheduler).
+        if _gh_token():
+            try:
+                r = requests.get(
+                    f"{_GH_API}/repos/{_GH_REPO}/contents/{os.path.basename(p)}",
+                    headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+                if r.status_code == 200:
+                    import base64 as _b64
+                    conteudo = _b64.b64decode(r.json().get("content", "")).decode()
+                    with open(p, "w", encoding="utf-8") as f:
+                        f.write(conteudo)
+                    return json.loads(conteudo)
+            except Exception:
+                pass
         return None
     try:
         with open(p, encoding="utf-8") as f:
@@ -1754,11 +1768,14 @@ def carregar_cache_vendas(loja_id=None):
         return None
 
 
-def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callback=None):
+def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callback=None,
+                       push_github=False):
     """
     Baixa as vendas dos últimos `dias` (padrão ~6 meses) da loja, agrega a
     quantidade vendida por variação e por cor, e salva em cache_vendas_{loja}.
     Alimenta o gerador de pedidos sem precisar bater na API toda hora.
+    Com push_github=True, persiste o cache (pequeno) no repositório para
+    sobreviver a reinícios do container.
     """
     from datetime import date as _date, timedelta as _td
     data_ini = str(_date.today() - _td(days=dias))
@@ -1778,9 +1795,32 @@ def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callba
         "por_variacao": agg.get("por_variacao", {}),
         "por_cor": agg.get("por_cor", {}),
     }
+    conteudo = json.dumps(cache, ensure_ascii=False)
     with open(cache_vendas_path(loja_id), "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False)
+        f.write(conteudo)
+    if push_github and _gh_token():
+        try:
+            _gh_push_arquivo(os.path.basename(cache_vendas_path(loja_id)), conteudo,
+                             f"sync vendas {cache['loja_nome']} {cache['sincronizado_em'][:16]}")
+        except Exception:
+            pass
     return cache
+
+
+def status_sincronizacao(loja_id=None):
+    """
+    Timestamps das últimas sincronizações relevantes para estoque/vendas,
+    para exibir 'última atualização' nas telas.
+    """
+    cprod = carregar_cache(loja_id) or {}
+    cven = carregar_cache_vendas(loja_id) or {}
+    return {
+        "produtos_em": cprod.get("sincronizado_em", ""),
+        "produtos_total": cprod.get("total", 0),
+        "vendas_em": cven.get("sincronizado_em", ""),
+        "vendas_pedidos": cven.get("pedidos", 0),
+        "vendas_periodo": (cven.get("data_ini", ""), cven.get("data_fim", "")),
+    }
 
 
 def _mapa_variacao_nome(loja_id=None):
