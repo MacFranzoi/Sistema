@@ -5,6 +5,16 @@ import time
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo as _ZoneInfo
+_TZ_BR = _ZoneInfo("America/Sao_Paulo")
+
+def _agora_br():
+    """Retorna datetime atual no fuso de Brasília."""
+    return datetime.now(_TZ_BR)
+
+def _agora_br_str():
+    """Retorna string ISO do momento atual em horário de Brasília (sem offset)."""
+    return _agora_br().strftime("%Y-%m-%dT%H:%M:%S")
 
 ACCESS_TOKEN = "998d6e5bed008c2023d5c5bc062ac9311e05c045"
 SECRET_TOKEN = "884b009905a80a147cea7172f25c83700c097166"
@@ -317,7 +327,7 @@ def sincronizar_produtos(loja_id=None, progress_callback=None):
         pagina += 1
 
     cache = {
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "loja_id": loja_id,
         "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
         "total": len(todos),
@@ -401,7 +411,7 @@ def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max
         "produtos": todos,
         "loja_id": loja_id,
         "total": len(todos),
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "ao_vivo": True,
     }
 
@@ -1827,7 +1837,7 @@ def cache_vendas_lista_path(loja_id=None):
 def _salvar_vendas_lista(loja_id, lista):
     try:
         with open(cache_vendas_lista_path(loja_id), "w", encoding="utf-8") as f:
-            json.dump({"sincronizado_em": datetime.now().isoformat(), "lista": lista},
+            json.dump({"sincronizado_em": _agora_br_str(), "lista": lista},
                       f, ensure_ascii=False)
     except Exception:
         pass
@@ -1869,7 +1879,7 @@ def _montar_cache_vendas(loja_id, dias, data_ini, data_fim, base, tail, situacao
     por_var = _somar_contagens(base.get("por_variacao"), tail.get("por_variacao"))
     por_cor = _somar_contagens(base.get("por_cor"), tail.get("por_cor"))
     return {
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "loja_id": loja_id,
         "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
         "data_ini": data_ini,
