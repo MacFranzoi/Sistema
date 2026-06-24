@@ -4866,16 +4866,24 @@ def _main_content():
                 except Exception:
                     _custos_tipo = {}
                 _tipos_disp = sorted(_custos_tipo.keys())
-                # Todos os grupos do catálogo (o usuário escolhe qual quer).
+                # Grupos de aparelhos (capas) primeiro — filtram melhor —, depois
+                # os demais grupos do catálogo (acessórios, cabos, películas…).
+                try:
+                    _grupos_aparelho = api.grupos_de_aparelhos(_sg_loja_id)
+                except Exception:
+                    _grupos_aparelho = []
                 try:
                     _cache_sg = api.carregar_cache(_sg_loja_id) or {}
-                    _grupos_disp = sorted({
+                    _todos_grupos = sorted({
                         p.get("nome_grupo", "")
                         for p in _cache_sg.get("produtos", [])
                         if p.get("nome_grupo", "")
                     })
                 except Exception:
-                    _grupos_disp = []
+                    _todos_grupos = []
+                _ap_set = {g.lower() for g in _grupos_aparelho}
+                _outros = [g for g in _todos_grupos if g.lower() not in _ap_set]
+                _grupos_disp = list(_grupos_aparelho) + _outros
 
                 _sg1, _sg2 = st.columns(2)
                 _sg_tipo = _sg1.selectbox(
