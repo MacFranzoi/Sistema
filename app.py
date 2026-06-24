@@ -4972,6 +4972,7 @@ def _main_content():
                                 "Qtd": it["quantidade"],
                                 "Estoque": it["estoque_atual"],
                                 "Vendas": it["vendas"],
+                                "Vendas cor": it.get("vendas_cor", 0),
                                 "Custo R$": it.get("custo_total", 0),
                                 "Após": it["estoque_apos"],
                             } for it in _sg_itens])

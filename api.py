@@ -2164,11 +2164,18 @@ def _distribuir_por_cor(itens, total):
     if total <= 0 or not itens:
         return itens
 
-    # Agrupa por cor e soma as vendas da cor.
+    # Agrupa por cor. O peso de cada cor é a sua POPULARIDADE no histórico
+    # (vendas_cor, somando todos os modelos), com fallback para a soma das
+    # vendas das variações daquela cor.
     por_cor = {}
     for it in itens:
         por_cor.setdefault(it.get("cor", ""), []).append(it)
-    vendas_cor = {c: sum(float(i.get("vendas", 0) or 0) for i in g) for c, g in por_cor.items()}
+    vendas_cor = {}
+    for c, g in por_cor.items():
+        pop = max((float(i.get("vendas_cor", 0) or 0) for i in g), default=0.0)
+        if pop <= 0:
+            pop = sum(float(i.get("vendas", 0) or 0) for i in g)
+        vendas_cor[c] = pop
 
     if sum(vendas_cor.values()) <= 0:
         return _distribuir_quantidade(itens, total, chave="score")
@@ -2248,16 +2255,26 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
 
     for it in variacoes:
         vid = it["variacao_id"]
-        vend = vendas["por_variacao"].get(vid)
-        if not vend:
-            vend = vendas["por_cor"].get(it["cor"], 0)
-        it["vendas"] = round(float(vend or 0), 2)
-        # IMPORTANTE: estoque negativo é falso (acumulado de anos), então é
-        # tratado como 0. A prioridade vem das VENDAS; o déficit só conta
-        # para quem tem estoque positivo abaixo do alvo.
+        # Venda REAL desta variação (modelo+cor específicos) — é o que aparece
+        # na coluna "Vendas". NÃO usa o agregado da cor como fallback (isso fazia
+        # todas as linhas mostrarem o mesmo número).
+        v_var = float(vendas["por_variacao"].get(vid, 0) or 0)
+        # Popularidade da COR no histórico (somando todos os modelos) — sinal
+        # para SUGERIR cores que vendem bem mesmo onde a variação não teve venda.
+        v_cor = float(vendas["por_cor"].get(it["cor"], 0) or 0)
+        it["vendas"] = round(v_var, 2)
+        it["vendas_cor"] = round(v_cor, 2)
+        # IMPORTANTE: estoque negativo é falso (acumulado de anos) → vira 0.
+        # Zera de vez para refletir no score, no déficit E na exibição.
         est_real = max(0, it["estoque"])
+        it["estoque"] = est_real
         it["deficit"] = max(0, int(estoque_alvo) - est_real)
-        it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"]
+        # Score: a venda da própria variação domina; a popularidade da cor entra
+        # com peso menor (sugere cores em alta dos outros modelos); o déficit
+        # de quem tem estoque positivo abaixo do alvo complementa.
+        it["score"] = (v_var * float(peso_vendas)
+                       + v_cor * 0.3
+                       + it["deficit"])
 
     # Distribuição com variedade de cores quando há sinal de vendas; senão,
     # cai para a repartição simples por score (estoque/déficit).
