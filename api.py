@@ -2194,7 +2194,8 @@ def _distribuir_por_cor(itens, total):
 def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
-                             custo_base=None, orcamento=None, usar_cache_vendas=True):
+                             custo_base=None, orcamento=None, usar_cache_vendas=True,
+                             max_por_variacao=3):
     """
     Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
     (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
@@ -2265,6 +2266,30 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
     else:
         _distribuir_quantidade(variacoes, quantidade_total, chave="score")
 
+    # Aplica teto máximo por variação (padrão: 3 unidades), redistribuindo o
+    # excesso para as próximas mais pontuadas.
+    if max_por_variacao and max_por_variacao > 0:
+        sobra = 0
+        for it in variacoes:
+            if it["quantidade"] > max_por_variacao:
+                sobra += it["quantidade"] - max_por_variacao
+                it["quantidade"] = max_por_variacao
+        if sobra > 0:
+            # Redistribui sobra em rodadas, pulando quem já atingiu o teto.
+            candidatos = sorted(
+                [it for it in variacoes if it["quantidade"] < max_por_variacao],
+                key=lambda x: x["score"], reverse=True,
+            )
+            idx = 0
+            while sobra > 0 and candidatos:
+                it = candidatos[idx % len(candidatos)]
+                if it["quantidade"] < max_por_variacao:
+                    it["quantidade"] += 1
+                    sobra -= 1
+                idx += 1
+                if idx >= len(candidatos) * max_por_variacao:
+                    break  # evita loop infinito se não há mais espaço
+
     for it in variacoes:
         it["estoque_atual"] = it["estoque"]
         it["estoque_apos"] = it["estoque"] + it["quantidade"]
@@ -2305,7 +2330,7 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
 
 def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                       dias_vendas=30, estoque_alvo=0, custo_base=None, orcamento=None,
-                      instrucao_extra="", max_candidatos=120):
+                      instrucao_extra="", max_candidatos=120, max_por_variacao=3):
     """
     Versão por IA: a Claude monta a lista de compra escolhendo os MODELOS que
     mais saem e as melhores cores, respeitando a quantidade/orçamento.
@@ -2318,6 +2343,7 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         quantidade_total=quantidade_total, grupo=grupo, tipo=tipo, loja_id=loja_id,
         dias_vendas=dias_vendas, usar_vendas=True, estoque_alvo=estoque_alvo,
         custo_base=custo_base, orcamento=orcamento, incluir_sem_pedido=True,
+        max_por_variacao=0,  # sem cap aqui — a IA faz a distribuição final
     )
     if not base.get("ok"):
         return base
@@ -2340,13 +2366,16 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
     prompt = (
         "Você é um comprador de uma loja de capinhas de celular. Monte a lista de "
         f"compra alocando EXATAMENTE {qtd_total} unidades no total entre as variações "
-        "abaixo. Priorize os MODELOS que mais saem (maior 'vendas') e as cores que estão "
-        "faltando (estoque negativo/baixo). Distribua entre vários modelos populares — "
-        "não concentre tudo num só. Pode deixar variações com 0.\n"
+        "abaixo. Regras OBRIGATÓRIAS:\n"
+        f"1. Máximo {max_por_variacao} unidades por variação (cor+modelo). Nunca ultrapasse esse teto.\n"
+        "2. Priorize os MODELOS que mais saem (maior 'vendas') e as cores com menor estoque.\n"
+        "3. Distribua entre MUITAS variações diferentes para ter variedade de cores — "
+        "não concentre em poucas. Para vender capas é preciso ter várias opções de cor.\n"
+        "4. Pode deixar variações com 0 se necessário.\n"
         + (f"Instrução adicional do usuário: {instrucao_extra}\n" if instrucao_extra else "")
         + "\nVariações (idx|variacao_id|nome|estoque|vendas):\n" + "\n".join(linhas)
         + '\n\nResponda APENAS com JSON: {"itens":[{"variacao_id":"...","quantidade":N}, ...]}. '
-        f"A soma das quantidades deve ser {qtd_total}."
+        f"A soma das quantidades deve ser exatamente {qtd_total}."
     )
     try:
         import anthropic as _ant
@@ -2383,6 +2412,28 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         unit = cb if cb > 0 else _parse_valor(it.get("valor_custo"))
         it["custo_unit"] = round(unit, 2)
         it["custo_total"] = round(unit * it["quantidade"], 2)
+
+    # Garante teto máximo mesmo que a IA ignore a instrução.
+    if max_por_variacao and max_por_variacao > 0:
+        sobra = 0
+        for it in base["itens"]:
+            if it["quantidade"] > max_por_variacao:
+                sobra += it["quantidade"] - max_por_variacao
+                it["quantidade"] = max_por_variacao
+        if sobra > 0:
+            candidatos_cap = sorted(
+                [it for it in base["itens"] if it["quantidade"] < max_por_variacao],
+                key=lambda x: x["score"], reverse=True,
+            )
+            idx = 0
+            while sobra > 0 and candidatos_cap:
+                it = candidatos_cap[idx % len(candidatos_cap)]
+                if it["quantidade"] < max_por_variacao:
+                    it["quantidade"] += 1
+                    sobra -= 1
+                idx += 1
+                if idx >= len(candidatos_cap) * max_por_variacao:
+                    break
 
     itens = sorted([it for it in base["itens"] if it["quantidade"] > 0],
                    key=lambda x: (x["quantidade"], x["score"]), reverse=True)
