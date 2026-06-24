@@ -1,0 +1,433 @@
+{
+  "nome": "BIPAGEM ITU",
+  "tipo": "entrada",
+  "loja_id": null,
+  "loja_nome": "Todas",
+  "criado_em": "2026-06-24T18:09:33.976722",
+  "ordem": 2,
+  "itens": [
+    {
+      "produto_id": "56506157",
+      "produto_nome": "G14",
+      "cod_interno": "G14",
+      "variacao_id": "95620219",
+      "variacao_cod": "G140045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "60752959",
+      "produto_nome": "G04",
+      "cod_interno": "G04",
+      "variacao_id": "102646410",
+      "variacao_cod": "G040042",
+      "variacao_nome": "R$39,99 / Diversos",
+      "quantidade": 14
+    },
+    {
+      "produto_id": "60752959",
+      "produto_nome": "G04",
+      "cod_interno": "G04",
+      "variacao_id": "102646412",
+      "variacao_cod": "G040044",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "60752959",
+      "produto_nome": "G04",
+      "cod_interno": "G04",
+      "variacao_id": "102646401",
+      "variacao_cod": "G040033",
+      "variacao_nome": "Preto / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620244",
+      "variacao_cod": "G840015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620310",
+      "variacao_cod": "G540006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620319",
+      "variacao_cod": "G540015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620305",
+      "variacao_cod": "G540001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620322",
+      "variacao_cod": "G540018",
+      "variacao_nome": "Pink / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620324",
+      "variacao_cod": "G540020",
+      "variacao_nome": "Rosa / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620318",
+      "variacao_cod": "G540014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620328",
+      "variacao_cod": "G540024",
+      "variacao_nome": "Roxo / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506157",
+      "produto_nome": "G14",
+      "cod_interno": "G14",
+      "variacao_id": "95620218",
+      "variacao_cod": "G140044",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620349",
+      "variacao_cod": "G540045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56506175",
+      "produto_nome": "G54",
+      "cod_interno": "G54",
+      "variacao_id": "95620351",
+      "variacao_cod": "G540047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620257",
+      "variacao_cod": "G840028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620230",
+      "variacao_cod": "G840001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620243",
+      "variacao_cod": "G840014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620259",
+      "variacao_cod": "G840030",
+      "variacao_nome": "Vermelho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620249",
+      "variacao_cod": "G840020",
+      "variacao_nome": "Rosa / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620250",
+      "variacao_cod": "G840021",
+      "variacao_nome": "Rosa Claro / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56506160",
+      "produto_nome": "G84",
+      "cod_interno": "G84",
+      "variacao_id": "95620274",
+      "variacao_cod": "G840045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627664",
+      "variacao_cod": "G150028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627556",
+      "variacao_cod": "G150001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627576",
+      "variacao_cod": "G150006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627612",
+      "variacao_cod": "G150015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627676",
+      "variacao_cod": "G150031",
+      "variacao_nome": "Vermelho Escuro / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627608",
+      "variacao_cod": "G150014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627632",
+      "variacao_cod": "G150020",
+      "variacao_nome": "Rosa / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627732",
+      "variacao_cod": "G150045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 4
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627728",
+      "variacao_cod": "G150044",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756906",
+      "variacao_cod": "G850045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 7
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774611",
+      "variacao_cod": "G550028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774539",
+      "variacao_cod": "G550004",
+      "variacao_nome": "Azul / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774569",
+      "variacao_cod": "G550014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774599",
+      "variacao_cod": "G550024",
+      "variacao_nome": "Roxo / Aveludada",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774530",
+      "variacao_cod": "G550001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "70152989",
+      "produto_nome": "G55",
+      "cod_interno": "G55",
+      "variacao_id": "118774668",
+      "variacao_cod": "G550047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756792",
+      "variacao_cod": "G850007",
+      "variacao_nome": "Azul Tiffany / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756855",
+      "variacao_cod": "G850028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756798",
+      "variacao_cod": "G850009",
+      "variacao_nome": "Cinza Chumbo / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756819",
+      "variacao_cod": "G850016",
+      "variacao_nome": "Marsala / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756789",
+      "variacao_cod": "G850006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756852",
+      "variacao_cod": "G850027",
+      "variacao_nome": "Verde Água / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756795",
+      "variacao_cod": "G850008",
+      "variacao_nome": "Cinza / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "67273844",
+      "produto_nome": "G85",
+      "cod_interno": "G85",
+      "variacao_id": "113756846",
+      "variacao_cod": "G850025",
+      "variacao_nome": "Salmão / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "72339232",
+      "produto_nome": "G15",
+      "cod_interno": "G15",
+      "variacao_id": "122627616",
+      "variacao_cod": "G150016",
+      "variacao_nome": "Marsala / Aveludada",
+      "quantidade": 1
+    }
+  ]
+}
