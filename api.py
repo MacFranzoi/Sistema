@@ -363,9 +363,14 @@ def sincronizar_estoque_loja(loja_id=None, max_paginas=None):
             if k in estoque_map:
                 vd["estoque"] = estoque_map[k]
                 n += 1
-    cache["sincronizado_em"] = datetime.now().isoformat()
-    with open(cache_path(loja_id), "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
+    cache["sincronizado_em"] = _agora_br_str()
+    p_path = cache_path(loja_id)
+    conteudo = json.dumps(cache, ensure_ascii=False, indent=2)
+    with open(p_path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    # Push pro GitHub para persistir entre restarts do Railway.
+    _gh_push_arquivo(os.path.basename(p_path), conteudo,
+                     f"Atualiza estoque loja={loja_id}")
     return {"atualizadas": n, "loja_id": loja_id, "sincronizado_em": cache["sincronizado_em"]}
 
 
@@ -385,7 +390,9 @@ def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max
     """
     import concurrent.futures as _cf
 
-    _max = max_paginas if max_paginas is not None else (5 if (nome or codigo) else 20)
+    # Sem limite de páginas por padrão — busca TODOS os produtos.
+    # max_paginas serve só para buscas filtradas (nome/codigo) onde o resultado é pequeno.
+    _max = max_paginas if max_paginas is not None else (5 if (nome or codigo) else 9999)
 
     def _fetch(pagina):
         params = {"pagina": pagina, "limite": limite}
