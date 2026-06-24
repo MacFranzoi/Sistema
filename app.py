@@ -5,14 +5,15 @@ from datetime import date, datetime, timedelta
 import api
 from fpdf import FPDF
 
-# Inicia tarefas em background (só no Railway, não no dev local)
+# Inicia tarefas em background (sync automático de estoque/vendas).
+# Liga por padrão; desligue com DISABLE_SCHEDULER=1 (ex.: dev local).
 import os as _os
-if _os.environ.get("RAILWAY_ENVIRONMENT") or _os.environ.get("PORT"):
+if _os.environ.get("DISABLE_SCHEDULER", "") not in ("1", "true", "True"):
     try:
         import scheduler as _scheduler
         _scheduler.start()
-    except Exception:
-        pass
+    except Exception as _e_sched:
+        _os.environ["_SCHEDULER_ERRO"] = str(_e_sched)
 
 # set_page_config DEVE ser a primeira chamada — antes do routing de versão
 st.set_page_config(
@@ -39,11 +40,16 @@ def badge_sync(loja_id, mostrar_vendas=True):
         return ts[:16].replace("T", " ") if ts else "nunca"
     partes = [f"📦 Estoque: **{_fmt(s.get('produtos_em'))}**"]
     if mostrar_vendas:
-        vp = s.get("vendas_periodo", ("", ""))
         partes.append(
             f"🧾 Vendas: **{_fmt(s.get('vendas_em'))}**"
             + (f" ({s.get('vendas_pedidos', 0)} vendas)" if s.get('vendas_em') else "")
         )
+    try:
+        import scheduler as _sch
+        _auto = _sch.esta_rodando()
+    except Exception:
+        _auto = False
+    partes.append("🟢 auto-sync ativo" if _auto else "🔴 auto-sync desligado")
     st.caption("🕒 Última atualização — " + " · ".join(partes))
 
 
