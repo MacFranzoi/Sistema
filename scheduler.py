@@ -184,6 +184,26 @@ def start():
 
         threading.Thread(target=_boot_sync, daemon=True).start()
 
+        # Primeira sincronização logo no boot (em thread, sem travar o app).
+        # Só sincroniza vendas se ainda não houver cache (evita refazer a cada
+        # reinício); o cold start já tenta recuperar do GitHub.
+        def _boot_sync():
+            try:
+                import api
+                for loja_id in list(api.LOJAS.keys()) + [None]:
+                    if api.carregar_cache_vendas(loja_id):
+                        continue  # já tem (local ou recuperado do GitHub)
+                    try:
+                        cv = api.sincronizar_vendas(loja_id, dias=180, push_github=True)
+                        logger.info(f"Boot sync vendas loja={loja_id}: "
+                                    f"{cv.get('pedidos', 0)} vendas")
+                    except Exception as e:
+                        logger.warning(f"Boot sync vendas loja={loja_id} falhou: {e}")
+            except Exception as e:
+                logger.error(f"Erro no boot sync: {e}")
+
+        threading.Thread(target=_boot_sync, daemon=True).start()
+
     except ImportError:
         logger.warning("APScheduler não instalado — tarefas automáticas desativadas")
     except Exception as e:
