@@ -47,9 +47,17 @@ def badge_sync(loja_id, mostrar_vendas=True):
     try:
         import scheduler as _sch
         _auto = _sch.esta_rodando()
+        import os as _os_sch
+        _est_min = _os_sch.environ.get("SYNC_ESTOQUE_MIN", "1")
+        _vnd_min = _os_sch.environ.get("SYNC_VENDAS_MIN", "1")
     except Exception:
         _auto = False
-    partes.append("🟢 auto-sync ativo" if _auto else "🔴 auto-sync desligado")
+        _est_min = "1"
+        _vnd_min = "1"
+    if _auto:
+        partes.append(f"🟢 estoque a cada {_est_min}min · vendas a cada {_vnd_min}min")
+    else:
+        partes.append("🔴 auto-sync desligado")
     st.caption("🕒 Última atualização — " + " · ".join(partes))
 
 
