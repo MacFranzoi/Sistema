@@ -186,9 +186,9 @@ def salvar_usuarios(usuarios):
     conteudo = json.dumps(usuarios, ensure_ascii=False, indent=2)
     with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    ok = _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
-    if not ok:
-        raise RuntimeError("Falha ao salvar usuários no GitHub — alteração NÃO foi persistida.")
+    # Push pro GitHub para persistir entre restarts do container.
+    # Não bloqueia a operação se falhar (GITHUB_TOKEN ausente, etc).
+    _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",

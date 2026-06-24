@@ -6554,6 +6554,9 @@ def _main_content():
     # ══════════════════════════════════════════════
     if _pg == "usuarios":
         st.subheader("👥 Gerenciamento de Usuários")
+        import os as _os_usr
+        if not _os_usr.environ.get("GITHUB_TOKEN"):
+            st.warning("⚠️ GITHUB_TOKEN não configurado. Usuários são salvos localmente mas serão perdidos se o container reiniciar. Configure a variável no Railway para persistir.")
 
         _usuarios_db = api.carregar_usuarios()
         _setores_vivos = api.carregar_setores()
