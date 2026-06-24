@@ -888,21 +888,27 @@ def _gh_get_sha(path):
     return None
 
 def _gh_push_arquivo(path, conteudo_str, mensagem):
-    """Cria ou atualiza um arquivo no GitHub."""
-    try:
-        sha = _gh_get_sha(path)
-        payload = {
-            "message": mensagem,
-            "content": base64.b64encode(conteudo_str.encode()).decode(),
-            "branch":  _GH_BRANCH,
-        }
-        if sha:
-            payload["sha"] = sha
-        r = requests.put(f"{_GH_API}/repos/{_GH_REPO}/contents/{path}",
-                         headers=_gh_headers(), json=payload, timeout=15)
-        return r.status_code in (200, 201)
-    except Exception:
-        return False
+    """Cria ou atualiza um arquivo no GitHub. Tenta até 3 vezes com backoff."""
+    import time as _time
+    for tentativa in range(3):
+        try:
+            sha = _gh_get_sha(path)
+            payload = {
+                "message": mensagem,
+                "content": base64.b64encode(conteudo_str.encode()).decode(),
+                "branch":  _GH_BRANCH,
+            }
+            if sha:
+                payload["sha"] = sha
+            r = requests.put(f"{_GH_API}/repos/{_GH_REPO}/contents/{path}",
+                             headers=_gh_headers(), json=payload, timeout=15)
+            if r.status_code in (200, 201):
+                return True
+        except Exception:
+            pass
+        if tentativa < 2:
+            _time.sleep(2 ** tentativa)  # 1s, 2s
+    return False
 
 def _gh_delete_arquivo(path):
     """Remove um arquivo do GitHub."""
@@ -996,9 +1002,8 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    # Sobe pro GitHub em background (falha silenciosamente)
-    _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
-    return caminho
+    gh_ok = _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
+    return caminho, gh_ok
 
 
 def listar_listas_salvas(tipo=None):

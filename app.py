@@ -1262,10 +1262,13 @@ def _main_content():
                 if not _nome_novo.strip():
                     st.error("Digite um nome.")
                 else:
-                    _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
+                    _cam, _gh_ok = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
                                             loja_id=loja_id, loja_nome=loja_sel_nome)
                     st.session_state[f"lista_arq_{key_suffix}"] = _pos.path.basename(_cam)
-                    st.success("✅ Lista salva!")
+                    if _gh_ok:
+                        st.success("✅ Lista salva e sincronizada com GitHub!")
+                    else:
+                        st.warning("⚠️ Lista salva localmente, mas não sincronizou com o GitHub. Ela pode sumir se o servidor reiniciar.")
                     st.rerun()
             if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
                 _cam = _pos.path.join(api.DIR_LISTAS, arq_atual)
@@ -1274,9 +1277,14 @@ def _main_content():
                         _d = _pj.load(_f)
                     _d["itens"] = itens_atuais
                     _d["atualizado_em"] = datetime.now().isoformat()
+                    _conteudo_upd = _pj.dumps(_d, ensure_ascii=False, indent=2)
                     with open(_cam, "w", encoding="utf-8") as _f:
-                        _pj.dump(_d, _f, ensure_ascii=False, indent=2)
-                    st.success("✅ Lista atualizada!")
+                        _f.write(_conteudo_upd)
+                    _gh_ok = api._gh_push_arquivo(f"listas/{arq_atual}", _conteudo_upd, f"Atualiza lista: {_d.get('nome', arq_atual)}")
+                    if _gh_ok:
+                        st.success("✅ Lista atualizada e sincronizada!")
+                    else:
+                        st.warning("⚠️ Lista atualizada localmente, mas não sincronizou com o GitHub.")
                     st.rerun()
 
             if arq_atual:
@@ -4789,8 +4797,11 @@ def _main_content():
                             if _restantes:
                                 import json as _jr
                                 _nome_rest = f"Restantes {datetime.now().strftime('%d/%m %H:%M')}"
-                                api.salvar_lista(_nome_rest, "pedido", _restantes)
-                                st.success(f"✅ Pedido **{_nome_rest}** criado com {len(_restantes)} item(ns) restantes!")
+                                _, _gh_ok_rest = api.salvar_lista(_nome_rest, "pedido", _restantes)
+                                if _gh_ok_rest:
+                                    st.success(f"✅ Pedido **{_nome_rest}** criado com {len(_restantes)} item(ns) restantes!")
+                                else:
+                                    st.warning(f"⚠️ **{_nome_rest}** salvo localmente, mas não sincronizou com GitHub.")
                                 st.rerun()
                             else:
                                 st.success("🎉 Todos os itens do pedido foram recebidos!")
@@ -6617,8 +6628,11 @@ def _main_content():
                     for _i in _gl_selecionadas:
                         _itens_combinados += _gl_todas[_i].get("itens", [])
                     _tipo_base = _gl_todas[_gl_selecionadas[0]].get("tipo", "pedido")
-                    api.salvar_lista(_gl_nome_mescla.strip(), _tipo_base, _itens_combinados)
-                    st.success(f"✅ **{_gl_nome_mescla}** criada com {len(_itens_combinados)} itens!")
+                    _, _gh_ok_mescla = api.salvar_lista(_gl_nome_mescla.strip(), _tipo_base, _itens_combinados)
+                    if _gh_ok_mescla:
+                        st.success(f"✅ **{_gl_nome_mescla}** criada com {len(_itens_combinados)} itens!")
+                    else:
+                        st.warning(f"⚠️ **{_gl_nome_mescla}** salva localmente, mas não sincronizou com GitHub.")
                     st.rerun()
 
 
