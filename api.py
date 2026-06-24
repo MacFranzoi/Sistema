@@ -1571,15 +1571,18 @@ def buscar_fornecedores(termo="", pagina=1, limite=50):
 # ──────────────────────────────────────────────
 # Vendas (pedidos de venda)
 # ──────────────────────────────────────────────
-def buscar_vendas(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=50):
+def buscar_vendas(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=50,
+                  situacao_id=None, tipo=None):
     params = {"limite": limite, "pagina": pagina}
     if data_ini: params["data_inicio"] = data_ini
     if data_fim:  params["data_fim"]    = data_fim
-    r = _get("pedidosvendas", params=params, loja_id=loja_id)
+    if situacao_id: params["situacao_id"] = situacao_id
+    if tipo: params["tipo"] = tipo
+    r = _get("vendas", params=params, loja_id=loja_id)
     return r.get("data", r) if isinstance(r, dict) else []
 
 def buscar_venda(pedido_id, loja_id=None):
-    r = _get(f"pedidosvendas/{pedido_id}", loja_id=loja_id)
+    r = _get(f"vendas/{pedido_id}", loja_id=loja_id)
     return r.get("data", r) if isinstance(r, dict) else {}
 
 # ──────────────────────────────────────────────
@@ -1611,6 +1614,31 @@ def _extrair_cor_tipo(nome_variacao):
     if len(partes) >= 2:
         return partes[0].lower(), partes[-1].lower()
     return (nome_variacao or "").strip().lower(), ""
+
+
+def grupos_de_aparelhos(loja_id=None, limiar=0.5):
+    """
+    Devolve os grupos que representam MODELOS DE APARELHOS (capinhas),
+    não acessórios. Heurística data-driven: um grupo é de aparelhos quando
+    a maioria (>= limiar) das suas variações usa o padrão 'Cor / Tipo'
+    (contém '/'). Acessórios (Cabo, Fone, Suporte...) ficam de fora.
+    """
+    cache = carregar_cache(loja_id) or {}
+    stats = {}
+    for p in cache.get("produtos", []) or []:
+        g = (p.get("nome_grupo", "") or "").strip()
+        if not g:
+            continue
+        tot, combar = stats.get(g, (0, 0))
+        for v in p.get("variacoes", []) or []:
+            vd = v.get("variacao", v) if isinstance(v, dict) else {}
+            tot += 1
+            if "/" in (vd.get("nome", "") or ""):
+                combar += 1
+        stats[g] = (tot, combar)
+    aparelhos = [g for g, (tot, comb) in stats.items()
+                 if tot > 0 and (comb / tot) >= limiar]
+    return sorted(aparelhos)
 
 
 def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativos=True):
@@ -1656,12 +1684,28 @@ def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativ
     return out
 
 
-def vendas_por_variacao(dias=30, loja_id=None, max_pedidos=400, data_ini=None, data_fim=None):
+def _mapa_variacao_nome(loja_id=None):
+    """variacao_id -> nome da variação ('Cor / Tipo'), a partir do cache."""
+    cache = carregar_cache(loja_id) or {}
+    mapa = {}
+    for p in cache.get("produtos", []) or []:
+        for v in p.get("variacoes", []) or []:
+            vd = v.get("variacao", v) if isinstance(v, dict) else {}
+            vid = str(vd.get("id", ""))
+            if vid:
+                mapa[vid] = vd.get("nome", "") or ""
+    return mapa
+
+
+def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
+                        data_ini=None, data_fim=None, situacao_id=None):
     """
-    Agrega a quantidade vendida por variação (variacao_id) e por cor nos
-    últimos `dias` (ou no intervalo informado), consultando o detalhe de
-    cada venda. Tolerante a variações de schema da GestãoClick.
-    Devolve {por_variacao: {id: qtd}, por_cor: {cor: qtd}, pedidos: n}.
+    Agrega a quantidade vendida por variação e por cor no período, SEMPRE
+    filtrando por loja (`loja_id`). Lê os produtos direto da listagem de
+    /vendas (que já traz `produtos[]`), paginando via `meta` — sem precisar
+    buscar o detalhe de cada venda.
+
+    Devolve {por_variacao: {id: qtd}, por_cor: {cor: qtd}, pedidos, itens}.
     """
     from datetime import date as _date, timedelta as _td
     if not data_fim:
@@ -1669,37 +1713,46 @@ def vendas_por_variacao(dias=30, loja_id=None, max_pedidos=400, data_ini=None, d
     if not data_ini:
         data_ini = str(_date.today() - _td(days=dias))
 
-    vendas = buscar_vendas(data_ini=data_ini, data_fim=data_fim, loja_id=loja_id, limite=500)
-    if not isinstance(vendas, list):
-        vendas = []
-
+    nome_por_vid = _mapa_variacao_nome(loja_id)
     por_var, por_cor = {}, {}
-    for v in vendas[:max_pedidos]:
-        pid = v.get("id") or v.get("codigo")
-        if not pid:
-            continue
-        try:
-            det = buscar_venda(pid, loja_id=loja_id)
-        except Exception:
-            continue
-        itens = det.get("produtos") or det.get("itens") or []
-        for it in itens:
-            prod = it.get("produto", it) if isinstance(it, dict) else {}
-            try:
-                qtd = float(prod.get("quantidade") or prod.get("qtde") or prod.get("qtd") or 0)
-            except (TypeError, ValueError):
-                qtd = 0.0
-            if qtd <= 0:
-                continue
-            vid = str(prod.get("variacao_id") or prod.get("produto_variacao_id") or
-                      prod.get("id_variacao") or "")
-            nome = prod.get("nome_produto") or prod.get("nome") or prod.get("descricao") or ""
-            if vid:
-                por_var[vid] = por_var.get(vid, 0) + qtd
-            cor, _ = _extrair_cor_tipo(nome)
-            if cor:
-                por_cor[cor] = por_cor.get(cor, 0) + qtd
-    return {"por_variacao": por_var, "por_cor": por_cor, "pedidos": len(vendas)}
+    n_pedidos = n_itens = 0
+
+    pagina = 1
+    while pagina <= max_paginas:
+        params = {"limite": limite, "pagina": pagina,
+                  "data_inicio": data_ini, "data_fim": data_fim}
+        if situacao_id:
+            params["situacao_id"] = situacao_id
+        r = _get("vendas", params=params, loja_id=loja_id)
+        data = r.get("data", []) if isinstance(r, dict) else (r or [])
+        if not data:
+            break
+        for v in data:
+            n_pedidos += 1
+            for it in (v.get("produtos") or []):
+                prod = it.get("produto", it) if isinstance(it, dict) else {}
+                try:
+                    qtd = float(prod.get("quantidade") or 0)
+                except (TypeError, ValueError):
+                    qtd = 0.0
+                if qtd <= 0:
+                    continue
+                vid = str(prod.get("variacao_id") or "")
+                nome = prod.get("nome_produto") or nome_por_vid.get(vid, "") or ""
+                n_itens += 1
+                if vid:
+                    por_var[vid] = por_var.get(vid, 0) + qtd
+                cor, _ = _extrair_cor_tipo(nome)
+                if cor:
+                    por_cor[cor] = por_cor.get(cor, 0) + qtd
+        # Paginação pelo meta da GestãoClick.
+        meta = r.get("meta", {}) if isinstance(r, dict) else {}
+        if not meta.get("proxima_pagina"):
+            break
+        pagina += 1
+
+    return {"por_variacao": por_var, "por_cor": por_cor,
+            "pedidos": n_pedidos, "itens": n_itens}
 
 
 def _distribuir_quantidade(itens, total, chave="score"):
@@ -1738,26 +1791,58 @@ def _distribuir_quantidade(itens, total, chave="score"):
     return itens
 
 
-def sugerir_pedido_reposicao(quantidade_total, grupo=None, tipo=None, loja_id=None,
+def _parse_valor(v):
+    """Converte '8,00' / '8.00' / 8 -> float. Inválido -> 0.0."""
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace("R$", "").replace(" ", "")
+    if not s:
+        return 0.0
+    # '1.234,56' -> '1234.56' ; '8,00' -> '8.00'
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
-                             peso_vendas=2.0, incluir_sem_pedido=False):
+                             peso_vendas=2.0, incluir_sem_pedido=False,
+                             custo_base=None, orcamento=None):
     """
-    Gera uma sugestão de ordem de compra: distribui `quantidade_total`
-    unidades de um grupo/tipo (ex.: 'Aveludada') entre as cores/variações,
-    priorizando as mais vendidas recentemente e as que estão faltando no
-    estoque.
+    Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
+    (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
+    recentemente e as que estão faltando no estoque.
+
+    A quantidade pode ser informada diretamente (`quantidade_total`) OU
+    derivada de um `orcamento` (R$) dividido pelo `custo_base` (R$/un).
 
     score = vendas_recentes * peso_vendas
           + deficit_para_o_alvo
           + (urgência por estoque negativo)
 
     Retorna {ok, itens, resumo, ...}. Cada item traz a quantidade sugerida,
-    o estoque atual, as vendas no período e o estoque projetado após o pedido.
+    o estoque atual, as vendas no período, o custo e o estoque projetado.
     """
+    custo_base = _parse_valor(custo_base)
+    orcamento = _parse_valor(orcamento)
     quantidade_total = int(quantidade_total or 0)
+    # Orçamento define a quantidade quando ela não foi informada diretamente.
+    if quantidade_total <= 0 and orcamento > 0 and custo_base > 0:
+        quantidade_total = int(orcamento // custo_base)
+
     variacoes = coletar_variacoes_catalogo(loja_id, grupo, tipo)
     if not variacoes:
         return {"ok": False, "erro": "Nenhuma variação encontrada para o filtro informado.",
+                "itens": [], "resumo": {}}
+    if quantidade_total <= 0:
+        return {"ok": False, "erro": "Informe uma quantidade total ou um orçamento + custo base.",
                 "itens": [], "resumo": {}}
 
     vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0}
@@ -1784,6 +1869,11 @@ def sugerir_pedido_reposicao(quantidade_total, grupo=None, tipo=None, loja_id=No
     for it in variacoes:
         it["estoque_atual"] = it["estoque"]
         it["estoque_apos"] = it["estoque"] + it["quantidade"]
+        unit = custo_base if custo_base > 0 else _parse_valor(it.get("valor_custo"))
+        it["custo_unit"] = round(unit, 2)
+        it["custo_total"] = round(unit * it["quantidade"], 2)
+        if custo_base > 0:
+            it["valor_custo"] = f"{custo_base:.2f}"
 
     itens = sorted(
         variacoes,
@@ -1804,10 +1894,108 @@ def sugerir_pedido_reposicao(quantidade_total, grupo=None, tipo=None, loja_id=No
         "pedidos_analisados": vendas.get("pedidos", 0),
         "dias_vendas": dias_vendas,
         "estoque_alvo": int(estoque_alvo),
+        "custo_base": round(custo_base, 2),
+        "orcamento": round(orcamento, 2),
+        "custo_total": round(sum(it.get("custo_total", 0) for it in variacoes), 2),
     }
     return {"ok": True, "itens": itens, "resumo": resumo,
             "aviso": None if (vendas_ok or not usar_vendas) else
             "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."}
+
+
+def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
+                      dias_vendas=30, estoque_alvo=0, custo_base=None, orcamento=None,
+                      instrucao_extra="", max_candidatos=120):
+    """
+    Versão por IA: a Claude monta a lista de compra escolhendo os MODELOS que
+    mais saem e as melhores cores, respeitando a quantidade/orçamento.
+
+    Reaproveita o motor determinístico para levantar candidatos (estoque +
+    vendas) e pede à IA a alocação final. Sem ANTHROPIC_API_KEY ou em caso de
+    erro, faz fallback automático para `sugerir_pedido_reposicao`.
+    """
+    base = sugerir_pedido_reposicao(
+        quantidade_total=quantidade_total, grupo=grupo, tipo=tipo, loja_id=loja_id,
+        dias_vendas=dias_vendas, usar_vendas=True, estoque_alvo=estoque_alvo,
+        custo_base=custo_base, orcamento=orcamento, incluir_sem_pedido=True,
+    )
+    if not base.get("ok"):
+        return base
+
+    qtd_total = base["resumo"]["quantidade_total"]
+    # Candidatos: os de maior score (mais vendidos / mais em falta).
+    candidatos = sorted(base["itens"], key=lambda x: x["score"], reverse=True)[:max_candidatos]
+
+    key = _get_anthropic_key()
+    if not key or not candidatos:
+        base["itens"] = [it for it in base["itens"] if it["quantidade"] > 0]
+        base["modo"] = "determinístico (sem chave de IA)"
+        return base
+
+    linhas = [
+        f'{i}|{it["variacao_id"]}|{it["produto_nome"]} / {it["variacao_nome"]}|'
+        f'estoque={it["estoque_atual"]}|vendas={it["vendas"]}'
+        for i, it in enumerate(candidatos)
+    ]
+    prompt = (
+        "Você é um comprador de uma loja de capinhas de celular. Monte a lista de "
+        f"compra alocando EXATAMENTE {qtd_total} unidades no total entre as variações "
+        "abaixo. Priorize os MODELOS que mais saem (maior 'vendas') e as cores que estão "
+        "faltando (estoque negativo/baixo). Distribua entre vários modelos populares — "
+        "não concentre tudo num só. Pode deixar variações com 0.\n"
+        + (f"Instrução adicional do usuário: {instrucao_extra}\n" if instrucao_extra else "")
+        + "\nVariações (idx|variacao_id|nome|estoque|vendas):\n" + "\n".join(linhas)
+        + '\n\nResponda APENAS com JSON: {"itens":[{"variacao_id":"...","quantidade":N}, ...]}. '
+        f"A soma das quantidades deve ser {qtd_total}."
+    )
+    try:
+        import anthropic as _ant
+        import json as _json, re as _re
+        client = _ant.Anthropic(api_key=key)
+        msg = client.messages.create(
+            model="claude-opus-4-8", max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        txt = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        m = _re.search(r"\{.*\}", txt, _re.S)
+        aloc = _json.loads(m.group(0))["itens"] if m else []
+    except Exception as e:
+        base["itens"] = [it for it in base["itens"] if it["quantidade"] > 0]
+        base["modo"] = "determinístico (IA indisponível)"
+        base["aviso"] = (base.get("aviso") or "") + f" IA indisponível: {e}".strip()
+        return base
+
+    por_id = {it["variacao_id"]: it for it in base["itens"]}
+    for it in base["itens"]:
+        it["quantidade"] = 0
+    for a in aloc:
+        vid = str(a.get("variacao_id", ""))
+        try:
+            q = int(a.get("quantidade", 0) or 0)
+        except (TypeError, ValueError):
+            q = 0
+        if vid in por_id and q > 0:
+            por_id[vid]["quantidade"] = q
+
+    cb = base["resumo"].get("custo_base", 0) or 0
+    for it in base["itens"]:
+        it["estoque_apos"] = it["estoque_atual"] + it["quantidade"]
+        unit = cb if cb > 0 else _parse_valor(it.get("valor_custo"))
+        it["custo_unit"] = round(unit, 2)
+        it["custo_total"] = round(unit * it["quantidade"], 2)
+
+    itens = sorted([it for it in base["itens"] if it["quantidade"] > 0],
+                   key=lambda x: (x["quantidade"], x["score"]), reverse=True)
+    dist = sum(it["quantidade"] for it in itens)
+    base["itens"] = itens
+    base["modo"] = "IA"
+    base["resumo"]["quantidade_distribuida"] = dist
+    base["resumo"]["variacoes_no_pedido"] = len(itens)
+    base["resumo"]["custo_total"] = round(sum(it["custo_total"] for it in itens), 2)
+    if dist != qtd_total:
+        base["aviso"] = (f"A IA alocou {dist} de {qtd_total} un. "
+                         "Ajuste as quantidades na tabela se necessário.")
+    return base
 
 
 # ──────────────────────────────────────────────
