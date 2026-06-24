@@ -8,5 +8,10 @@
     "nome": "Fernando Franzoi",
     "senha": "fer123",
     "setor": "gerencia"
+  },
+  "thamiris": {
+    "nome": "Thamiris",
+    "senha": "plug123",
+    "setor": "gerencia"
   }
 }
