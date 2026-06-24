@@ -4963,6 +4963,19 @@ def _main_content():
                                if _rz['vendas_usadas'] else " · ⚠️ sem vendas (usou estoque)")
                         )
                         _sg_itens = _sg_res["itens"]
+                        # Ranking de cores
+                        _rank = _rz.get("ranking_cores", [])
+                        if _rank:
+                            st.markdown("**🎨 Ranking de cores** (mais vendidas → menos vendidas):")
+                            _rank_txt = " · ".join(
+                                f"**{r['cor'].title()}** {int(r['vendas'])}un"
+                                + (f" ↗{int(r['vendas_cor'])}" if r['vendas_cor'] > r['vendas'] else "")
+                                for r in _rank[:12]
+                            )
+                            st.caption(_rank_txt)
+                        if _rz.get("matches_por_variacao", -1) == 0 and _rz.get("vendas_usadas"):
+                            st.warning("⚠️ Nenhuma variação casou com o histórico de vendas desta loja. "
+                                       "Sincronize as vendas para esta loja específica antes de gerar o pedido.")
                         if not _sg_itens:
                             st.info("Nenhuma cor recebeu unidades. Aumente a quantidade ou o orçamento.")
                         else:

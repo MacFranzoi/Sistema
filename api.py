@@ -2202,7 +2202,7 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
                              custo_base=None, orcamento=None, usar_cache_vendas=True,
-                             max_por_variacao=3):
+                             max_por_variacao=2):
     """
     Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
     (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
@@ -2253,25 +2253,29 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
             except Exception as e:
                 vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
 
+    # Quantas variações tiveram venda real pelo ID — diagnóstico de qualidade do cache.
+    _por_var_cache = vendas.get("por_variacao", {})
+    _por_cor_cache = vendas.get("por_cor", {})
+    _matches = 0
     for it in variacoes:
         vid = it["variacao_id"]
-        # Venda REAL desta variação (modelo+cor específicos) — é o que aparece
-        # na coluna "Vendas". NÃO usa o agregado da cor como fallback (isso fazia
-        # todas as linhas mostrarem o mesmo número).
-        v_var = float(vendas["por_variacao"].get(vid, 0) or 0)
-        # Popularidade da COR no histórico (somando todos os modelos) — sinal
-        # para SUGERIR cores que vendem bem mesmo onde a variação não teve venda.
-        v_cor = float(vendas["por_cor"].get(it["cor"], 0) or 0)
+        # Vendas REAIS desta variação específica (modelo+cor) no período.
+        # Não usa fallback do agregado de cor — isso causava todas as linhas
+        # mostrarem o mesmo número.
+        v_var = float(_por_var_cache.get(vid, 0) or _por_var_cache.get(int(vid) if vid.isdigit() else vid, 0) or 0)
+        if v_var > 0:
+            _matches += 1
+        # Popularidade da COR no histórico (todos os modelos) — sinal secundário
+        # para sugerir cores que vendem bem nos outros modelos.
+        v_cor = float(_por_cor_cache.get(it["cor"], 0) or 0)
         it["vendas"] = round(v_var, 2)
         it["vendas_cor"] = round(v_cor, 2)
-        # IMPORTANTE: estoque negativo é falso (acumulado de anos) → vira 0.
-        # Zera de vez para refletir no score, no déficit E na exibição.
+        # Estoque negativo é acumulado falso de anos → trata como 0.
         est_real = max(0, it["estoque"])
         it["estoque"] = est_real
         it["deficit"] = max(0, int(estoque_alvo) - est_real)
-        # Score: a venda da própria variação domina; a popularidade da cor entra
-        # com peso menor (sugere cores em alta dos outros modelos); o déficit
-        # de quem tem estoque positivo abaixo do alvo complementa.
+        # Score: venda da variação (peso principal) + popularidade da cor (sinal
+        # de tendência) + déficit (urgência de reposição).
         it["score"] = (v_var * float(peso_vendas)
                        + v_cor * 0.3
                        + it["deficit"])
@@ -2324,6 +2328,28 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
     if not incluir_sem_pedido:
         itens = [it for it in itens if it["quantidade"] > 0]
 
+    # Ranking de cores: agrega vendas por cor entre todas as variações,
+    # usando a venda real por variação como base primária e a popularidade
+    # de cor (por_cor do cache) como sinal de tendência geral.
+    _rank_cor = {}
+    for it in variacoes:
+        c = it["cor"]
+        if c not in _rank_cor:
+            _rank_cor[c] = {"cor": c, "vendas": 0.0, "vendas_cor": it.get("vendas_cor", 0), "qtd_sugerida": 0}
+        _rank_cor[c]["vendas"] += it["vendas"]
+        _rank_cor[c]["qtd_sugerida"] += it["quantidade"]
+    # Ordena: primeiro por vendas reais das variações, depois pela popularidade global da cor.
+    ranking_cores = sorted(
+        _rank_cor.values(),
+        key=lambda x: (x["vendas"], x["vendas_cor"]),
+        reverse=True,
+    )
+
+    aviso_match = ""
+    if vendas_ok and _matches == 0:
+        aviso_match = (f" ⚠️ Nenhuma variação casou com o cache de vendas "
+                       f"(loja_id={loja_id}). Verifique se o cache foi sincronizado para esta loja.")
+
     resumo = {
         "quantidade_total": quantidade_total,
         "quantidade_distribuida": sum(it["quantidade"] for it in variacoes),
@@ -2339,15 +2365,18 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         "custo_base": round(custo_base, 2),
         "orcamento": round(orcamento, 2),
         "custo_total": round(sum(it.get("custo_total", 0) for it in variacoes), 2),
+        "matches_por_variacao": _matches,
+        "ranking_cores": ranking_cores,
     }
+    aviso_base = None if (vendas_ok or not usar_vendas) else \
+        "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."
     return {"ok": True, "itens": itens, "resumo": resumo,
-            "aviso": None if (vendas_ok or not usar_vendas) else
-            "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."}
+            "aviso": (aviso_base or "") + aviso_match or None}
 
 
 def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                       dias_vendas=30, estoque_alvo=0, custo_base=None, orcamento=None,
-                      instrucao_extra="", max_candidatos=120, max_por_variacao=3):
+                      instrucao_extra="", max_candidatos=120, max_por_variacao=2):
     """
     Versão por IA: a Claude monta a lista de compra escolhendo os MODELOS que
     mais saem e as melhores cores, respeitando a quantidade/orçamento.
@@ -2384,7 +2413,7 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         "Você é um comprador de uma loja de capinhas de celular. Monte a lista de "
         f"compra alocando EXATAMENTE {qtd_total} unidades no total entre as variações "
         "abaixo. Regras OBRIGATÓRIAS:\n"
-        f"1. Máximo {max_por_variacao} unidades por variação (cor+modelo). Nunca ultrapasse esse teto.\n"
+        f"1. Máximo {max_por_variacao} unidades por variação (cor+modelo). NUNCA coloque mais que {max_por_variacao} na mesma variação.\n"
         "2. Priorize os MODELOS que mais saem (maior 'vendas') e as cores com menor estoque.\n"
         "3. Distribua entre MUITAS variações diferentes para ter variedade de cores — "
         "não concentre em poucas. Para vender capas é preciso ter várias opções de cor.\n"
