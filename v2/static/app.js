@@ -28,6 +28,39 @@ async function apiPost(path, body) {
 }
 const $ = (sel) => document.querySelector(sel);
 const el = (html) => { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstChild; };
+
+// ── Gravação de voz via MediaRecorder → Whisper ────────────────────
+function ativarMicWhisper(btn, onTexto) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    btn.style.display = "none"; return;
+  }
+  let stream, recorder, chunks = [];
+  btn.onclick = async () => {
+    if (btn._gravando) { recorder.stop(); return; }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) { alert("Microfone não disponível: " + e.message); return; }
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    btn._gravando = true;
+    btn.textContent = "⏹ Parar";
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = async () => {
+      btn._gravando = false;
+      stream.getTracks().forEach((t) => t.stop());
+      btn.disabled = true; btn.textContent = "Transcrevendo…";
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      const fd = new FormData(); fd.append("arquivo", blob, "audio.webm");
+      try {
+        const r = await fetch("/api/voz/transcrever", { method: "POST", credentials: "same-origin", body: fd });
+        if (!r.ok) throw new Error((await r.json()).detail || "Erro");
+        onTexto((await r.json()).texto);
+      } catch (err) { alert("Erro ao transcrever: " + err.message); }
+      finally { btn.disabled = false; btn.textContent = "🎤 Voz"; }
+    };
+    recorder.start();
+  };
+}
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ── Login ──────────────────────────────────────────────────────────
@@ -888,31 +921,15 @@ async function renderEntrada(cont) {
 
   // ── WhatsApp IA ──
   function modoWpp() {
-    const temSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
     $("#ent-modo").innerHTML = `
       <textarea id="ew-txt" placeholder="Chegaram 5 POCO X3 aveludada preta, 3 iPhone 14 silicone azul…" style="width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:10px;outline:none;font-family:inherit"></textarea>
       <div class="busca" style="margin-top:8px">
-        ${temSpeech ? '<button id="ew-mic">🎤 Voz</button>' : ''}
+        <button id="ew-mic">🎤 Voz</button>
         <button id="ew-gerar">✨ Identificar com IA</button>
       </div>
       <div id="ew-msg"></div>`;
 
-    if (temSpeech) {
-      const SpeechRecog = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recog = new SpeechRecog();
-      recog.lang = "pt-BR"; recog.continuous = true; recog.interimResults = false;
-      let gravando = false;
-      recog.onresult = (e) => {
-        for (let i = e.resultIndex; i < e.results.length; i++)
-          $("#ew-txt").value += e.results[i][0].transcript + " ";
-      };
-      recog.onend = () => { gravando = false; if ($("#ew-mic")) $("#ew-mic").textContent = "🎤 Voz"; };
-      recog.onerror = () => { gravando = false; if ($("#ew-mic")) $("#ew-mic").textContent = "🎤 Voz"; };
-      $("#ew-mic").onclick = () => {
-        if (gravando) { recog.stop(); }
-        else { recog.start(); gravando = true; $("#ew-mic").textContent = "⏹ Parar"; }
-      };
-    }
+    ativarMicWhisper($("#ew-mic"), (txt) => { $("#ew-txt").value += txt + " "; });
 
     $("#ew-gerar").onclick = async () => {
       const texto = $("#ew-txt").value.trim();
@@ -1569,23 +1586,7 @@ async function renderPedido(cont) {
     <div id="pe-lista"></div>`;
 
   // ── Microfone para WhatsApp/IA ──
-  (function() {
-    const SpeechRecog = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecog) { if ($("#pw-mic")) $("#pw-mic").style.display = "none"; return; }
-    const recog = new SpeechRecog();
-    recog.lang = "pt-BR"; recog.continuous = true; recog.interimResults = false;
-    let gravando = false;
-    recog.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++)
-        $("#pw-texto").value += e.results[i][0].transcript + "\n";
-    };
-    recog.onend = () => { gravando = false; if ($("#pw-mic")) $("#pw-mic").textContent = "🎤 Voz"; };
-    recog.onerror = () => { gravando = false; if ($("#pw-mic")) $("#pw-mic").textContent = "🎤 Voz"; };
-    $("#pw-mic").onclick = () => {
-      if (gravando) { recog.stop(); }
-      else { recog.start(); gravando = true; $("#pw-mic").textContent = "⏹ Parar"; }
-    };
-  })();
+  ativarMicWhisper($("#pw-mic"), (txt) => { $("#pw-texto").value += txt + "\n"; });
 
   // ── WhatsApp/IA ──
   $("#pw-gerar").onclick = async () => {
