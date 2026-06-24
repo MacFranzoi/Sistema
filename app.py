@@ -4866,9 +4866,14 @@ def _main_content():
                 except Exception:
                     _custos_tipo = {}
                 _tipos_disp = sorted(_custos_tipo.keys())
-                # Apenas grupos de APARELHOS (capinhas), nunca acessórios.
+                # Todos os grupos do catálogo (o usuário escolhe qual quer).
                 try:
-                    _grupos_disp = api.grupos_de_aparelhos(_sg_loja_id)
+                    _cache_sg = api.carregar_cache(_sg_loja_id) or {}
+                    _grupos_disp = sorted({
+                        p.get("nome_grupo", "")
+                        for p in _cache_sg.get("produtos", [])
+                        if p.get("nome_grupo", "")
+                    })
                 except Exception:
                     _grupos_disp = []
 
@@ -4878,7 +4883,7 @@ def _main_content():
                     help="Filtra pela variação, ex.: Aveludada, Silicone Líquido.")
                 _sg_grupo = _sg2.selectbox(
                     "Grupo de aparelhos", ["(todos)"] + _grupos_disp, key="sug_grupo",
-                    help="Só modelos de celular. Ex.: Galaxy A, Apple, Xiaomi 2023.")
+                    help="Filtra por grupo de produto. Ex.: Galaxy A, Apple, Cabos, Peliculas.")
 
                 # Custo base — pré-preenchido pelo custo do tipo selecionado.
                 try:
