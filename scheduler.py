@@ -182,8 +182,10 @@ def start():
             try:
                 import api
                 for loja_id in list(api.LOJAS.keys()) + [None]:
-                    if api.carregar_cache_vendas(loja_id):
-                        continue  # já tem (local ou recuperado do GitHub)
+                    tem_agregado = bool(api.carregar_cache_vendas(loja_id))
+                    tem_lista = api.carregar_vendas_lista(loja_id) is not None
+                    if tem_agregado and tem_lista:
+                        continue  # já tem tudo (local ou recuperado do GitHub)
                     try:
                         cv = api.sincronizar_vendas(loja_id, dias=180, push_github=True)
                         logger.info(f"Boot sync vendas loja={loja_id}: "
