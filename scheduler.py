@@ -33,6 +33,9 @@ def _sincronizar_todas_lojas():
 
 def _atualizar_estoque_cache():
     """Atualiza só o estoque no cache existente (mais rápido que sync completo)."""
+    global _ultimo_push_estoque
+    import time as _time
+    fazer_push = (_time.time() - _ultimo_push_estoque) >= _PUSH_ESTOQUE_INTERVALO
     try:
         import api
         import json
@@ -42,8 +45,8 @@ def _atualizar_estoque_cache():
                 cache = api.carregar_cache(loja_id)
                 if not cache:
                     continue
-                # Busca estoque ao vivo e atualiza o cache local
-                dados = api.buscar_estoque_ao_vivo(loja_id=loja_id, max_paginas=10)
+                # Busca estoque ao vivo — sem limite de páginas para cobrir catálogo todo
+                dados = api.buscar_estoque_ao_vivo(loja_id=loja_id, max_paginas=50)
                 # Monta mapa produto_id + variacao_id → estoque
                 estoque_map = {}
                 for p in dados.get("produtos", []):
@@ -62,22 +65,29 @@ def _atualizar_estoque_cache():
                         if k in estoque_map:
                             vd["estoque"] = estoque_map[k]
                 # Persiste o cache atualizado diretamente no arquivo
-                cache["sincronizado_em"] = datetime.now().isoformat()
+                cache["sincronizado_em"] = api._agora_br_str()
                 p_path = api.cache_path(loja_id)
+                conteudo = json.dumps(cache, ensure_ascii=False, indent=2)
                 with open(p_path, "w", encoding="utf-8") as f:
-                    json.dump(cache, f, ensure_ascii=False, indent=2)
-                logger.info(f"Estoque cache atualizado: loja={loja_id}")
+                    f.write(conteudo)
+                # Push pro GitHub (throttled) para sobreviver a restarts.
+                if fazer_push:
+                    nome_arq = os.path.basename(p_path)
+                    api._gh_push_arquivo(nome_arq, conteudo, f"Atualiza estoque {nome_arq}")
+                logger.info(f"Estoque cache atualizado: loja={loja_id}" + (" [+github]" if fazer_push else ""))
             except Exception as e:
                 logger.warning(f"Falha atualização estoque loja={loja_id}: {e}")
+        if fazer_push:
+            _ultimo_push_estoque = _time.time()
     except Exception as e:
         logger.error(f"Erro atualização estoque: {e}")
 
 
-# Último push do cache de vendas pro GitHub (epoch). Usado para não fazer
-# commit a cada ciclo de poucos minutos — só de tempos em tempos.
+# Throttle de push pro GitHub: não comita a cada ciclo de minuto.
 _ultimo_push_vendas = 0.0
-# Intervalo mínimo entre pushes ao GitHub (segundos). Default 1h.
+_ultimo_push_estoque = 0.0
 _PUSH_VENDAS_INTERVALO = int(os.environ.get("PUSH_VENDAS_INTERVALO_SEG", "3600"))
+_PUSH_ESTOQUE_INTERVALO = int(os.environ.get("PUSH_ESTOQUE_INTERVALO_SEG", "3600"))
 
 
 def _sincronizar_vendas_todas_lojas(completo=False):
@@ -182,8 +192,10 @@ def start():
             try:
                 import api
                 for loja_id in list(api.LOJAS.keys()) + [None]:
-                    if api.carregar_cache_vendas(loja_id):
-                        continue  # já tem (local ou recuperado do GitHub)
+                    tem_agregado = bool(api.carregar_cache_vendas(loja_id))
+                    tem_lista = api.carregar_vendas_lista(loja_id) is not None
+                    if tem_agregado and tem_lista:
+                        continue  # já tem tudo (local ou recuperado do GitHub)
                     try:
                         cv = api.sincronizar_vendas(loja_id, dias=180, push_github=True)
                         logger.info(f"Boot sync vendas loja={loja_id}: "

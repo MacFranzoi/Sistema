@@ -4963,6 +4963,27 @@ def _main_content():
                                if _rz['vendas_usadas'] else " · ⚠️ sem vendas (usou estoque)")
                         )
                         _sg_itens = _sg_res["itens"]
+                        # Ranking de modelos
+                        _rank_mod = _rz.get("ranking_modelos", [])
+                        if _rank_mod:
+                            st.markdown("**📱 Modelos mais vendidos** (ordem de prioridade no pedido):")
+                            _mod_txt = " · ".join(
+                                f"**{r['modelo']}** {int(r['vendas'])}un → {r['qtd_sugerida']} pedido"
+                                for r in _rank_mod[:10] if r["vendas"] > 0 or r["qtd_sugerida"] > 0
+                            )
+                            st.caption(_mod_txt or "Sem histórico de vendas por modelo.")
+                        # Ranking de cores
+                        _rank_cor = _rz.get("ranking_cores", [])
+                        if _rank_cor:
+                            st.markdown("**🎨 Ranking de cores:**")
+                            _cor_txt = " · ".join(
+                                f"**{r['cor'].title()}** {int(r['vendas'])}un"
+                                for r in _rank_cor[:10] if r["vendas"] > 0
+                            )
+                            st.caption(_cor_txt or "Sem histórico de vendas por cor.")
+                        if _rz.get("matches_por_variacao", -1) == 0 and _rz.get("vendas_usadas"):
+                            st.warning("⚠️ Nenhuma variação casou com o histórico de vendas desta loja. "
+                                       "Sincronize as vendas para esta loja específica antes de gerar o pedido.")
                         if not _sg_itens:
                             st.info("Nenhuma cor recebeu unidades. Aumente a quantidade ou o orçamento.")
                         else:
@@ -4972,6 +4993,7 @@ def _main_content():
                                 "Qtd": it["quantidade"],
                                 "Estoque": it["estoque_atual"],
                                 "Vendas": it["vendas"],
+                                "Vendas cor": it.get("vendas_cor", 0),
                                 "Custo R$": it.get("custo_total", 0),
                                 "Após": it["estoque_apos"],
                             } for it in _sg_itens])
@@ -6532,6 +6554,9 @@ def _main_content():
     # ══════════════════════════════════════════════
     if _pg == "usuarios":
         st.subheader("👥 Gerenciamento de Usuários")
+        import os as _os_usr
+        if not _os_usr.environ.get("GITHUB_TOKEN"):
+            st.warning("⚠️ GITHUB_TOKEN não configurado. Usuários são salvos localmente mas serão perdidos se o container reiniciar. Configure a variável no Railway para persistir.")
 
         _usuarios_db = api.carregar_usuarios()
         _setores_vivos = api.carregar_setores()

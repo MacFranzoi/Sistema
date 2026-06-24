@@ -5,6 +5,16 @@ import time
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo as _ZoneInfo
+_TZ_BR = _ZoneInfo("America/Sao_Paulo")
+
+def _agora_br():
+    """Retorna datetime atual no fuso de Brasília."""
+    return datetime.now(_TZ_BR)
+
+def _agora_br_str():
+    """Retorna string ISO do momento atual em horário de Brasília (sem offset)."""
+    return _agora_br().strftime("%Y-%m-%dT%H:%M:%S")
 
 ACCESS_TOKEN = "998d6e5bed008c2023d5c5bc062ac9311e05c045"
 SECRET_TOKEN = "884b009905a80a147cea7172f25c83700c097166"
@@ -186,9 +196,9 @@ def salvar_usuarios(usuarios):
     conteudo = json.dumps(usuarios, ensure_ascii=False, indent=2)
     with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    ok = _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
-    if not ok:
-        raise RuntimeError("Falha ao salvar usuários no GitHub — alteração NÃO foi persistida.")
+    # Push pro GitHub para persistir entre restarts do container.
+    # Não bloqueia a operação se falhar (GITHUB_TOKEN ausente, etc).
+    _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",
@@ -317,7 +327,7 @@ def sincronizar_produtos(loja_id=None, progress_callback=None):
         pagina += 1
 
     cache = {
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "loja_id": loja_id,
         "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
         "total": len(todos),
@@ -353,9 +363,14 @@ def sincronizar_estoque_loja(loja_id=None, max_paginas=None):
             if k in estoque_map:
                 vd["estoque"] = estoque_map[k]
                 n += 1
-    cache["sincronizado_em"] = datetime.now().isoformat()
-    with open(cache_path(loja_id), "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
+    cache["sincronizado_em"] = _agora_br_str()
+    p_path = cache_path(loja_id)
+    conteudo = json.dumps(cache, ensure_ascii=False, indent=2)
+    with open(p_path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    # Push pro GitHub para persistir entre restarts do Railway.
+    _gh_push_arquivo(os.path.basename(p_path), conteudo,
+                     f"Atualiza estoque loja={loja_id}")
     return {"atualizadas": n, "loja_id": loja_id, "sincronizado_em": cache["sincronizado_em"]}
 
 
@@ -375,7 +390,9 @@ def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max
     """
     import concurrent.futures as _cf
 
-    _max = max_paginas if max_paginas is not None else (5 if (nome or codigo) else 20)
+    # Sem limite de páginas por padrão — busca TODOS os produtos.
+    # max_paginas serve só para buscas filtradas (nome/codigo) onde o resultado é pequeno.
+    _max = max_paginas if max_paginas is not None else (5 if (nome or codigo) else 9999)
 
     def _fetch(pagina):
         params = {"pagina": pagina, "limite": limite}
@@ -401,7 +418,7 @@ def buscar_estoque_ao_vivo(loja_id=None, nome=None, codigo=None, limite=100, max
         "produtos": todos,
         "loja_id": loja_id,
         "total": len(todos),
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "ao_vivo": True,
     }
 
@@ -1827,7 +1844,7 @@ def cache_vendas_lista_path(loja_id=None):
 def _salvar_vendas_lista(loja_id, lista):
     try:
         with open(cache_vendas_lista_path(loja_id), "w", encoding="utf-8") as f:
-            json.dump({"sincronizado_em": datetime.now().isoformat(), "lista": lista},
+            json.dump({"sincronizado_em": _agora_br_str(), "lista": lista},
                       f, ensure_ascii=False)
     except Exception:
         pass
@@ -1869,7 +1886,7 @@ def _montar_cache_vendas(loja_id, dias, data_ini, data_fim, base, tail, situacao
     por_var = _somar_contagens(base.get("por_variacao"), tail.get("por_variacao"))
     por_cor = _somar_contagens(base.get("por_cor"), tail.get("por_cor"))
     return {
-        "sincronizado_em": datetime.now().isoformat(),
+        "sincronizado_em": _agora_br_str(),
         "loja_id": loja_id,
         "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
         "data_ini": data_ini,
@@ -2150,13 +2167,19 @@ def _parse_valor(v):
         return 0.0
 
 
-def _distribuir_por_cor(itens, total):
+def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2):
     """
-    Distribui `total` em dois níveis para garantir VARIEDADE DE CORES:
-      1) reparte o total entre as CORES, proporcional às vendas de cada cor
-         (cores que vendem mais levam mais — mas todas as que vendem aparecem);
-      2) dentro de cada cor, reparte a cota entre os modelos pelo score.
-    Cai para a distribuição simples se não houver sinal de vendas por cor.
+    Distribui `total` priorizando MODELOS que mais venderam:
+
+    1) Rankeia modelos pelo total de vendas (soma de todas as cores).
+    2) Para cada modelo (do mais vendido ao menos), verifica quais cores
+       estão abaixo do alvo (deficit > 0) ou são populares (vendas_cor).
+    3) Aloca no máximo `max_por_variacao` unidades por cor/variação.
+    4) Percorre os modelos em rodadas até esgotar o total.
+
+    Isso garante: modelos que vendem mais aparecem no pedido com mais cores;
+    preto não domina — as cores são distribuídas por popularidade dentro
+    de cada modelo.
     """
     total = int(total)
     for it in itens:
@@ -2164,37 +2187,62 @@ def _distribuir_por_cor(itens, total):
     if total <= 0 or not itens:
         return itens
 
-    # Agrupa por cor e soma as vendas da cor.
-    por_cor = {}
+    # Agrupa variações por modelo.
+    por_modelo = {}
     for it in itens:
-        por_cor.setdefault(it.get("cor", ""), []).append(it)
-    vendas_cor = {c: sum(float(i.get("vendas", 0) or 0) for i in g) for c, g in por_cor.items()}
+        modelo = it.get("produto_nome", "")
+        por_modelo.setdefault(modelo, []).append(it)
 
-    if sum(vendas_cor.values()) <= 0:
-        return _distribuir_quantidade(itens, total, chave="score")
+    # Venda total do modelo = soma das vendas reais de suas variações
+    # + sinal de cor para modelos sem histórico próprio.
+    def _venda_modelo(grupo):
+        v = sum(float(i.get("vendas", 0) or 0) for i in grupo)
+        if v <= 0:
+            v = max((float(i.get("vendas_cor", 0) or 0) for i in grupo), default=0.0) * 0.1
+        return v
 
-    # Nível 1: cotas por cor (maior resto), ponderado pelas vendas da cor.
-    cores = list(por_cor.keys())
-    pesos = [vendas_cor[c] for c in cores]
-    soma = sum(pesos)
-    brutos = [total * p / soma for p in pesos]
-    cotas = [int(b) for b in brutos]
-    resto = total - sum(cotas)
-    ordem = sorted(range(len(cores)), key=lambda i: brutos[i] - cotas[i], reverse=True)
-    for k in range(resto):
-        cotas[ordem[k % len(ordem)]] += 1
+    modelos_ranqueados = sorted(
+        por_modelo.items(),
+        key=lambda kv: _venda_modelo(kv[1]),
+        reverse=True,
+    )
 
-    # Nível 2: dentro de cada cor, reparte pelo score entre os modelos.
-    for c, cota in zip(cores, cotas):
-        if cota > 0:
-            _distribuir_quantidade(por_cor[c], cota, chave="score")
+    restante = total
+    # Rodadas: cada rodada oferece até max_por_variacao slots por modelo.
+    # Modelos mais vendidos são atendidos primeiro.
+    for rodada in range(max_por_variacao):
+        if restante <= 0:
+            break
+        for modelo, grupo in modelos_ranqueados:
+            if restante <= 0:
+                break
+            # Dentro do modelo, rankeia as cores por: deficit > 0 primeiro,
+            # depois por popularidade da cor (vendas_cor) e por vendas da variação.
+            cores_ordenadas = sorted(
+                grupo,
+                key=lambda x: (
+                    int(x.get("deficit", 0) > 0),   # tem deficit
+                    float(x.get("vendas", 0) or 0),  # vendas da variação
+                    float(x.get("vendas_cor", 0) or 0),  # popularidade da cor
+                ),
+                reverse=True,
+            )
+            for it in cores_ordenadas:
+                if restante <= 0:
+                    break
+                if it["quantidade"] < max_por_variacao:
+                    it["quantidade"] += 1
+                    restante -= 1
+
+    return itens
     return itens
 
 
 def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
-                             custo_base=None, orcamento=None, usar_cache_vendas=True):
+                             custo_base=None, orcamento=None, usar_cache_vendas=True,
+                             max_por_variacao=2):
     """
     Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
     (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
@@ -2245,23 +2293,38 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
             except Exception as e:
                 vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
 
+    # Quantas variações tiveram venda real pelo ID — diagnóstico de qualidade do cache.
+    _por_var_cache = vendas.get("por_variacao", {})
+    _por_cor_cache = vendas.get("por_cor", {})
+    _matches = 0
     for it in variacoes:
         vid = it["variacao_id"]
-        vend = vendas["por_variacao"].get(vid)
-        if not vend:
-            vend = vendas["por_cor"].get(it["cor"], 0)
-        it["vendas"] = round(float(vend or 0), 2)
-        # IMPORTANTE: estoque negativo é falso (acumulado de anos), então é
-        # tratado como 0. A prioridade vem das VENDAS; o déficit só conta
-        # para quem tem estoque positivo abaixo do alvo.
+        # Vendas REAIS desta variação específica (modelo+cor) no período.
+        # Não usa fallback do agregado de cor — isso causava todas as linhas
+        # mostrarem o mesmo número.
+        v_var = float(_por_var_cache.get(vid, 0) or _por_var_cache.get(int(vid) if vid.isdigit() else vid, 0) or 0)
+        if v_var > 0:
+            _matches += 1
+        # Popularidade da COR no histórico (todos os modelos) — sinal secundário
+        # para sugerir cores que vendem bem nos outros modelos.
+        v_cor = float(_por_cor_cache.get(it["cor"], 0) or 0)
+        it["vendas"] = round(v_var, 2)
+        it["vendas_cor"] = round(v_cor, 2)
+        # Estoque negativo é acumulado falso de anos → trata como 0.
         est_real = max(0, it["estoque"])
+        it["estoque"] = est_real
         it["deficit"] = max(0, int(estoque_alvo) - est_real)
-        it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"]
+        # Score: venda da variação (peso principal) + popularidade da cor (sinal
+        # de tendência) + déficit (urgência de reposição).
+        it["score"] = (v_var * float(peso_vendas)
+                       + v_cor * 0.3
+                       + it["deficit"])
 
-    # Distribuição com variedade de cores quando há sinal de vendas; senão,
-    # cai para a repartição simples por score (estoque/déficit).
+    # Distribuição MODEL-FIRST: rankeia modelos por vendas, dentro de cada
+    # modelo distribui pelas cores com mais déficit/popularidade.
+    # Sem sinal de vendas cai para distribuição simples por score.
     if vendas_ok:
-        _distribuir_por_cor(variacoes, quantidade_total)
+        _distribuir_por_modelo_e_cor(variacoes, quantidade_total, max_por_variacao=max_por_variacao or 2)
     else:
         _distribuir_quantidade(variacoes, quantidade_total, chave="score")
 
@@ -2274,13 +2337,57 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         if custo_base > 0:
             it["valor_custo"] = f"{custo_base:.2f}"
 
+    # Ordena: primeiro os modelos mais vendidos (total de vendas do modelo),
+    # dentro do modelo pela popularidade da cor.
+    _vendas_modelo = {}
+    for it in variacoes:
+        m = it["produto_nome"]
+        _vendas_modelo[m] = _vendas_modelo.get(m, 0) + it["vendas"]
     itens = sorted(
         variacoes,
-        key=lambda x: (x["quantidade"], x["score"], -x["estoque"]),
+        key=lambda x: (
+            x["quantidade"],                          # tem quantidade (aparece no pedido)
+            _vendas_modelo.get(x["produto_nome"], 0), # modelo mais vendido primeiro
+            float(x.get("vendas_cor", 0) or 0),       # cor mais popular dentro do modelo
+            x["vendas"],                               # venda específica desta variação
+        ),
         reverse=True,
     )
     if not incluir_sem_pedido:
         itens = [it for it in itens if it["quantidade"] > 0]
+
+    # Ranking de modelos: soma de vendas de todas as cores do modelo.
+    _rank_mod = {}
+    for it in variacoes:
+        m = it["produto_nome"]
+        if m not in _rank_mod:
+            _rank_mod[m] = {"modelo": m, "vendas": 0.0, "qtd_sugerida": 0, "cores": set()}
+        _rank_mod[m]["vendas"] += it["vendas"]
+        _rank_mod[m]["qtd_sugerida"] += it["quantidade"]
+        if it["quantidade"] > 0:
+            _rank_mod[m]["cores"].add(it["cor"])
+    for v in _rank_mod.values():
+        v["cores"] = sorted(v["cores"])
+    ranking_modelos = sorted(_rank_mod.values(), key=lambda x: x["vendas"], reverse=True)
+
+    # Ranking de cores: agrega vendas por cor entre todas as variações.
+    _rank_cor = {}
+    for it in variacoes:
+        c = it["cor"]
+        if c not in _rank_cor:
+            _rank_cor[c] = {"cor": c, "vendas": 0.0, "vendas_cor": it.get("vendas_cor", 0), "qtd_sugerida": 0}
+        _rank_cor[c]["vendas"] += it["vendas"]
+        _rank_cor[c]["qtd_sugerida"] += it["quantidade"]
+    ranking_cores = sorted(
+        _rank_cor.values(),
+        key=lambda x: (x["vendas"], x["vendas_cor"]),
+        reverse=True,
+    )
+
+    aviso_match = ""
+    if vendas_ok and _matches == 0:
+        aviso_match = (f" ⚠️ Nenhuma variação casou com o cache de vendas "
+                       f"(loja_id={loja_id}). Verifique se o cache foi sincronizado para esta loja.")
 
     resumo = {
         "quantidade_total": quantidade_total,
@@ -2297,15 +2404,19 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         "custo_base": round(custo_base, 2),
         "orcamento": round(orcamento, 2),
         "custo_total": round(sum(it.get("custo_total", 0) for it in variacoes), 2),
+        "matches_por_variacao": _matches,
+        "ranking_cores": ranking_cores,
+        "ranking_modelos": ranking_modelos,
     }
+    aviso_base = None if (vendas_ok or not usar_vendas) else \
+        "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."
     return {"ok": True, "itens": itens, "resumo": resumo,
-            "aviso": None if (vendas_ok or not usar_vendas) else
-            "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."}
+            "aviso": (aviso_base or "") + aviso_match or None}
 
 
 def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                       dias_vendas=30, estoque_alvo=0, custo_base=None, orcamento=None,
-                      instrucao_extra="", max_candidatos=120):
+                      instrucao_extra="", max_candidatos=120, max_por_variacao=2):
     """
     Versão por IA: a Claude monta a lista de compra escolhendo os MODELOS que
     mais saem e as melhores cores, respeitando a quantidade/orçamento.
@@ -2318,6 +2429,7 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         quantidade_total=quantidade_total, grupo=grupo, tipo=tipo, loja_id=loja_id,
         dias_vendas=dias_vendas, usar_vendas=True, estoque_alvo=estoque_alvo,
         custo_base=custo_base, orcamento=orcamento, incluir_sem_pedido=True,
+        max_por_variacao=0,  # sem cap aqui — a IA faz a distribuição final
     )
     if not base.get("ok"):
         return base
@@ -2340,13 +2452,16 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
     prompt = (
         "Você é um comprador de uma loja de capinhas de celular. Monte a lista de "
         f"compra alocando EXATAMENTE {qtd_total} unidades no total entre as variações "
-        "abaixo. Priorize os MODELOS que mais saem (maior 'vendas') e as cores que estão "
-        "faltando (estoque negativo/baixo). Distribua entre vários modelos populares — "
-        "não concentre tudo num só. Pode deixar variações com 0.\n"
+        "abaixo. Regras OBRIGATÓRIAS:\n"
+        f"1. Máximo {max_por_variacao} unidades por variação (cor+modelo). NUNCA coloque mais que {max_por_variacao} na mesma variação.\n"
+        "2. Priorize os MODELOS que mais saem (maior 'vendas') e as cores com menor estoque.\n"
+        "3. Distribua entre MUITAS variações diferentes para ter variedade de cores — "
+        "não concentre em poucas. Para vender capas é preciso ter várias opções de cor.\n"
+        "4. Pode deixar variações com 0 se necessário.\n"
         + (f"Instrução adicional do usuário: {instrucao_extra}\n" if instrucao_extra else "")
         + "\nVariações (idx|variacao_id|nome|estoque|vendas):\n" + "\n".join(linhas)
         + '\n\nResponda APENAS com JSON: {"itens":[{"variacao_id":"...","quantidade":N}, ...]}. '
-        f"A soma das quantidades deve ser {qtd_total}."
+        f"A soma das quantidades deve ser exatamente {qtd_total}."
     )
     try:
         import anthropic as _ant
@@ -2383,6 +2498,28 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         unit = cb if cb > 0 else _parse_valor(it.get("valor_custo"))
         it["custo_unit"] = round(unit, 2)
         it["custo_total"] = round(unit * it["quantidade"], 2)
+
+    # Garante teto máximo mesmo que a IA ignore a instrução.
+    if max_por_variacao and max_por_variacao > 0:
+        sobra = 0
+        for it in base["itens"]:
+            if it["quantidade"] > max_por_variacao:
+                sobra += it["quantidade"] - max_por_variacao
+                it["quantidade"] = max_por_variacao
+        if sobra > 0:
+            candidatos_cap = sorted(
+                [it for it in base["itens"] if it["quantidade"] < max_por_variacao],
+                key=lambda x: x["score"], reverse=True,
+            )
+            idx = 0
+            while sobra > 0 and candidatos_cap:
+                it = candidatos_cap[idx % len(candidatos_cap)]
+                if it["quantidade"] < max_por_variacao:
+                    it["quantidade"] += 1
+                    sobra -= 1
+                idx += 1
+                if idx >= len(candidatos_cap) * max_por_variacao:
+                    break
 
     itens = sorted([it for it in base["itens"] if it["quantidade"] > 0],
                    key=lambda x: (x["quantidade"], x["score"]), reverse=True)
