@@ -4740,6 +4740,40 @@ def _main_content():
                     unsafe_allow_html=True,
                 )
 
+                # ── Loja desta geração (independente da loja do topo) ──
+                _lojas_map = {nome: lid for lid, nome in api.LOJAS.items()}
+                _lojas_opts = list(_lojas_map.keys()) + ["Todas as lojas"]
+                _idx_loja = (_lojas_opts.index(loja_sel_nome)
+                             if loja_sel_nome in _lojas_opts else 0)
+                _sg_loja_nome = st.selectbox(
+                    "🏪 Loja (vendas e estoque desta loja)", _lojas_opts, index=_idx_loja,
+                    key="sug_loja",
+                    help="Os IDs de variação são por loja — venda e estoque sairão desta loja.")
+                _sg_loja_id = _lojas_map.get(_sg_loja_nome)  # None = Todas
+
+                # Status do cache de vendas sincronizado.
+                _cv_info = api.carregar_cache_vendas(_sg_loja_id)
+                _cs1, _cs2 = st.columns([3, 1])
+                if _cv_info:
+                    _cs1.caption(
+                        f"🧾 Vendas sincronizadas: **{_cv_info.get('pedidos', 0)}** vendas / "
+                        f"**{_cv_info.get('itens', 0)}** itens · período {_cv_info.get('data_ini','?')} a "
+                        f"{_cv_info.get('data_fim','?')} · atualizado {(_cv_info.get('sincronizado_em','') or '')[:16].replace('T',' ')}")
+                else:
+                    _cs1.caption("🧾 Vendas ainda não sincronizadas para esta loja — clique em Sincronizar.")
+                if _cs2.button("🔄 Sincronizar vendas", key="sug_sync_vendas", use_container_width=True):
+                    with st.spinner(f"Baixando vendas dos últimos 6 meses ({_sg_loja_nome})…"):
+                        try:
+                            _prog = st.empty()
+                            def _cb(tp, pag, n):
+                                _prog.caption(f"… {tp}: página {pag} ({n} vendas)")
+                            _cv = api.sincronizar_vendas(_sg_loja_id, dias=180, progress_callback=_cb)
+                            _prog.empty()
+                            st.success(f"✅ {_cv.get('pedidos',0)} vendas / {_cv.get('itens',0)} itens sincronizados.")
+                            st.rerun()
+                        except Exception as _se:
+                            st.error(f"Erro ao sincronizar vendas: {_se}")
+
                 try:
                     _custos_tipo = api.carregar_custos_tipo() or {}
                 except Exception:
@@ -4747,7 +4781,7 @@ def _main_content():
                 _tipos_disp = sorted(_custos_tipo.keys())
                 # Apenas grupos de APARELHOS (capinhas), nunca acessórios.
                 try:
-                    _grupos_disp = api.grupos_de_aparelhos(loja_id)
+                    _grupos_disp = api.grupos_de_aparelhos(_sg_loja_id)
                 except Exception:
                     _grupos_disp = []
 
@@ -4801,7 +4835,7 @@ def _main_content():
                                  help="Verifica se a API está retornando vendas da loja no período."):
                         with st.spinner("Consultando vendas da loja…"):
                             try:
-                                _diag = api.diagnostico_vendas(dias=int(_sg_dias), loja_id=loja_id)
+                                _diag = api.diagnostico_vendas(dias=int(_sg_dias), loja_id=_sg_loja_id)
                                 st.json(_diag)
                             except Exception as _de:
                                 st.error(f"Erro no diagnóstico: {_de}")
@@ -4820,7 +4854,7 @@ def _main_content():
                                     custo_base=float(_sg_custo),
                                     grupo=None if _sg_grupo == "(todos)" else _sg_grupo,
                                     tipo=None if _sg_tipo == "(todos)" else _sg_tipo,
-                                    loja_id=loja_id,
+                                    loja_id=_sg_loja_id,
                                     dias_vendas=int(_sg_dias),
                                     estoque_alvo=int(_sg_alvo),
                                 )
@@ -4846,7 +4880,8 @@ def _main_content():
                             f"📦 {_rz['quantidade_distribuida']} un. entre "
                             f"{_rz['variacoes_no_pedido']} cor(es) · 💰 custo total R$ {_rz.get('custo_total', 0):,.2f}"
                             + (f" · 🤖 {_modo_lbl}" if _modo_lbl else "")
-                            + (f" · {_rz['pedidos_analisados']} venda(s) no período" if _rz['vendas_usadas'] else "")
+                            + (f" · 🧾 vendas {_rz.get('vendas_fonte','')} ({_rz['pedidos_analisados']})"
+                               if _rz['vendas_usadas'] else " · ⚠️ sem vendas (usou estoque)")
                         )
                         _sg_itens = _sg_res["itens"]
                         if not _sg_itens:

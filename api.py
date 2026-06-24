@@ -1707,6 +1707,51 @@ def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativ
     return out
 
 
+def cache_vendas_path(loja_id=None):
+    sufixo = f"_{loja_id}" if loja_id else "_todas"
+    return os.path.join(DIR, f"cache_vendas{sufixo}.json")
+
+
+def carregar_cache_vendas(loja_id=None):
+    p = cache_vendas_path(loja_id)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callback=None):
+    """
+    Baixa as vendas dos últimos `dias` (padrão ~6 meses) da loja, agrega a
+    quantidade vendida por variação e por cor, e salva em cache_vendas_{loja}.
+    Alimenta o gerador de pedidos sem precisar bater na API toda hora.
+    """
+    from datetime import date as _date, timedelta as _td
+    data_ini = str(_date.today() - _td(days=dias))
+    data_fim = str(_date.today())
+    agg = vendas_por_variacao(loja_id=loja_id, data_ini=data_ini, data_fim=data_fim,
+                              situacao_id=situacao_id, max_paginas=200,
+                              progress_callback=progress_callback)
+    cache = {
+        "sincronizado_em": datetime.now().isoformat(),
+        "loja_id": loja_id,
+        "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
+        "data_ini": data_ini,
+        "data_fim": data_fim,
+        "dias": dias,
+        "pedidos": agg.get("pedidos", 0),
+        "itens": agg.get("itens", 0),
+        "por_variacao": agg.get("por_variacao", {}),
+        "por_cor": agg.get("por_cor", {}),
+    }
+    with open(cache_vendas_path(loja_id), "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False)
+    return cache
+
+
 def _mapa_variacao_nome(loja_id=None):
     """variacao_id -> nome da variação ('Cor / Tipo'), a partir do cache."""
     cache = carregar_cache(loja_id) or {}
@@ -1721,7 +1766,8 @@ def _mapa_variacao_nome(loja_id=None):
 
 
 def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
-                        data_ini=None, data_fim=None, situacao_id=None):
+                        data_ini=None, data_fim=None, situacao_id=None,
+                        progress_callback=None):
     """
     Agrega a quantidade vendida por variação e por cor no período, SEMPRE
     filtrando por loja (`loja_id`). Lê os produtos direto da listagem de
@@ -1778,6 +1824,11 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
                     cor, _ = _extrair_cor_tipo(nome_cat)
                     if cor:
                         por_cor[cor] = por_cor.get(cor, 0) + qtd
+            if progress_callback:
+                try:
+                    progress_callback(vtipo or "produto", pagina, n_pedidos)
+                except Exception:
+                    pass
             meta = r.get("meta", {}) if isinstance(r, dict) else {}
             if not meta.get("proxima_pagina"):
                 break
@@ -1888,7 +1939,7 @@ def _parse_valor(v):
 def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
-                             custo_base=None, orcamento=None):
+                             custo_base=None, orcamento=None, usar_cache_vendas=True):
     """
     Gera uma sugestão de ordem de compra: distribui unidades de um grupo/tipo
     (ex.: 'Aveludada') entre as cores/variações, priorizando as mais vendidas
@@ -1921,12 +1972,23 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
 
     vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0}
     vendas_ok = False
+    vendas_fonte = ""
     if usar_vendas and quantidade_total > 0:
-        try:
-            vendas = vendas_por_variacao(dias_vendas, loja_id)
-            vendas_ok = bool(vendas["por_variacao"] or vendas["por_cor"])
-        except Exception as e:
-            vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
+        # 1) Prefere o cache de vendas já sincronizado (rápido, sem bater na API).
+        if usar_cache_vendas:
+            cv = carregar_cache_vendas(loja_id)
+            if cv and (cv.get("por_variacao") or cv.get("por_cor")):
+                vendas = cv
+                vendas_ok = True
+                vendas_fonte = f"cache ({cv.get('sincronizado_em', '')[:10]})"
+        # 2) Sem cache: consulta ao vivo.
+        if not vendas_ok:
+            try:
+                vendas = vendas_por_variacao(dias_vendas, loja_id)
+                vendas_ok = bool(vendas["por_variacao"] or vendas["por_cor"])
+                vendas_fonte = "ao vivo"
+            except Exception as e:
+                vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
 
     for it in variacoes:
         vid = it["variacao_id"]
@@ -1965,6 +2027,7 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         "variacoes_consideradas": len(variacoes),
         "variacoes_no_pedido": len([it for it in variacoes if it["quantidade"] > 0]),
         "vendas_usadas": vendas_ok,
+        "vendas_fonte": vendas_fonte,
         "pedidos_analisados": vendas.get("pedidos", 0),
         "dias_vendas": dias_vendas,
         "estoque_alvo": int(estoque_alvo),
