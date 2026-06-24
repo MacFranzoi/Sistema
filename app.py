@@ -4773,6 +4773,15 @@ def _main_content():
                             st.rerun()
                         except Exception as _se:
                             st.error(f"Erro ao sincronizar vendas: {_se}")
+                if _cs2.button("📦 Sincronizar estoque", key="sug_sync_estoque", use_container_width=True,
+                               help="Atualiza o estoque desta loja direto da GestãoClick."):
+                    with st.spinner(f"Atualizando estoque ({_sg_loja_nome})…"):
+                        try:
+                            _re = api.sincronizar_estoque_loja(_sg_loja_id)
+                            st.success(f"✅ Estoque atualizado: {_re.get('atualizadas',0)} variações.")
+                            st.rerun()
+                        except Exception as _ee:
+                            st.error(f"Erro ao sincronizar estoque: {_ee}")
 
                 try:
                     _custos_tipo = api.carregar_custos_tipo() or {}

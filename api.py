@@ -328,6 +328,37 @@ def sincronizar_produtos(loja_id=None, progress_callback=None):
     return cache
 
 
+def sincronizar_estoque_loja(loja_id=None, max_paginas=None):
+    """
+    Atualiza só o estoque das variações no cache da loja, buscando ao vivo
+    na GestãoClick (mais rápido que o sync completo). Devolve quantas
+    variações foram atualizadas.
+    """
+    cache = carregar_cache(loja_id)
+    if not cache:
+        cache = sincronizar_produtos(loja_id)
+    dados = buscar_estoque_ao_vivo(loja_id=loja_id, max_paginas=max_paginas)
+    estoque_map = {}
+    for p in dados.get("produtos", []):
+        pid = str(p.get("id", ""))
+        for v in p.get("variacoes", []):
+            vd = v.get("variacao", {})
+            estoque_map[f"{pid}_{vd.get('id','')}"] = vd.get("estoque", 0)
+    n = 0
+    for p in cache.get("produtos", []):
+        pid = str(p.get("id", ""))
+        for v in p.get("variacoes", []):
+            vd = v.get("variacao", {})
+            k = f"{pid}_{vd.get('id','')}"
+            if k in estoque_map:
+                vd["estoque"] = estoque_map[k]
+                n += 1
+    cache["sincronizado_em"] = datetime.now().isoformat()
+    with open(cache_path(loja_id), "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    return {"atualizadas": n, "loja_id": loja_id, "sincronizado_em": cache["sincronizado_em"]}
+
+
 def carregar_cache(loja_id=None):
     p = cache_path(loja_id)
     if not os.path.exists(p):
@@ -1936,6 +1967,47 @@ def _parse_valor(v):
         return 0.0
 
 
+def _distribuir_por_cor(itens, total):
+    """
+    Distribui `total` em dois níveis para garantir VARIEDADE DE CORES:
+      1) reparte o total entre as CORES, proporcional às vendas de cada cor
+         (cores que vendem mais levam mais — mas todas as que vendem aparecem);
+      2) dentro de cada cor, reparte a cota entre os modelos pelo score.
+    Cai para a distribuição simples se não houver sinal de vendas por cor.
+    """
+    total = int(total)
+    for it in itens:
+        it["quantidade"] = 0
+    if total <= 0 or not itens:
+        return itens
+
+    # Agrupa por cor e soma as vendas da cor.
+    por_cor = {}
+    for it in itens:
+        por_cor.setdefault(it.get("cor", ""), []).append(it)
+    vendas_cor = {c: sum(float(i.get("vendas", 0) or 0) for i in g) for c, g in por_cor.items()}
+
+    if sum(vendas_cor.values()) <= 0:
+        return _distribuir_quantidade(itens, total, chave="score")
+
+    # Nível 1: cotas por cor (maior resto), ponderado pelas vendas da cor.
+    cores = list(por_cor.keys())
+    pesos = [vendas_cor[c] for c in cores]
+    soma = sum(pesos)
+    brutos = [total * p / soma for p in pesos]
+    cotas = [int(b) for b in brutos]
+    resto = total - sum(cotas)
+    ordem = sorted(range(len(cores)), key=lambda i: brutos[i] - cotas[i], reverse=True)
+    for k in range(resto):
+        cotas[ordem[k % len(ordem)]] += 1
+
+    # Nível 2: dentro de cada cor, reparte pelo score entre os modelos.
+    for c, cota in zip(cores, cotas):
+        if cota > 0:
+            _distribuir_quantidade(por_cor[c], cota, chave="score")
+    return itens
+
+
 def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
                              dias_vendas=30, usar_vendas=True, estoque_alvo=0,
                              peso_vendas=2.0, incluir_sem_pedido=False,
@@ -2000,7 +2072,12 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         urgencia = abs(it["estoque"]) if it["estoque"] < 0 else 0
         it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"] + urgencia
 
-    _distribuir_quantidade(variacoes, quantidade_total, chave="score")
+    # Distribuição com variedade de cores quando há sinal de vendas; senão,
+    # cai para a repartição simples por score (estoque/déficit).
+    if vendas_ok:
+        _distribuir_por_cor(variacoes, quantidade_total)
+    else:
+        _distribuir_quantidade(variacoes, quantidade_total, chave="score")
 
     for it in variacoes:
         it["estoque_atual"] = it["estoque"]
