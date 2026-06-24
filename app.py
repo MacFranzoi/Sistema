@@ -2001,23 +2001,47 @@ def _main_content():
                 if loja_rel != "Todas":
                     loja_id_rel = next((lid for lid, ln in api.LOJAS.items() if ln == loja_rel), None)
                 c_rel = api.carregar_cache(loja_id_rel)
+                # Cache de vendas (por variação) para cruzar com o estoque.
+                _cv_rel = api.carregar_cache_vendas(loja_id_rel) or {}
+                _vendas_var = _cv_rel.get("por_variacao", {}) or {}
                 if c_rel:
                     prods = c_rel.get("produtos", [])
                     rows = []
                     for p in prods:
                         for v in p.get("variacoes", []):
                             vd = v.get("variacao", v)
+                            est = int(vd.get("estoque", 0) or 0)
+                            vendido = int(round(float(_vendas_var.get(str(vd.get("id","")), 0) or 0)))
                             rows.append({
                                 "Produto": p.get("nome",""),
                                 "Variação": vd.get("nome",""),
                                 "Cód.": vd.get("codigo",""),
-                                "Estoque": int(vd.get("estoque", 0) or 0),
+                                "Estoque": est,
+                                "Vendido": vendido,
+                                "Situação": ("Parado" if est > 0 and vendido == 0
+                                             else "Repor" if est <= 0 and vendido > 0
+                                             else "OK"),
                             })
                     if rows:
                         df_rc = pd.DataFrame(rows)
                         total_itens = df_rc["Estoque"].sum()
-                        st.success(f"**{len(df_rc)} variações** · **{total_itens} unidades** em estoque")
-                        df_rc = df_rc.sort_values("Estoque", ascending=True)
+                        _parados = int((df_rc["Situação"] == "Parado").sum())
+                        _repor = int((df_rc["Situação"] == "Repor").sum())
+                        if _vendas_var:
+                            _ve = (_cv_rel.get("sincronizado_em","") or "")[:16].replace("T"," ")
+                            st.success(f"**{len(df_rc)} variações** · **{total_itens} un.** em estoque · "
+                                       f"🛑 {_parados} parados · 🔁 {_repor} p/ repor · vendas até {_ve}")
+                        else:
+                            st.success(f"**{len(df_rc)} variações** · **{total_itens} unidades** em estoque "
+                                       f"· (sincronize vendas p/ ver giro)")
+                        _ordem = st.radio("Ordenar por", ["Menor estoque", "Mais vendidos", "Parados primeiro"],
+                                          horizontal=True, key="rc_ordem")
+                        if _ordem == "Mais vendidos":
+                            df_rc = df_rc.sort_values("Vendido", ascending=False)
+                        elif _ordem == "Parados primeiro":
+                            df_rc = df_rc.sort_values(["Situação", "Estoque"], ascending=[True, False])
+                        else:
+                            df_rc = df_rc.sort_values("Estoque", ascending=True)
                         st.dataframe(df_rc, use_container_width=True, hide_index=True)
                     else:
                         st.info("Cache vazio. Sincronize primeiro.")
