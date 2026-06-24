@@ -1926,8 +1926,9 @@ def _distribuir_quantidade(itens, total, chave="score"):
     pesos = [max(0.0, float(it.get(chave, 0) or 0)) for it in itens]
     soma = sum(pesos)
     if soma <= 0:
-        # Sem sinal de demanda: prioriza quem tem menor estoque.
-        ordem = sorted(range(len(itens)), key=lambda i: itens[i].get("estoque", 0))
+        # Sem sinal de demanda: prioriza quem tem menor estoque POSITIVO
+        # (negativo é falso, vira 0).
+        ordem = sorted(range(len(itens)), key=lambda i: max(0, itens[i].get("estoque", 0)))
         base = [0] * len(itens)
         for k in range(total):
             base[ordem[k % len(ordem)]] += 1
@@ -2068,9 +2069,12 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         if not vend:
             vend = vendas["por_cor"].get(it["cor"], 0)
         it["vendas"] = round(float(vend or 0), 2)
-        it["deficit"] = max(0, int(estoque_alvo) - it["estoque"])
-        urgencia = abs(it["estoque"]) if it["estoque"] < 0 else 0
-        it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"] + urgencia
+        # IMPORTANTE: estoque negativo é falso (acumulado de anos), então é
+        # tratado como 0. A prioridade vem das VENDAS; o déficit só conta
+        # para quem tem estoque positivo abaixo do alvo.
+        est_real = max(0, it["estoque"])
+        it["deficit"] = max(0, int(estoque_alvo) - est_real)
+        it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"]
 
     # Distribuição com variedade de cores quando há sinal de vendas; senão,
     # cai para a repartição simples por score (estoque/déficit).
