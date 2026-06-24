@@ -2210,10 +2210,11 @@ def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2, max_modelos=9
     restante = total
 
     if qtd_por_modelo > 0:
-        # Modo FIXO: cada modelo recebe exatamente qtd_por_modelo unidades,
-        # distribuídas entre suas cores (por popularidade/déficit).
+        # Modo FIXO: cada modelo recebe qtd_por_modelo unidades, distribuídas
+        # entre suas cores por popularidade/déficit. Distribui em rodadas
+        # (round-robin) — se houver mais cores que a meta, as melhores cores
+        # levam 1 cada; se houver poucas cores, elas acumulam até bater a meta.
         for modelo, grupo in modelos_ranqueados:
-            cota_modelo = min(qtd_por_modelo, max_por_variacao * len(grupo))
             cores_ordenadas = sorted(
                 grupo,
                 key=lambda x: (int(x.get("deficit", 0) > 0),
@@ -2221,13 +2222,21 @@ def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2, max_modelos=9
                                float(x.get("vendas_cor", 0) or 0)),
                 reverse=True,
             )
-            alocado = 0
-            for it in cores_ordenadas:
-                if alocado >= cota_modelo:
+            restante_modelo = qtd_por_modelo
+            # Teto por cor cresce se faltam cores para distribuir a meta.
+            import math as _math
+            teto_cor = max(max_por_variacao, _math.ceil(qtd_por_modelo / max(1, len(cores_ordenadas))))
+            idx = 0
+            seguranca = 0
+            while restante_modelo > 0 and cores_ordenadas:
+                it = cores_ordenadas[idx % len(cores_ordenadas)]
+                if it["quantidade"] < teto_cor:
+                    it["quantidade"] += 1
+                    restante_modelo -= 1
+                idx += 1
+                seguranca += 1
+                if seguranca > len(cores_ordenadas) * (teto_cor + 1):
                     break
-                dar = min(max_por_variacao, cota_modelo - alocado)
-                it["quantidade"] = dar
-                alocado += dar
         return itens
 
     # Rodadas: cada rodada oferece até max_por_variacao slots por modelo.
@@ -2488,6 +2497,13 @@ def sugerir_pedido_ia(quantidade_total=0, grupo=None, tipo=None, loja_id=None,
         qtd_por_modelo=qtd_por_modelo, max_modelos=max_modelos,
     )
     if not base.get("ok"):
+        return base
+
+    # Quando o usuário define META POR MODELO (ex.: 10 capas de cada), usa a
+    # distribuição determinística exata — a IA não deve refazer/cortar as cotas.
+    if qtd_por_modelo and qtd_por_modelo > 0:
+        base["itens"] = [it for it in base["itens"] if it["quantidade"] > 0]
+        base["modo"] = "determinístico (meta por modelo)"
         return base
 
     qtd_total = base["resumo"]["quantidade_total"]
