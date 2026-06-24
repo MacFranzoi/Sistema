@@ -68,12 +68,13 @@ def _atualizar_estoque_cache():
 
 
 def _sincronizar_vendas_todas_lojas():
-    """Sincroniza o cache de vendas (últimos ~6 meses) de cada loja."""
+    """Sincroniza o cache de vendas (últimos ~6 meses) de cada loja e
+    persiste no GitHub para sobreviver a reinícios do container."""
     try:
         import api
         for loja_id in list(api.LOJAS.keys()) + [None]:
             try:
-                cv = api.sincronizar_vendas(loja_id, dias=180)
+                cv = api.sincronizar_vendas(loja_id, dias=180, push_github=True)
                 logger.info(f"Vendas sincronizadas: loja={loja_id} "
                             f"({cv.get('pedidos', 0)} vendas, {cv.get('itens', 0)} itens)")
             except Exception as e:
@@ -123,7 +124,16 @@ def start():
             replace_existing=True,
         )
 
-        # Sync de vendas todo dia às 5h (alimenta o pedido automático)
+        # Sync de vendas a cada 3 horas (alimenta o pedido automático)
+        sched.add_job(
+            _sincronizar_vendas_todas_lojas,
+            IntervalTrigger(hours=3),
+            id="sync_vendas_intervalo",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+
+        # Sync de vendas também todo dia às 5h (garante atualização diária)
         sched.add_job(
             _sincronizar_vendas_todas_lojas,
             CronTrigger(hour=5, minute=0),
@@ -133,7 +143,8 @@ def start():
         )
 
         sched.start()
-        logger.info("Scheduler iniciado: sync 2h, estoque 15min, sync diário 6h, vendas 5h")
+        logger.info("Scheduler iniciado: produtos 2h, estoque 15min, "
+                    "sync diário 6h, vendas 3h + 5h")
 
     except ImportError:
         logger.warning("APScheduler não instalado — tarefas automáticas desativadas")
