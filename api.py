@@ -1769,11 +1769,13 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
                     if qtd <= 0:
                         continue
                     vid = str(prod.get("variacao_id") or "")
-                    nome = prod.get("nome_produto") or nome_por_vid.get(vid, "") or ""
+                    # A cor vem do catálogo ('Cor / Tipo'); nas vendas o
+                    # nome_produto é só o modelo (ex.: 'iPhone 16 Plus').
+                    nome_cat = nome_por_vid.get(vid, "") or prod.get("nome_produto") or ""
                     n_itens += 1
                     if vid:
                         por_var[vid] = por_var.get(vid, 0) + qtd
-                    cor, _ = _extrair_cor_tipo(nome)
+                    cor, _ = _extrair_cor_tipo(nome_cat)
                     if cor:
                         por_cor[cor] = por_cor.get(cor, 0) + qtd
             meta = r.get("meta", {}) if isinstance(r, dict) else {}
