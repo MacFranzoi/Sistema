@@ -1,3 +1,5 @@
 .streamlit/secrets.toml
 __pycache__/
 cache_vendas_*.json
+
+cache_vendas_lista_*.json
