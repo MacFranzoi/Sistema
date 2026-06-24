@@ -1603,6 +1603,214 @@ def buscar_compras(data_ini=None, data_fim=None, loja_id=None, pagina=1, limite=
     return r.get("data", r) if isinstance(r, dict) else []
 
 # ──────────────────────────────────────────────
+# Sugestão automática de pedido (reposição por grupo/variação)
+# ──────────────────────────────────────────────
+def _extrair_cor_tipo(nome_variacao):
+    """'Preto / Aveludada' -> ('preto', 'aveludada'). Sem '/' -> (nome, '')."""
+    partes = [x.strip() for x in (nome_variacao or "").split("/") if x.strip()]
+    if len(partes) >= 2:
+        return partes[0].lower(), partes[-1].lower()
+    return (nome_variacao or "").strip().lower(), ""
+
+
+def coletar_variacoes_catalogo(loja_id=None, grupo=None, tipo=None, somente_ativos=True):
+    """
+    Varre o cache de produtos e devolve a lista achatada de variações,
+    opcionalmente filtrada por grupo (nome_grupo) e/ou tipo de capa
+    (ex.: 'Aveludada', 'Silicone'), buscado dentro do nome da variação.
+    """
+    cache = carregar_cache(loja_id) or {}
+    grupo_l = (grupo or "").strip().lower()
+    tipo_l = (tipo or "").strip().lower()
+    out = []
+    for p in cache.get("produtos", []) or []:
+        if somente_ativos and str(p.get("ativo", "1")) not in ("1", "True", "true"):
+            continue
+        if grupo_l and grupo_l not in (p.get("nome_grupo", "") or "").lower():
+            continue
+        for v in p.get("variacoes", []) or []:
+            vd = v.get("variacao", v) if isinstance(v, dict) else {}
+            nome = vd.get("nome", "") or ""
+            if tipo_l and tipo_l not in nome.lower():
+                continue
+            cor, vtipo = _extrair_cor_tipo(nome)
+            try:
+                est = int(float(vd.get("estoque", 0) or 0))
+            except (TypeError, ValueError):
+                est = 0
+            valores = vd.get("valores") or p.get("valores") or []
+            custo = (valores[0].get("valor_custo") if valores else None) or p.get("valor_custo", "")
+            out.append({
+                "produto_id": str(p.get("id", "")),
+                "produto_nome": p.get("nome", ""),
+                "nome_grupo": p.get("nome_grupo", ""),
+                "cod_interno": p.get("codigo_interno", ""),
+                "variacao_id": str(vd.get("id", "")),
+                "variacao_cod": vd.get("codigo", ""),
+                "variacao_nome": nome,
+                "cor": cor,
+                "tipo": vtipo,
+                "estoque": est,
+                "valor_custo": custo,
+            })
+    return out
+
+
+def vendas_por_variacao(dias=30, loja_id=None, max_pedidos=400, data_ini=None, data_fim=None):
+    """
+    Agrega a quantidade vendida por variação (variacao_id) e por cor nos
+    últimos `dias` (ou no intervalo informado), consultando o detalhe de
+    cada venda. Tolerante a variações de schema da GestãoClick.
+    Devolve {por_variacao: {id: qtd}, por_cor: {cor: qtd}, pedidos: n}.
+    """
+    from datetime import date as _date, timedelta as _td
+    if not data_fim:
+        data_fim = str(_date.today())
+    if not data_ini:
+        data_ini = str(_date.today() - _td(days=dias))
+
+    vendas = buscar_vendas(data_ini=data_ini, data_fim=data_fim, loja_id=loja_id, limite=500)
+    if not isinstance(vendas, list):
+        vendas = []
+
+    por_var, por_cor = {}, {}
+    for v in vendas[:max_pedidos]:
+        pid = v.get("id") or v.get("codigo")
+        if not pid:
+            continue
+        try:
+            det = buscar_venda(pid, loja_id=loja_id)
+        except Exception:
+            continue
+        itens = det.get("produtos") or det.get("itens") or []
+        for it in itens:
+            prod = it.get("produto", it) if isinstance(it, dict) else {}
+            try:
+                qtd = float(prod.get("quantidade") or prod.get("qtde") or prod.get("qtd") or 0)
+            except (TypeError, ValueError):
+                qtd = 0.0
+            if qtd <= 0:
+                continue
+            vid = str(prod.get("variacao_id") or prod.get("produto_variacao_id") or
+                      prod.get("id_variacao") or "")
+            nome = prod.get("nome_produto") or prod.get("nome") or prod.get("descricao") or ""
+            if vid:
+                por_var[vid] = por_var.get(vid, 0) + qtd
+            cor, _ = _extrair_cor_tipo(nome)
+            if cor:
+                por_cor[cor] = por_cor.get(cor, 0) + qtd
+    return {"por_variacao": por_var, "por_cor": por_cor, "pedidos": len(vendas)}
+
+
+def _distribuir_quantidade(itens, total, chave="score"):
+    """
+    Distribui `total` unidades inteiras entre `itens` proporcionalmente a
+    item[chave], usando o método do maior resto (a soma fecha exatamente em
+    `total`). Itens com peso 0 só recebem sobra se ninguém mais tiver peso.
+    """
+    total = int(total)
+    if total <= 0 or not itens:
+        for it in itens:
+            it["quantidade"] = 0
+        return itens
+
+    pesos = [max(0.0, float(it.get(chave, 0) or 0)) for it in itens]
+    soma = sum(pesos)
+    if soma <= 0:
+        # Sem sinal de demanda: prioriza quem tem menor estoque.
+        ordem = sorted(range(len(itens)), key=lambda i: itens[i].get("estoque", 0))
+        base = [0] * len(itens)
+        for k in range(total):
+            base[ordem[k % len(ordem)]] += 1
+        for it, q in zip(itens, base):
+            it["quantidade"] = q
+        return itens
+
+    brutos = [total * peso / soma for peso in pesos]
+    base = [int(b) for b in brutos]
+    resto = total - sum(base)
+    # Distribui a sobra para os maiores restos fracionários.
+    ordem = sorted(range(len(itens)), key=lambda i: brutos[i] - base[i], reverse=True)
+    for k in range(resto):
+        base[ordem[k % len(ordem)]] += 1
+    for it, q in zip(itens, base):
+        it["quantidade"] = q
+    return itens
+
+
+def sugerir_pedido_reposicao(quantidade_total, grupo=None, tipo=None, loja_id=None,
+                             dias_vendas=30, usar_vendas=True, estoque_alvo=0,
+                             peso_vendas=2.0, incluir_sem_pedido=False):
+    """
+    Gera uma sugestão de ordem de compra: distribui `quantidade_total`
+    unidades de um grupo/tipo (ex.: 'Aveludada') entre as cores/variações,
+    priorizando as mais vendidas recentemente e as que estão faltando no
+    estoque.
+
+    score = vendas_recentes * peso_vendas
+          + deficit_para_o_alvo
+          + (urgência por estoque negativo)
+
+    Retorna {ok, itens, resumo, ...}. Cada item traz a quantidade sugerida,
+    o estoque atual, as vendas no período e o estoque projetado após o pedido.
+    """
+    quantidade_total = int(quantidade_total or 0)
+    variacoes = coletar_variacoes_catalogo(loja_id, grupo, tipo)
+    if not variacoes:
+        return {"ok": False, "erro": "Nenhuma variação encontrada para o filtro informado.",
+                "itens": [], "resumo": {}}
+
+    vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0}
+    vendas_ok = False
+    if usar_vendas and quantidade_total > 0:
+        try:
+            vendas = vendas_por_variacao(dias_vendas, loja_id)
+            vendas_ok = bool(vendas["por_variacao"] or vendas["por_cor"])
+        except Exception as e:
+            vendas = {"por_variacao": {}, "por_cor": {}, "pedidos": 0, "erro": str(e)}
+
+    for it in variacoes:
+        vid = it["variacao_id"]
+        vend = vendas["por_variacao"].get(vid)
+        if not vend:
+            vend = vendas["por_cor"].get(it["cor"], 0)
+        it["vendas"] = round(float(vend or 0), 2)
+        it["deficit"] = max(0, int(estoque_alvo) - it["estoque"])
+        urgencia = abs(it["estoque"]) if it["estoque"] < 0 else 0
+        it["score"] = it["vendas"] * float(peso_vendas) + it["deficit"] + urgencia
+
+    _distribuir_quantidade(variacoes, quantidade_total, chave="score")
+
+    for it in variacoes:
+        it["estoque_atual"] = it["estoque"]
+        it["estoque_apos"] = it["estoque"] + it["quantidade"]
+
+    itens = sorted(
+        variacoes,
+        key=lambda x: (x["quantidade"], x["score"], -x["estoque"]),
+        reverse=True,
+    )
+    if not incluir_sem_pedido:
+        itens = [it for it in itens if it["quantidade"] > 0]
+
+    resumo = {
+        "quantidade_total": quantidade_total,
+        "quantidade_distribuida": sum(it["quantidade"] for it in variacoes),
+        "grupo": grupo or "",
+        "tipo": tipo or "",
+        "variacoes_consideradas": len(variacoes),
+        "variacoes_no_pedido": len([it for it in variacoes if it["quantidade"] > 0]),
+        "vendas_usadas": vendas_ok,
+        "pedidos_analisados": vendas.get("pedidos", 0),
+        "dias_vendas": dias_vendas,
+        "estoque_alvo": int(estoque_alvo),
+    }
+    return {"ok": True, "itens": itens, "resumo": resumo,
+            "aviso": None if (vendas_ok or not usar_vendas) else
+            "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."}
+
+
+# ──────────────────────────────────────────────
 # Financeiro
 # ──────────────────────────────────────────────
 def buscar_contas_receber(data_ini=None, data_fim=None, pagina=1, limite=50):

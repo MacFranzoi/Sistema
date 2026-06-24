@@ -4730,6 +4730,122 @@ def _main_content():
             with col_f3:
                 obs_pedido = st.text_input("📝 Observações", placeholder="ex: entrega até sexta", key="obs_pedido")
 
+            # ── 🤖 Sugestão automática de reposição (por grupo/variação) ─────
+            with st.expander("🤖 Gerar pedido automático (reposição inteligente)", expanded=False):
+                st.markdown(
+                    f"<p style='color:{TXT2};font-size:0.88rem'>Informe uma <b>quantidade total</b> de um "
+                    f"tipo de capa (ex.: Aveludada) e/ou grupo de modelos. O sistema distribui as unidades "
+                    f"entre as cores priorizando as <b>mais vendidas</b> no período e as que estão "
+                    f"<b>faltando no estoque</b>, e gera a ordem de compra pronta.</p>",
+                    unsafe_allow_html=True,
+                )
+
+                try:
+                    _tipos_disp = sorted((api.carregar_custos_tipo() or {}).keys())
+                except Exception:
+                    _tipos_disp = []
+                _grupos_disp = sorted({
+                    (p.get("nome_grupo") or "").strip()
+                    for p in (cache.get("produtos", []) if cache else [])
+                    if (p.get("nome_grupo") or "").strip()
+                })
+
+                _sg1, _sg2, _sg3 = st.columns(3)
+                _sg_tipo = _sg1.selectbox(
+                    "Tipo de capa", ["(todos)"] + _tipos_disp, key="sug_tipo",
+                    help="Filtra pela variação, ex.: Aveludada, Silicone Líquido.")
+                _sg_grupo = _sg2.selectbox(
+                    "Grupo de modelos", ["(todos)"] + _grupos_disp, key="sug_grupo",
+                    help="Opcional. Ex.: Galaxy A, Apple, Xiaomi 2023.")
+                _sg_qtd = _sg3.number_input(
+                    "Quantidade total", min_value=1, max_value=100000, value=20, step=1, key="sug_qtd")
+
+                _sg4, _sg5, _sg6 = st.columns(3)
+                _sg_usar_vendas = _sg4.toggle(
+                    "Usar histórico de vendas", value=True, key="sug_usar_vendas",
+                    help="Prioriza as cores mais vendidas. Desligue para usar só o estoque/déficit.")
+                _sg_dias = _sg5.number_input(
+                    "Período de vendas (dias)", min_value=7, max_value=365, value=30, step=1,
+                    key="sug_dias", disabled=not _sg_usar_vendas)
+                _sg_alvo = _sg6.number_input(
+                    "Estoque-alvo por cor", min_value=0, max_value=999, value=2, step=1, key="sug_alvo",
+                    help="Considera em falta tudo abaixo deste nível.")
+
+                if st.button("✨ Gerar sugestão", type="primary", key="sug_gerar", use_container_width=True):
+                    if not cache:
+                        st.warning("Sincronize os produtos primeiro.")
+                    else:
+                        with st.spinner("Analisando estoque e vendas…"):
+                            try:
+                                _sg_res = api.sugerir_pedido_reposicao(
+                                    quantidade_total=int(_sg_qtd),
+                                    grupo=None if _sg_grupo == "(todos)" else _sg_grupo,
+                                    tipo=None if _sg_tipo == "(todos)" else _sg_tipo,
+                                    loja_id=loja_id,
+                                    dias_vendas=int(_sg_dias),
+                                    usar_vendas=bool(_sg_usar_vendas),
+                                    estoque_alvo=int(_sg_alvo),
+                                )
+                                st.session_state["sug_resultado"] = _sg_res
+                            except Exception as _sg_e:
+                                st.error(f"Erro ao gerar sugestão: {_sg_e}")
+                                st.session_state.pop("sug_resultado", None)
+
+                _sg_res = st.session_state.get("sug_resultado")
+                if _sg_res:
+                    if not _sg_res.get("ok"):
+                        st.warning(_sg_res.get("erro", "Não foi possível gerar a sugestão."))
+                    else:
+                        _rz = _sg_res["resumo"]
+                        if _sg_res.get("aviso"):
+                            st.info(_sg_res["aviso"])
+                        st.caption(
+                            f"📦 {_rz['quantidade_distribuida']} un. distribuídas entre "
+                            f"{_rz['variacoes_no_pedido']} cor(es) · {_rz['variacoes_consideradas']} variações analisadas"
+                            + (f" · {_rz['pedidos_analisados']} venda(s) no período" if _rz['vendas_usadas'] else "")
+                        )
+                        _sg_itens = _sg_res["itens"]
+                        if not _sg_itens:
+                            st.info("Nenhuma cor recebeu unidades. Aumente a quantidade total.")
+                        else:
+                            _df_sug = pd.DataFrame([{
+                                "Modelo": it["produto_nome"],
+                                "Variação": it["variacao_nome"],
+                                "Qtd": it["quantidade"],
+                                "Estoque": it["estoque_atual"],
+                                "Vendas": it["vendas"],
+                                "Após": it["estoque_apos"],
+                            } for it in _sg_itens])
+                            st.dataframe(_df_sug, use_container_width=True, hide_index=True)
+
+                            if st.button("➕ Adicionar sugestão ao pedido", type="primary",
+                                         key="sug_add", use_container_width=True):
+                                st.session_state.setdefault("pedido_itens", [])
+                                _forn_sg = st.session_state.get("fornecedor_global", "") or "—"
+                                _obs_sg = f"Auto · {_rz['tipo'] or _rz['grupo'] or 'reposição'}".strip()
+                                _ja = {i.get("variacao_id") for i in st.session_state.pedido_itens}
+                                _n_add = 0
+                                for it in _sg_itens:
+                                    if it["variacao_id"] in _ja:
+                                        continue
+                                    st.session_state.pedido_itens.append({
+                                        "fornecedor": _forn_sg,
+                                        "produto_id": it["produto_id"],
+                                        "produto_nome": it["produto_nome"],
+                                        "cod_interno": it["cod_interno"],
+                                        "variacao_id": it["variacao_id"],
+                                        "variacao_cod": it["variacao_cod"],
+                                        "variacao_nome": it["variacao_nome"],
+                                        "estoque_atual": it["estoque_atual"],
+                                        "quantidade": it["quantidade"],
+                                        "valor_custo": it.get("valor_custo") or "0.00",
+                                        "observacao": _obs_sg,
+                                    })
+                                    _n_add += 1
+                                st.session_state.pop("sug_resultado", None)
+                                st.success(f"✅ {_n_add} item(ns) adicionados ao pedido!")
+                                st.rerun()
+
             # ── Bipar códigos de barras ──────────────────────────────────────
             with st.expander("📡 Bipar códigos de barras para o pedido", expanded=False):
                 st.caption("Clique na área abaixo e bipe todos os códigos em sequência. Cada bipe escreve um código por linha. Quando terminar, clique em **Gerar pedido**.")
