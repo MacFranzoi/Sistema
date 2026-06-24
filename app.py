@@ -5030,7 +5030,7 @@ def _main_content():
                         if not _sg_itens:
                             st.info("Nenhuma cor recebeu unidades. Aumente a quantidade ou o orçamento.")
                         else:
-                            st.caption("✏️ Edite a quantidade ou marque **Excluir** para remover itens antes de adicionar ao pedido.")
+                            st.caption("✏️ Edite a quantidade ou marque **Excluir** para remover itens. As alterações só são aplicadas ao clicar no botão (a página não recarrega a cada edição).")
                             _df_sug = pd.DataFrame([{
                                 "Excluir": False,
                                 "Modelo": it["produto_nome"],
@@ -5043,28 +5043,31 @@ def _main_content():
                                 "Após": it["estoque_apos"],
                                 "_idx": i,
                             } for i, it in enumerate(_sg_itens)])
-                            _df_edit = st.data_editor(
-                                _df_sug,
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Excluir": st.column_config.CheckboxColumn("🗑️", width="small"),
-                                    "Qtd": st.column_config.NumberColumn("Qtd", min_value=0, max_value=999, step=1, width="small"),
-                                    "Modelo": st.column_config.TextColumn("Modelo", disabled=True),
-                                    "Variação": st.column_config.TextColumn("Variação", disabled=True),
-                                    "Estoque": st.column_config.NumberColumn("Estoque", disabled=True, width="small"),
-                                    "Vendas": st.column_config.NumberColumn("Vendas", disabled=True, width="small"),
-                                    "Vendas cor": st.column_config.NumberColumn("Vendas cor", disabled=True, width="small"),
-                                    "Custo R$": st.column_config.NumberColumn("Custo R$", disabled=True, format="R$ %.2f"),
-                                    "Após": st.column_config.NumberColumn("Após", disabled=True, width="small"),
-                                    "_idx": None,
-                                },
-                                key="sug_df_edit",
-                                num_rows="fixed",
-                            )
+                            with st.form("form_sug_edit", clear_on_submit=False):
+                                _df_edit = st.data_editor(
+                                    _df_sug,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Excluir": st.column_config.CheckboxColumn("🗑️", width="small"),
+                                        "Qtd": st.column_config.NumberColumn("Qtd", min_value=0, max_value=999, step=1, width="small"),
+                                        "Modelo": st.column_config.TextColumn("Modelo", disabled=True),
+                                        "Variação": st.column_config.TextColumn("Variação", disabled=True),
+                                        "Estoque": st.column_config.NumberColumn("Estoque", disabled=True, width="small"),
+                                        "Vendas": st.column_config.NumberColumn("Vendas", disabled=True, width="small"),
+                                        "Vendas cor": st.column_config.NumberColumn("Vendas cor", disabled=True, width="small"),
+                                        "Custo R$": st.column_config.NumberColumn("Custo R$", disabled=True, format="R$ %.2f"),
+                                        "Após": st.column_config.NumberColumn("Após", disabled=True, width="small"),
+                                        "_idx": None,
+                                    },
+                                    key="sug_df_edit",
+                                    num_rows="fixed",
+                                )
+                                _add_sug = st.form_submit_button(
+                                    "➕ Adicionar sugestão ao pedido", type="primary",
+                                    use_container_width=True)
 
-                            if st.button("➕ Adicionar sugestão ao pedido", type="primary",
-                                         key="sug_add", use_container_width=True):
+                            if _add_sug:
                                 st.session_state.setdefault("pedido_itens", [])
                                 _forn_sg = st.session_state.get("fornecedor_global", "") or "—"
                                 _obs_sg = f"Auto · {_rz['tipo'] or _rz['grupo'] or 'reposição'}".strip()
