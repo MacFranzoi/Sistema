@@ -2611,92 +2611,54 @@ def _main_content():
 
         # ── Leitor externo (USB / Bluetooth) ─────────────────────────────────
         elif _ent_modo == "📡 Leitor externo":
-            st.caption("Clique na área abaixo, bipe todos os códigos em sequência e depois clique em **Adicionar tudo**. O leitor escreve um código por linha automaticamente.")
+            st.caption("Clique na área abaixo, bipe todos os códigos em sequência e depois clique em **Adicionar tudo**. O leitor escreve um código por linha automaticamente. A área não recarrega enquanto você bipa — o foco fica preso nela.")
 
-            _leitor_ver = st.session_state.get("leitor_area_ver", 0)
-            _leitor_area = st.text_area(
-                "Códigos bipados",
-                placeholder="Clique aqui e comece a bipar...\nCada código aparece em uma linha.",
-                height=220,
-                key=f"leitor_area_txt_{_leitor_ver}",
-                label_visibility="collapsed",
-            )
+            import streamlit.components.v1 as _stc_lext
+            import os as _os_lext
+            _lext_path = _os_lext.path.join(
+                _os_lext.path.dirname(_os_lext.path.abspath(__file__)),
+                "leitor_externo_component")
+            _leitor_comp = _stc_lext.declare_component("leitor_externo", path=_lext_path)
 
-            # Mapa código → nome para o contador JS
-            import json as _json_lext
+            # Mapa código → nome para o contador (dentro do próprio iframe)
             _lext_name_map = {
                 cod: f"{p.get('nome','')} / {v.get('nome','') if v else ''}"
                 for cod, (p, v) in _bc_map.items()
             }
-            import streamlit.components.v1 as _cv1_lext
-            _cv1_lext.html(f"""
-    <div style="font-family:sans-serif;font-size:0.85rem;line-height:1.8;padding:2px 0;font-weight:700;color:#111">
-      <span id="lext-total">0 linha(s)</span>
-      <span style="margin:0 6px;opacity:.4">|</span>
-      <span id="lext-modelos">0 modelo(s)</span>
-      <span style="margin:0 6px;opacity:.4">|</span>
-      <span id="lext-breakdown" style="font-weight:600"></span>
-    </div>
-    <script>
-    (function(){{
-      var map={_json_lext.dumps(_lext_name_map)};
-      function upd(){{
-        var tas=window.parent.document.querySelectorAll('[data-testid="stTextArea"] textarea');
-        var ta=null;
-        for(var i=0;i<tas.length;i++){{if(tas[i].placeholder&&tas[i].placeholder.indexOf('bipar')>-1){{ta=tas[i];break;}}}}
-        if(!ta)return;
-        var lines=ta.value.split('\\n').filter(function(l){{return l.trim()!==''}});
-        var byModel={{}};
-        lines.forEach(function(c){{
-          c=c.trim();
-          var nm=map[c];
-          var key=nm?nm.split(' / ')[0]:'❓ '+c;
-          byModel[key]=(byModel[key]||0)+1;
-        }});
-        var n=Object.keys(byModel).length;
-        document.getElementById('lext-total').textContent=lines.length+' linha(s)';
-        document.getElementById('lext-modelos').textContent=n+' modelo(s)';
-        document.getElementById('lext-breakdown').textContent=
-          Object.entries(byModel).sort(function(a,b){{return a[0].localeCompare(b[0])}})
-            .map(function(e){{return e[0]+': '+e[1]}}).join('  ·  ');
-      }}
-      setInterval(upd,500);upd();
-    }})();
-    </script>
-    """, height=36)
+            _processed_ts = st.session_state.pop("leitor_processed_ts", "")
+            _leitor_val = _leitor_comp(
+                name_map=_lext_name_map,
+                processed_ts=_processed_ts,
+                key="leitor_externo_comp",
+            )
 
-            _la1, _la2 = st.columns(2)
-            _processar = _la1.button("➕ Adicionar tudo à lista", type="primary",
-                                      use_container_width=True, key="leitor_area_add",
-                                      disabled=not (_leitor_area or "").strip())
-            if _la2.button("🗑️ Limpar", use_container_width=True, key="leitor_area_clear"):
-                st.session_state["leitor_area_ver"] = _leitor_ver + 1
-                st.rerun()
-
-            if _processar and _leitor_area.strip():
-                _codigos_l = [c.strip() for c in _leitor_area.splitlines() if c.strip()]
-                _ok_l, _nf_l, _sem_var_l = [], [], []
-                for _cod_l in _codigos_l:
-                    _match_l = _bc_map.get(_cod_l)
-                    if not _match_l:
-                        _nf_l.append(_cod_l)
-                        continue
-                    _prod_l, _var_l = _match_l
-                    if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
-                        _var_l = _prod_l["variacoes"][0].get("variacao", {})
-                    if _var_l:
-                        _bc_add_item(_prod_l, _var_l)
-                        _ok_l.append(f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}")
-                    else:
-                        _sem_var_l.append(_cod_l)
-                if _ok_l:
-                    st.success(f"✅ {len(_ok_l)} código(s) adicionado(s) à lista.")
-                if _nf_l:
-                    st.warning(f"⚠️ {len(_nf_l)} código(s) não encontrado(s): {', '.join(_nf_l[:5])}")
-                if _sem_var_l:
-                    st.info(f"ℹ️ {len(_sem_var_l)} produto(s) com múltiplas variações — adicione manualmente: {', '.join(_sem_var_l[:5])}")
-                if _ok_l:
-                    st.session_state["leitor_area_ver"] = _leitor_ver + 1
+            if _leitor_val and isinstance(_leitor_val, dict) and _leitor_val.get("codes"):
+                _ts_l = str(_leitor_val.get("ts", ""))
+                if _ts_l and _ts_l != st.session_state.get("leitor_last_ts", ""):
+                    st.session_state["leitor_last_ts"] = _ts_l
+                    _codigos_l = [c.strip() for c in _leitor_val["codes"] if c.strip()]
+                    _ok_l, _nf_l, _sem_var_l = [], [], []
+                    for _cod_l in _codigos_l:
+                        _match_l = _bc_map.get(_cod_l)
+                        if not _match_l:
+                            _nf_l.append(_cod_l)
+                            continue
+                        _prod_l, _var_l = _match_l
+                        if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
+                            _var_l = _prod_l["variacoes"][0].get("variacao", {})
+                        if _var_l:
+                            _bc_add_item(_prod_l, _var_l)
+                            _ok_l.append(f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}")
+                        else:
+                            _sem_var_l.append(_cod_l)
+                    if _ok_l:
+                        st.success(f"✅ {len(_ok_l)} código(s) adicionado(s) à lista.")
+                    if _nf_l:
+                        st.warning(f"⚠️ {len(_nf_l)} código(s) não encontrado(s): {', '.join(_nf_l[:5])}")
+                    if _sem_var_l:
+                        st.info(f"ℹ️ {len(_sem_var_l)} produto(s) com múltiplas variações — adicione manualmente: {', '.join(_sem_var_l[:5])}")
+                    # Sinaliza ao componente que processou (ele limpa a área e segue bipando)
+                    st.session_state["leitor_processed_ts"] = _ts_l
                     st.rerun()
 
         # ── Código manual ─────────────────────────────────────────────────────
