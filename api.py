@@ -1778,23 +1778,52 @@ def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callba
     sobreviver a reinícios do container.
     """
     from datetime import date as _date, timedelta as _td
-    data_ini = str(_date.today() - _td(days=dias))
-    data_fim = str(_date.today())
-    agg = vendas_por_variacao(loja_id=loja_id, data_ini=data_ini, data_fim=data_fim,
-                              situacao_id=situacao_id, max_paginas=200,
-                              progress_callback=progress_callback)
-    cache = {
+    hoje = _date.today()
+    data_ini = str(hoje - _td(days=dias))
+    ontem = str(hoje - _td(days=1))
+    data_fim = str(hoje)
+    # Base congelada (até ontem) + tail do dia (hoje). Assim a atualização
+    # incremental só precisa re-baixar o dia de hoje.
+    base = vendas_por_variacao(loja_id=loja_id, data_ini=data_ini, data_fim=ontem,
+                               situacao_id=situacao_id, max_paginas=200,
+                               progress_callback=progress_callback)
+    tail = vendas_por_variacao(loja_id=loja_id, data_ini=data_fim, data_fim=data_fim,
+                               situacao_id=situacao_id, max_paginas=50)
+    cache = _montar_cache_vendas(loja_id, dias, data_ini, data_fim, base, tail, situacao_id)
+    _salvar_cache_vendas(loja_id, cache, push_github)
+    return cache
+
+
+def _somar_contagens(a, b):
+    out = dict(a or {})
+    for k, v in (b or {}).items():
+        out[k] = out.get(k, 0) + v
+    return out
+
+
+def _montar_cache_vendas(loja_id, dias, data_ini, data_fim, base, tail, situacao_id=None):
+    por_var = _somar_contagens(base.get("por_variacao"), tail.get("por_variacao"))
+    por_cor = _somar_contagens(base.get("por_cor"), tail.get("por_cor"))
+    return {
         "sincronizado_em": datetime.now().isoformat(),
         "loja_id": loja_id,
         "loja_nome": LOJAS.get(str(loja_id), "Todas") if loja_id else "Todas",
         "data_ini": data_ini,
         "data_fim": data_fim,
         "dias": dias,
-        "pedidos": agg.get("pedidos", 0),
-        "itens": agg.get("itens", 0),
-        "por_variacao": agg.get("por_variacao", {}),
-        "por_cor": agg.get("por_cor", {}),
+        "situacao_id": situacao_id,
+        "tail_dia": data_fim,  # dia coberto pelo 'tail' (recarregado no incremental)
+        "base_por_variacao": base.get("por_variacao", {}),
+        "base_por_cor": base.get("por_cor", {}),
+        "base_pedidos": base.get("pedidos", 0),
+        "pedidos": base.get("pedidos", 0) + tail.get("pedidos", 0),
+        "itens": base.get("itens", 0) + tail.get("itens", 0),
+        "por_variacao": por_var,
+        "por_cor": por_cor,
     }
+
+
+def _salvar_cache_vendas(loja_id, cache, push_github=False):
     conteudo = json.dumps(cache, ensure_ascii=False)
     with open(cache_vendas_path(loja_id), "w", encoding="utf-8") as f:
         f.write(conteudo)
@@ -1804,6 +1833,30 @@ def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callba
                              f"sync vendas {cache['loja_nome']} {cache['sincronizado_em'][:16]}")
         except Exception:
             pass
+
+
+def atualizar_vendas_incremental(loja_id=None, push_github=False):
+    """
+    Monitora SÓ as vendas novas do dia: recarrega apenas o dia de hoje e
+    recombina com a base congelada (até ontem). Muito mais leve que refazer
+    os 6 meses — ideal para rodar de minuto em minuto.
+
+    Se não houver cache ainda, ou se o dia virou (tail_dia != hoje), faz o
+    sync completo para refreezar a base.
+    """
+    from datetime import date as _date
+    hoje = str(_date.today())
+    cv = carregar_cache_vendas(loja_id)
+    if not cv or "base_por_variacao" not in cv or cv.get("tail_dia") != hoje:
+        return sincronizar_vendas(loja_id, dias=(cv or {}).get("dias", 180),
+                                  push_github=push_github)
+    tail = vendas_por_variacao(loja_id=loja_id, data_ini=hoje, data_fim=hoje, max_paginas=50)
+    base = {"por_variacao": cv["base_por_variacao"], "por_cor": cv["base_por_cor"],
+            "pedidos": cv.get("base_pedidos", 0), "itens": 0}
+    cache = _montar_cache_vendas(loja_id, cv.get("dias", 180), cv.get("data_ini", ""),
+                                 hoje, base, tail, cv.get("situacao_id"))
+    cache["itens"] = cv.get("itens", 0)  # itens é informativo; mantém o da base
+    _salvar_cache_vendas(loja_id, cache, push_github)
     return cache
 
 
