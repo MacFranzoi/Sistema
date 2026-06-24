@@ -4733,41 +4733,65 @@ def _main_content():
             # ── 🤖 Sugestão automática de reposição (por grupo/variação) ─────
             with st.expander("🤖 Gerar pedido automático (reposição inteligente)", expanded=False):
                 st.markdown(
-                    f"<p style='color:{TXT2};font-size:0.88rem'>Informe uma <b>quantidade total</b> de um "
-                    f"tipo de capa (ex.: Aveludada) e/ou grupo de modelos. O sistema distribui as unidades "
-                    f"entre as cores priorizando as <b>mais vendidas</b> no período e as que estão "
-                    f"<b>faltando no estoque</b>, e gera a ordem de compra pronta.</p>",
+                    f"<p style='color:{TXT2};font-size:0.88rem'>Escolha um <b>tipo de capa</b> (ex.: Aveludada) "
+                    f"e/ou <b>grupo de aparelhos</b>, e informe a <b>quantidade</b> ou o <b>orçamento</b>. "
+                    f"O sistema distribui entre os modelos/cores priorizando os <b>mais vendidos</b> "
+                    f"na <b>loja {loja_sel_nome}</b> e o que está <b>faltando no estoque</b>.</p>",
                     unsafe_allow_html=True,
                 )
 
                 try:
-                    _tipos_disp = sorted((api.carregar_custos_tipo() or {}).keys())
+                    _custos_tipo = api.carregar_custos_tipo() or {}
                 except Exception:
-                    _tipos_disp = []
-                _grupos_disp = sorted({
-                    (p.get("nome_grupo") or "").strip()
-                    for p in (cache.get("produtos", []) if cache else [])
-                    if (p.get("nome_grupo") or "").strip()
-                })
+                    _custos_tipo = {}
+                _tipos_disp = sorted(_custos_tipo.keys())
+                # Apenas grupos de APARELHOS (capinhas), nunca acessórios.
+                try:
+                    _grupos_disp = api.grupos_de_aparelhos(loja_id)
+                except Exception:
+                    _grupos_disp = []
 
-                _sg1, _sg2, _sg3 = st.columns(3)
+                _sg1, _sg2 = st.columns(2)
                 _sg_tipo = _sg1.selectbox(
                     "Tipo de capa", ["(todos)"] + _tipos_disp, key="sug_tipo",
                     help="Filtra pela variação, ex.: Aveludada, Silicone Líquido.")
                 _sg_grupo = _sg2.selectbox(
-                    "Grupo de modelos", ["(todos)"] + _grupos_disp, key="sug_grupo",
-                    help="Opcional. Ex.: Galaxy A, Apple, Xiaomi 2023.")
-                _sg_qtd = _sg3.number_input(
-                    "Quantidade total", min_value=1, max_value=100000, value=20, step=1, key="sug_qtd")
+                    "Grupo de aparelhos", ["(todos)"] + _grupos_disp, key="sug_grupo",
+                    help="Só modelos de celular. Ex.: Galaxy A, Apple, Xiaomi 2023.")
 
-                _sg4, _sg5, _sg6 = st.columns(3)
-                _sg_usar_vendas = _sg4.toggle(
-                    "Usar histórico de vendas", value=True, key="sug_usar_vendas",
-                    help="Prioriza as cores mais vendidas. Desligue para usar só o estoque/déficit.")
-                _sg_dias = _sg5.number_input(
-                    "Período de vendas (dias)", min_value=7, max_value=365, value=30, step=1,
-                    key="sug_dias", disabled=not _sg_usar_vendas)
-                _sg_alvo = _sg6.number_input(
+                # Custo base — pré-preenchido pelo custo do tipo selecionado.
+                try:
+                    _custo_pad = api._parse_valor(_custos_tipo.get(_sg_tipo, 0))
+                except Exception:
+                    _custo_pad = 0.0
+                _sg3, _sg4 = st.columns(2)
+                _sg_modo = _sg3.radio(
+                    "Definir por", ["Quantidade", "Orçamento (R$)"], horizontal=True, key="sug_modo")
+                _sg_custo = _sg4.number_input(
+                    "Custo base (R$/un)", min_value=0.0, max_value=100000.0,
+                    value=float(_custo_pad), step=0.5, key="sug_custo",
+                    help="Custo unitário usado no pedido e para calcular quantos cabem no orçamento.")
+
+                _sg_qtd, _sg_orc = 0, 0.0
+                if _sg_modo == "Quantidade":
+                    _sg_qtd = st.number_input(
+                        "Quantidade total", min_value=1, max_value=100000, value=20, step=1, key="sug_qtd")
+                else:
+                    _sg_orc = st.number_input(
+                        "Quanto quero gastar (R$)", min_value=1.0, max_value=10000000.0,
+                        value=500.0, step=50.0, key="sug_orc")
+                    if _sg_custo > 0:
+                        st.caption(f"≈ **{int(_sg_orc // _sg_custo)} unidades** a R$ {_sg_custo:.2f} cada.")
+                    else:
+                        st.warning("Informe o custo base para converter o orçamento em unidades.")
+
+                _sg5, _sg6, _sg7 = st.columns(3)
+                _sg_usar_ia = _sg5.toggle(
+                    "Gerar por IA", value=True, key="sug_usar_ia",
+                    help="A IA monta a lista priorizando os modelos que mais saem.")
+                _sg_dias = _sg6.number_input(
+                    "Período de vendas (dias)", min_value=7, max_value=365, value=30, step=1, key="sug_dias")
+                _sg_alvo = _sg7.number_input(
                     "Estoque-alvo por cor", min_value=0, max_value=999, value=2, step=1, key="sug_alvo",
                     help="Considera em falta tudo abaixo deste nível.")
 
@@ -4775,17 +4799,22 @@ def _main_content():
                     if not cache:
                         st.warning("Sincronize os produtos primeiro.")
                     else:
-                        with st.spinner("Analisando estoque e vendas…"):
+                        with st.spinner("Analisando estoque e vendas da loja…"):
                             try:
-                                _sg_res = api.sugerir_pedido_reposicao(
+                                _kw = dict(
                                     quantidade_total=int(_sg_qtd),
+                                    orcamento=float(_sg_orc),
+                                    custo_base=float(_sg_custo),
                                     grupo=None if _sg_grupo == "(todos)" else _sg_grupo,
                                     tipo=None if _sg_tipo == "(todos)" else _sg_tipo,
                                     loja_id=loja_id,
                                     dias_vendas=int(_sg_dias),
-                                    usar_vendas=bool(_sg_usar_vendas),
                                     estoque_alvo=int(_sg_alvo),
                                 )
+                                if _sg_usar_ia:
+                                    _sg_res = api.sugerir_pedido_ia(**_kw)
+                                else:
+                                    _sg_res = api.sugerir_pedido_reposicao(usar_vendas=True, **_kw)
                                 st.session_state["sug_resultado"] = _sg_res
                             except Exception as _sg_e:
                                 st.error(f"Erro ao gerar sugestão: {_sg_e}")
@@ -4799,14 +4828,16 @@ def _main_content():
                         _rz = _sg_res["resumo"]
                         if _sg_res.get("aviso"):
                             st.info(_sg_res["aviso"])
+                        _modo_lbl = _sg_res.get("modo", "")
                         st.caption(
-                            f"📦 {_rz['quantidade_distribuida']} un. distribuídas entre "
-                            f"{_rz['variacoes_no_pedido']} cor(es) · {_rz['variacoes_consideradas']} variações analisadas"
+                            f"📦 {_rz['quantidade_distribuida']} un. entre "
+                            f"{_rz['variacoes_no_pedido']} cor(es) · 💰 custo total R$ {_rz.get('custo_total', 0):,.2f}"
+                            + (f" · 🤖 {_modo_lbl}" if _modo_lbl else "")
                             + (f" · {_rz['pedidos_analisados']} venda(s) no período" if _rz['vendas_usadas'] else "")
                         )
                         _sg_itens = _sg_res["itens"]
                         if not _sg_itens:
-                            st.info("Nenhuma cor recebeu unidades. Aumente a quantidade total.")
+                            st.info("Nenhuma cor recebeu unidades. Aumente a quantidade ou o orçamento.")
                         else:
                             _df_sug = pd.DataFrame([{
                                 "Modelo": it["produto_nome"],
@@ -4814,6 +4845,7 @@ def _main_content():
                                 "Qtd": it["quantidade"],
                                 "Estoque": it["estoque_atual"],
                                 "Vendas": it["vendas"],
+                                "Custo R$": it.get("custo_total", 0),
                                 "Após": it["estoque_apos"],
                             } for it in _sg_itens])
                             st.dataframe(_df_sug, use_container_width=True, hide_index=True)
