@@ -1796,6 +1796,8 @@ def diagnostico_vendas(dias=30, loja_id=None):
     d_ini = str(_date.today() - _td(days=dias))
     d_fim = str(_date.today())
     out = {"loja_id": loja_id, "data_ini": d_ini, "data_fim": d_fim, "por_tipo": {}}
+    nome_por_vid = _mapa_variacao_nome(loja_id)
+    out["variacoes_no_catalogo_da_loja"] = len(nome_por_vid)
     for vtipo in (None, "vendas_balcao"):
         try:
             params = {"limite": 50, "pagina": 1, "data_inicio": d_ini, "data_fim": d_fim}
@@ -1807,11 +1809,16 @@ def diagnostico_vendas(dias=30, loja_id=None):
             amostra = {}
             if data:
                 prods = data[0].get("produtos") or []
+                ex = prods[0].get("produto") if prods else None
+                vid_ex = str((ex or {}).get("variacao_id") or "")
                 amostra = {
                     "nome_loja": data[0].get("nome_loja"),
                     "situacao": data[0].get("nome_situacao"),
                     "qtd_produtos_na_venda": len(prods),
-                    "exemplo_produto": (prods[0].get("produto") if prods else None),
+                    "exemplo_produto": ex,
+                    "variacao_id_exemplo": vid_ex,
+                    "casa_com_catalogo": vid_ex in nome_por_vid,
+                    "variacao_no_catalogo": nome_por_vid.get(vid_ex, "(não encontrada — selecione a loja correta)"),
                 }
             out["por_tipo"][vtipo or "produto"] = {
                 "total_registros": meta.get("total_registros", len(data)),
