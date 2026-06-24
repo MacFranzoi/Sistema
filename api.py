@@ -2150,13 +2150,19 @@ def _parse_valor(v):
         return 0.0
 
 
-def _distribuir_por_cor(itens, total):
+def _distribuir_por_modelo_e_cor(itens, total, max_por_variacao=2):
     """
-    Distribui `total` em dois níveis para garantir VARIEDADE DE CORES:
-      1) reparte o total entre as CORES, proporcional às vendas de cada cor
-         (cores que vendem mais levam mais — mas todas as que vendem aparecem);
-      2) dentro de cada cor, reparte a cota entre os modelos pelo score.
-    Cai para a distribuição simples se não houver sinal de vendas por cor.
+    Distribui `total` priorizando MODELOS que mais venderam:
+
+    1) Rankeia modelos pelo total de vendas (soma de todas as cores).
+    2) Para cada modelo (do mais vendido ao menos), verifica quais cores
+       estão abaixo do alvo (deficit > 0) ou são populares (vendas_cor).
+    3) Aloca no máximo `max_por_variacao` unidades por cor/variação.
+    4) Percorre os modelos em rodadas até esgotar o total.
+
+    Isso garante: modelos que vendem mais aparecem no pedido com mais cores;
+    preto não domina — as cores são distribuídas por popularidade dentro
+    de cada modelo.
     """
     total = int(total)
     for it in itens:
@@ -2164,37 +2170,54 @@ def _distribuir_por_cor(itens, total):
     if total <= 0 or not itens:
         return itens
 
-    # Agrupa por cor. O peso de cada cor é a sua POPULARIDADE no histórico
-    # (vendas_cor, somando todos os modelos), com fallback para a soma das
-    # vendas das variações daquela cor.
-    por_cor = {}
+    # Agrupa variações por modelo.
+    por_modelo = {}
     for it in itens:
-        por_cor.setdefault(it.get("cor", ""), []).append(it)
-    vendas_cor = {}
-    for c, g in por_cor.items():
-        pop = max((float(i.get("vendas_cor", 0) or 0) for i in g), default=0.0)
-        if pop <= 0:
-            pop = sum(float(i.get("vendas", 0) or 0) for i in g)
-        vendas_cor[c] = pop
+        modelo = it.get("produto_nome", "")
+        por_modelo.setdefault(modelo, []).append(it)
 
-    if sum(vendas_cor.values()) <= 0:
-        return _distribuir_quantidade(itens, total, chave="score")
+    # Venda total do modelo = soma das vendas reais de suas variações
+    # + sinal de cor para modelos sem histórico próprio.
+    def _venda_modelo(grupo):
+        v = sum(float(i.get("vendas", 0) or 0) for i in grupo)
+        if v <= 0:
+            v = max((float(i.get("vendas_cor", 0) or 0) for i in grupo), default=0.0) * 0.1
+        return v
 
-    # Nível 1: cotas por cor (maior resto), ponderado pelas vendas da cor.
-    cores = list(por_cor.keys())
-    pesos = [vendas_cor[c] for c in cores]
-    soma = sum(pesos)
-    brutos = [total * p / soma for p in pesos]
-    cotas = [int(b) for b in brutos]
-    resto = total - sum(cotas)
-    ordem = sorted(range(len(cores)), key=lambda i: brutos[i] - cotas[i], reverse=True)
-    for k in range(resto):
-        cotas[ordem[k % len(ordem)]] += 1
+    modelos_ranqueados = sorted(
+        por_modelo.items(),
+        key=lambda kv: _venda_modelo(kv[1]),
+        reverse=True,
+    )
 
-    # Nível 2: dentro de cada cor, reparte pelo score entre os modelos.
-    for c, cota in zip(cores, cotas):
-        if cota > 0:
-            _distribuir_quantidade(por_cor[c], cota, chave="score")
+    restante = total
+    # Rodadas: cada rodada oferece até max_por_variacao slots por modelo.
+    # Modelos mais vendidos são atendidos primeiro.
+    for rodada in range(max_por_variacao):
+        if restante <= 0:
+            break
+        for modelo, grupo in modelos_ranqueados:
+            if restante <= 0:
+                break
+            # Dentro do modelo, rankeia as cores por: deficit > 0 primeiro,
+            # depois por popularidade da cor (vendas_cor) e por vendas da variação.
+            cores_ordenadas = sorted(
+                grupo,
+                key=lambda x: (
+                    int(x.get("deficit", 0) > 0),   # tem deficit
+                    float(x.get("vendas", 0) or 0),  # vendas da variação
+                    float(x.get("vendas_cor", 0) or 0),  # popularidade da cor
+                ),
+                reverse=True,
+            )
+            for it in cores_ordenadas:
+                if restante <= 0:
+                    break
+                if it["quantidade"] < max_por_variacao:
+                    it["quantidade"] += 1
+                    restante -= 1
+
+    return itens
     return itens
 
 
@@ -2280,36 +2303,13 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
                        + v_cor * 0.3
                        + it["deficit"])
 
-    # Distribuição com variedade de cores quando há sinal de vendas; senão,
-    # cai para a repartição simples por score (estoque/déficit).
+    # Distribuição MODEL-FIRST: rankeia modelos por vendas, dentro de cada
+    # modelo distribui pelas cores com mais déficit/popularidade.
+    # Sem sinal de vendas cai para distribuição simples por score.
     if vendas_ok:
-        _distribuir_por_cor(variacoes, quantidade_total)
+        _distribuir_por_modelo_e_cor(variacoes, quantidade_total, max_por_variacao=max_por_variacao or 2)
     else:
         _distribuir_quantidade(variacoes, quantidade_total, chave="score")
-
-    # Aplica teto máximo por variação (padrão: 3 unidades), redistribuindo o
-    # excesso para as próximas mais pontuadas.
-    if max_por_variacao and max_por_variacao > 0:
-        sobra = 0
-        for it in variacoes:
-            if it["quantidade"] > max_por_variacao:
-                sobra += it["quantidade"] - max_por_variacao
-                it["quantidade"] = max_por_variacao
-        if sobra > 0:
-            # Redistribui sobra em rodadas, pulando quem já atingiu o teto.
-            candidatos = sorted(
-                [it for it in variacoes if it["quantidade"] < max_por_variacao],
-                key=lambda x: x["score"], reverse=True,
-            )
-            idx = 0
-            while sobra > 0 and candidatos:
-                it = candidatos[idx % len(candidatos)]
-                if it["quantidade"] < max_por_variacao:
-                    it["quantidade"] += 1
-                    sobra -= 1
-                idx += 1
-                if idx >= len(candidatos) * max_por_variacao:
-                    break  # evita loop infinito se não há mais espaço
 
     for it in variacoes:
         it["estoque_atual"] = it["estoque"]
@@ -2320,17 +2320,40 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         if custo_base > 0:
             it["valor_custo"] = f"{custo_base:.2f}"
 
+    # Ordena: primeiro os modelos mais vendidos (total de vendas do modelo),
+    # dentro do modelo pela popularidade da cor.
+    _vendas_modelo = {}
+    for it in variacoes:
+        m = it["produto_nome"]
+        _vendas_modelo[m] = _vendas_modelo.get(m, 0) + it["vendas"]
     itens = sorted(
         variacoes,
-        key=lambda x: (x["quantidade"], x["score"], -x["estoque"]),
+        key=lambda x: (
+            x["quantidade"],                          # tem quantidade (aparece no pedido)
+            _vendas_modelo.get(x["produto_nome"], 0), # modelo mais vendido primeiro
+            float(x.get("vendas_cor", 0) or 0),       # cor mais popular dentro do modelo
+            x["vendas"],                               # venda específica desta variação
+        ),
         reverse=True,
     )
     if not incluir_sem_pedido:
         itens = [it for it in itens if it["quantidade"] > 0]
 
-    # Ranking de cores: agrega vendas por cor entre todas as variações,
-    # usando a venda real por variação como base primária e a popularidade
-    # de cor (por_cor do cache) como sinal de tendência geral.
+    # Ranking de modelos: soma de vendas de todas as cores do modelo.
+    _rank_mod = {}
+    for it in variacoes:
+        m = it["produto_nome"]
+        if m not in _rank_mod:
+            _rank_mod[m] = {"modelo": m, "vendas": 0.0, "qtd_sugerida": 0, "cores": set()}
+        _rank_mod[m]["vendas"] += it["vendas"]
+        _rank_mod[m]["qtd_sugerida"] += it["quantidade"]
+        if it["quantidade"] > 0:
+            _rank_mod[m]["cores"].add(it["cor"])
+    for v in _rank_mod.values():
+        v["cores"] = sorted(v["cores"])
+    ranking_modelos = sorted(_rank_mod.values(), key=lambda x: x["vendas"], reverse=True)
+
+    # Ranking de cores: agrega vendas por cor entre todas as variações.
     _rank_cor = {}
     for it in variacoes:
         c = it["cor"]
@@ -2338,7 +2361,6 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
             _rank_cor[c] = {"cor": c, "vendas": 0.0, "vendas_cor": it.get("vendas_cor", 0), "qtd_sugerida": 0}
         _rank_cor[c]["vendas"] += it["vendas"]
         _rank_cor[c]["qtd_sugerida"] += it["quantidade"]
-    # Ordena: primeiro por vendas reais das variações, depois pela popularidade global da cor.
     ranking_cores = sorted(
         _rank_cor.values(),
         key=lambda x: (x["vendas"], x["vendas_cor"]),
@@ -2367,6 +2389,7 @@ def sugerir_pedido_reposicao(quantidade_total=0, grupo=None, tipo=None, loja_id=
         "custo_total": round(sum(it.get("custo_total", 0) for it in variacoes), 2),
         "matches_por_variacao": _matches,
         "ranking_cores": ranking_cores,
+        "ranking_modelos": ranking_modelos,
     }
     aviso_base = None if (vendas_ok or not usar_vendas) else \
         "Sem dados de vendas no período — a sugestão usou estoque/déficit como critério."
