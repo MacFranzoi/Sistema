@@ -1647,12 +1647,27 @@ def _extrair_cor_tipo(nome_variacao):
     return (nome_variacao or "").strip().lower(), ""
 
 
+# Palavras que marcam um GRUPO como acessório/filme (não é capa de celular).
+_GRUPOS_NAO_CAPA = (
+    "cabo", "fone", "carregador", "suporte", "caixa de som", "fonte",
+    "adaptador", "powerbank", "power bank", "microfone", "teclado",
+    "localizador", "pulseira", "relógio", "relogio", "smartwatch", "watch",
+    "controle", "indução", "inducao", "fotografia", "acessório", "acessorio",
+    "adicionai", "adicional", "fivela", "umidificador", "car  bt", "car bt",
+    "audio", "áudio", "pelicula", "película", "hidrogel", "vidro",
+    "tc fonte", "tc carregador", "indução", "velcro",  # velcro de suporte
+)
+
+
 def grupos_de_aparelhos(loja_id=None, limiar=0.5):
     """
-    Devolve os grupos que representam MODELOS DE APARELHOS (capinhas),
-    não acessórios. Heurística data-driven: um grupo é de aparelhos quando
-    a maioria (>= limiar) das suas variações usa o padrão 'Cor / Tipo'
-    (contém '/'). Acessórios (Cabo, Fone, Suporte...) ficam de fora.
+    Devolve os grupos que representam CAPAS de celular — tanto os nomeados por
+    modelo (Apple, Galaxy A, Moto G...) quanto os nomeados por tipo de capa
+    (Aveludada, Aveludada Linha A, Metalizada, Tecido, Luxo, Space Silk...).
+
+    Critério: o grupo tem variações E o nome NÃO contém palavra de acessório/
+    filme (_GRUPOS_NAO_CAPA). Como reforço, grupos com a maioria das variações
+    no padrão 'Cor / Tipo' também entram.
     """
     cache = carregar_cache(loja_id) or {}
     stats = {}
@@ -1667,8 +1682,16 @@ def grupos_de_aparelhos(loja_id=None, limiar=0.5):
             if "/" in (vd.get("nome", "") or ""):
                 combar += 1
         stats[g] = (tot, combar)
-    aparelhos = [g for g, (tot, comb) in stats.items()
-                 if tot > 0 and (comb / tot) >= limiar]
+
+    aparelhos = []
+    for g, (tot, comb) in stats.items():
+        if tot <= 0:
+            continue
+        gl = g.lower()
+        if any(kw in gl for kw in _GRUPOS_NAO_CAPA):
+            continue  # acessório ou filme
+        # É capa: nomeado por modelo (tem '/') ou por tipo de capa (sem '/').
+        aparelhos.append(g)
     return sorted(aparelhos)
 
 
@@ -1786,12 +1809,53 @@ def sincronizar_vendas(loja_id=None, dias=180, situacao_id=None, progress_callba
     # incremental só precisa re-baixar o dia de hoje.
     base = vendas_por_variacao(loja_id=loja_id, data_ini=data_ini, data_fim=ontem,
                                situacao_id=situacao_id, max_paginas=200,
-                               progress_callback=progress_callback)
+                               progress_callback=progress_callback, coletar_lista=True)
     tail = vendas_por_variacao(loja_id=loja_id, data_ini=data_fim, data_fim=data_fim,
-                               situacao_id=situacao_id, max_paginas=50)
+                               situacao_id=situacao_id, max_paginas=50, coletar_lista=True)
     cache = _montar_cache_vendas(loja_id, dias, data_ini, data_fim, base, tail, situacao_id)
     _salvar_cache_vendas(loja_id, cache, push_github)
+    # Lista crua de vendas (cabeçalhos) em arquivo separado, para a página Vendas.
+    _salvar_vendas_lista(loja_id, (base.get("lista", []) + tail.get("lista", [])))
     return cache
+
+
+def cache_vendas_lista_path(loja_id=None):
+    sufixo = f"_{loja_id}" if loja_id else "_todas"
+    return os.path.join(DIR, f"cache_vendas_lista{sufixo}.json")
+
+
+def _salvar_vendas_lista(loja_id, lista):
+    try:
+        with open(cache_vendas_lista_path(loja_id), "w", encoding="utf-8") as f:
+            json.dump({"sincronizado_em": datetime.now().isoformat(), "lista": lista},
+                      f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def carregar_vendas_lista(loja_id=None):
+    p = cache_vendas_lista_path(loja_id)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def vendas_cacheadas(loja_id=None, data_ini=None, data_fim=None):
+    """Lista de vendas do cache (rápida), filtrada por período. None se não há cache."""
+    cache = carregar_vendas_lista(loja_id)
+    if not cache:
+        return None
+    lista = cache.get("lista", [])
+    if data_ini:
+        lista = [v for v in lista if (v.get("data") or "") >= data_ini]
+    if data_fim:
+        lista = [v for v in lista if (v.get("data") or "") <= data_fim]
+    return {"lista": sorted(lista, key=lambda v: v.get("data", ""), reverse=True),
+            "sincronizado_em": cache.get("sincronizado_em", "")}
 
 
 def _somar_contagens(a, b):
@@ -1850,13 +1914,19 @@ def atualizar_vendas_incremental(loja_id=None, push_github=False):
     if not cv or "base_por_variacao" not in cv or cv.get("tail_dia") != hoje:
         return sincronizar_vendas(loja_id, dias=(cv or {}).get("dias", 180),
                                   push_github=push_github)
-    tail = vendas_por_variacao(loja_id=loja_id, data_ini=hoje, data_fim=hoje, max_paginas=50)
+    tail = vendas_por_variacao(loja_id=loja_id, data_ini=hoje, data_fim=hoje,
+                               max_paginas=50, coletar_lista=True)
     base = {"por_variacao": cv["base_por_variacao"], "por_cor": cv["base_por_cor"],
             "pedidos": cv.get("base_pedidos", 0), "itens": 0}
     cache = _montar_cache_vendas(loja_id, cv.get("dias", 180), cv.get("data_ini", ""),
                                  hoje, base, tail, cv.get("situacao_id"))
     cache["itens"] = cv.get("itens", 0)  # itens é informativo; mantém o da base
     _salvar_cache_vendas(loja_id, cache, push_github)
+    # Atualiza a lista crua: troca as vendas de HOJE pelas recém-buscadas.
+    _lista_cache = carregar_vendas_lista(loja_id) or {"lista": []}
+    nova = [v for v in _lista_cache.get("lista", []) if (v.get("data") or "") != hoje]
+    nova += tail.get("lista", [])
+    _salvar_vendas_lista(loja_id, nova)
     return cache
 
 
@@ -1891,7 +1961,7 @@ def _mapa_variacao_nome(loja_id=None):
 
 def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
                         data_ini=None, data_fim=None, situacao_id=None,
-                        progress_callback=None):
+                        progress_callback=None, coletar_lista=False):
     """
     Agrega a quantidade vendida por variação e por cor no período, SEMPRE
     filtrando por loja (`loja_id`). Lê os produtos direto da listagem de
@@ -1899,6 +1969,8 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
     buscar o detalhe de cada venda.
 
     Devolve {por_variacao: {id: qtd}, por_cor: {cor: qtd}, pedidos, itens}.
+    Com coletar_lista=True inclui 'lista' (cabeçalhos enxutos de cada venda)
+    para alimentar a página de Vendas sem nova chamada à API.
     """
     from datetime import date as _date, timedelta as _td
     if not data_fim:
@@ -1908,6 +1980,7 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
 
     nome_por_vid = _mapa_variacao_nome(loja_id)
     por_var, por_cor = {}, {}
+    lista = []
     n_pedidos = n_itens = 0
 
     # A GestãoClick separa vendas normais (tipo=produto, o padrão) das vendas
@@ -1930,6 +2003,19 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
                 break
             for v in data:
                 n_pedidos += 1
+                if coletar_lista:
+                    lista.append({
+                        "id": v.get("id", ""),
+                        "codigo": v.get("codigo", ""),
+                        "data": (v.get("data") or "")[:10],
+                        "cliente": v.get("nome_cliente", "") or v.get("cliente_nome", ""),
+                        "vendedor": v.get("nome_vendedor", ""),
+                        "valor_total": float(v.get("valor_total") or 0),
+                        "situacao": v.get("nome_situacao", ""),
+                        "loja": v.get("nome_loja", ""),
+                        "qtd_itens": len(v.get("produtos") or []),
+                        "tipo": vtipo or "produto",
+                    })
                 for it in (v.get("produtos") or []):
                     prod = it.get("produto", it) if isinstance(it, dict) else {}
                     try:
@@ -1958,8 +2044,11 @@ def vendas_por_variacao(dias=30, loja_id=None, max_paginas=20, limite=100,
                 break
             pagina += 1
 
-    return {"por_variacao": por_var, "por_cor": por_cor,
-            "pedidos": n_pedidos, "itens": n_itens}
+    out = {"por_variacao": por_var, "por_cor": por_cor,
+           "pedidos": n_pedidos, "itens": n_itens}
+    if coletar_lista:
+        out["lista"] = lista
+    return out
 
 
 def diagnostico_vendas(dias=30, loja_id=None):

@@ -1702,21 +1702,39 @@ def _main_content():
     if _pg == "vendas":
 
         badge_sync(loja_id)
-        vf1, vf2, vf3 = st.columns([1, 1, 1])
+        vf1, vf2, vf3, vf4 = st.columns([1, 1, 1, 1])
         d_ini_v = vf1.date_input("De", value=date.today() - timedelta(days=30), key="v_ini")
         d_fim_v = vf2.date_input("Até", value=date.today(), key="v_fim")
-        if vf3.button("🔄 Carregar", use_container_width=True, key="v_load"):
+        _v_usar_cache = vf3.toggle("⚡ Cache", value=True, key="v_cache",
+                                   help="Lê do cache sincronizado (instantâneo). Desligue para buscar ao vivo.")
+        if vf4.button("🔄 Carregar", use_container_width=True, key="v_load"):
             st.session_state["vendas_dados"] = None
 
         if "vendas_dados" not in st.session_state or st.session_state.vendas_dados is None:
-            with st.spinner("Buscando vendas…"):
-                try:
-                    st.session_state["vendas_dados"] = api.buscar_vendas(
-                        data_ini=str(d_ini_v), data_fim=str(d_fim_v),
-                        loja_id=loja_id, limite=200)
-                except Exception as e:
-                    st.error(f"Erro: {e}")
-                    st.session_state["vendas_dados"] = []
+            if _v_usar_cache:
+                _cacheado = api.vendas_cacheadas(loja_id, str(d_ini_v), str(d_fim_v))
+                if _cacheado is not None:
+                    # Normaliza os campos do cache para o formato da tabela.
+                    st.session_state["vendas_dados"] = [{
+                        "numero": v.get("codigo", ""),
+                        "data": v.get("data", ""),
+                        "cliente_nome": v.get("cliente", ""),
+                        "valor_total": v.get("valor_total", 0),
+                        "status": v.get("situacao", ""),
+                    } for v in _cacheado["lista"]]
+                    st.caption(f"⚡ Do cache · atualizado {(_cacheado.get('sincronizado_em','') or '')[:16].replace('T',' ')}")
+                else:
+                    st.info("Sem cache de vendas ainda — buscando ao vivo. Sincronize as vendas para acelerar.")
+                    st.session_state["vendas_dados"] = None
+            if st.session_state.get("vendas_dados") is None:
+                with st.spinner("Buscando vendas…"):
+                    try:
+                        st.session_state["vendas_dados"] = api.buscar_vendas(
+                            data_ini=str(d_ini_v), data_fim=str(d_fim_v),
+                            loja_id=loja_id, limite=200)
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
+                        st.session_state["vendas_dados"] = []
 
         vendas = st.session_state.get("vendas_dados") or []
         if not isinstance(vendas, list): vendas = []
