@@ -2402,22 +2402,37 @@ def _main_content():
         # bipado por último — sem depender de clique. O rascunho só é limpo em
         # ações intencionais (Limpar / Confirmar / Enviar p/ aprovação), então,
         # se ele existe, é porque o trabalho não foi finalizado: é seguro voltar.
-        if not st.session_state.itens_entrada and not st.session_state.get("_ent_rasc_dispensado"):
+        if (not st.session_state.itens_entrada
+                and not st.session_state.get("_ent_rasc_dispensado")
+                and not st.session_state.get("_ent_rasc_checado")):
+            st.session_state["_ent_rasc_checado"] = True
             _rasc_ent = api.carregar_rascunho_entrada(_user)
-            if _rasc_ent and _rasc_ent.get("itens"):
-                st.session_state.itens_entrada = list(_rasc_ent["itens"])
-                _n_rasc = len(_rasc_ent["itens"])
+            if _rasc_ent and (_rasc_ent.get("itens") or _rasc_ent.get("leitor_raw")):
+                _itens_r = _rasc_ent.get("itens") or []
+                _raw_r = _rasc_ent.get("leitor_raw") or ""
+                st.session_state.itens_entrada = list(_itens_r)
+                if _raw_r:
+                    # Recoloca os códigos digitados de volta na caixa do leitor externo
+                    st.session_state["_leitor_raw_restore"] = _raw_r
                 _quando = (_rasc_ent.get("salvo_em", "") or "")[:16].replace("T", " ")
+                _partes = []
+                if _itens_r:
+                    _partes.append(f"{len(_itens_r)} item(ns) na lista")
+                if _raw_r:
+                    _partes.append(f"{len([l for l in _raw_r.splitlines() if l.strip()])} código(s) na caixa do leitor")
+                _resumo = " + ".join(_partes)
                 try:
-                    st.toast(f"♻️ Lista recuperada automaticamente — {_n_rasc} item(ns).", icon="♻️")
+                    st.toast(f"♻️ Recuperado automaticamente — {_resumo}.", icon="♻️")
                 except Exception:
                     pass
                 _rb1, _rb2 = st.columns([4, 1])
-                _rb1.info(f"♻️ **Lista recuperada automaticamente** — {_n_rasc} item(ns) "
-                          f"bipado(s) por último (salvos em {_quando}). Pode continuar de onde parou.")
+                _rb1.info(f"♻️ **Recuperado automaticamente** — {_resumo} (salvo em {_quando}). "
+                          f"Pode continuar de onde parou.")
                 if _rb2.button("🗑️ Começar do zero", use_container_width=True, key="ent_rasc_descartar"):
                     api.limpar_rascunho_entrada(_user)
                     st.session_state.itens_entrada = []
+                    st.session_state["_leitor_raw_restore"] = ""
+                    st.session_state.pop("_leitor_raw_current", None)
                     st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
 
@@ -2748,11 +2763,27 @@ def _main_content():
             _leitor_ver = st.session_state.get("leitor_area_ver", 0)
             _leitor_area = st.text_area(
                 "Códigos bipados",
+                value=st.session_state.get("_leitor_raw_restore", ""),
                 placeholder="Clique aqui e comece a bipar...\nCada código aparece em uma linha.",
                 height=220,
                 key=f"leitor_area_txt_{_leitor_ver}",
                 label_visibility="collapsed",
             )
+            # Auto-salva o que está na caixa (a cada rerun) para não perder os
+            # códigos bipados mesmo antes de clicar em "Adicionar tudo".
+            st.session_state["_leitor_raw_current"] = _leitor_area or ""
+            if (_leitor_area or "").strip():
+                import hashlib as _hl_raw
+                _raw_hash = _hl_raw.md5(_leitor_area.encode()).hexdigest()
+                if _raw_hash != st.session_state.get("_leitor_raw_hash", ""):
+                    try:
+                        api.salvar_rascunho_entrada(_user, {
+                            "itens": st.session_state.itens_entrada,
+                            "leitor_raw": _leitor_area,
+                        })
+                        st.session_state["_leitor_raw_hash"] = _raw_hash
+                    except Exception:
+                        pass
 
             # Mapa código → nome para o contador JS
             import json as _json_lext
@@ -2803,6 +2834,9 @@ def _main_content():
                                       disabled=not (_leitor_area or "").strip())
             if _la2.button("🗑️ Limpar", use_container_width=True, key="leitor_area_clear"):
                 st.session_state["leitor_area_ver"] = _leitor_ver + 1
+                st.session_state["_leitor_raw_restore"] = ""
+                st.session_state.pop("_leitor_raw_current", None)
+                st.session_state.pop("_leitor_raw_hash", None)
                 st.rerun()
 
             if _processar and _leitor_area.strip():
@@ -2838,7 +2872,12 @@ def _main_content():
                 if _sem_var_l:
                     st.info(f"ℹ️ {len(_sem_var_l)} produto(s) com múltiplas variações — adicione manualmente: {', '.join(_sem_var_l[:5])}")
                 if _ok_l:
+                    # Itens já entraram na lista (e foram para o rascunho/log) — esvazia
+                    # a caixa do leitor para não duplicar na próxima leitura.
                     st.session_state["leitor_area_ver"] = _leitor_ver + 1
+                    st.session_state["_leitor_raw_restore"] = ""
+                    st.session_state.pop("_leitor_raw_current", None)
+                    st.session_state.pop("_leitor_raw_hash", None)
                     st.rerun()
 
         # ── Código manual ─────────────────────────────────────────────────────
@@ -2889,7 +2928,10 @@ def _main_content():
                 _json_ent.dumps(st.session_state.itens_entrada, sort_keys=True, default=str).encode()
             ).hexdigest()
             if _ent_hash_now != st.session_state.get("_ent_hash_saved", ""):
-                api.salvar_rascunho_entrada(_user, {"itens": st.session_state.itens_entrada})
+                api.salvar_rascunho_entrada(_user, {
+                    "itens": st.session_state.itens_entrada,
+                    "leitor_raw": st.session_state.get("_leitor_raw_current", ""),
+                })
                 st.session_state["_ent_hash_saved"] = _ent_hash_now
                 st.session_state.pop("_ent_rasc_dispensado", None)
 
@@ -3107,6 +3149,49 @@ def _main_content():
                     unsafe_allow_html=True,
                 )
 
+            # ── Barra de salvar SEMPRE VISÍVEL (fácil de achar) ───────────────
+            _arq_aberto_ent = st.session_state.get("lista_arq_ent")
+            st.markdown("##### 💾 Salvar")
+            if _arq_aberto_ent:
+                st.caption(f"📂 Lista aberta: **{_arq_aberto_ent}**")
+            _qs1, _qs2, _qs3 = st.columns([3, 1, 1])
+            _qs_nome = _qs1.text_input(
+                "Nome da lista", key="qs_nome_ent", label_visibility="collapsed",
+                placeholder="Nome da lista (ex: Inventário 24/06)")
+            if _qs2.button("💾 Salvar novo", use_container_width=True, key="qs_salvar_ent"):
+                if not _qs_nome.strip():
+                    st.error("Digite um nome para a lista.")
+                else:
+                    _cam_qs = api.salvar_lista(_qs_nome.strip(), "entrada",
+                                               st.session_state.itens_entrada,
+                                               loja_id=loja_id, loja_nome=loja_sel_nome)
+                    st.session_state["lista_arq_ent"] = _cam_qs.split("/")[-1].split("\\")[-1]
+                    _nv_qs = api.ultimo_salvamento_nuvem_ok()
+                    if _nv_qs is True:
+                        st.success("✅ Lista salva na nuvem (segura contra reinício)!")
+                    elif _nv_qs is False:
+                        st.error("⚠️ Salva LOCALMENTE, mas o envio para a nuvem FALHOU. "
+                                 "Tente de novo — pode se perder se o servidor reiniciar.")
+                    else:
+                        st.warning("✅ Salva localmente (persistência na nuvem desativada).")
+            if _arq_aberto_ent:
+                if _qs3.button("🔄 Atualizar aberta", type="primary", use_container_width=True,
+                               key="qs_atualizar_ent",
+                               help="Salva na MESMA lista aberta (sobrescreve)."):
+                    _ok_qs = api.atualizar_lista(_arq_aberto_ent, st.session_state.itens_entrada)
+                    _nv_qs2 = api.ultimo_salvamento_nuvem_ok()
+                    if not _ok_qs and _nv_qs2 is not False:
+                        st.error("⚠️ Não encontrei a lista aberta. Use 'Salvar novo'.")
+                    elif _nv_qs2 is True:
+                        st.success("✅ Lista atualizada na nuvem!")
+                    elif _nv_qs2 is False:
+                        st.error("⚠️ Atualizada LOCALMENTE, mas a nuvem FALHOU. Tente de novo.")
+                    else:
+                        st.warning("✅ Atualizada localmente.")
+            else:
+                _qs3.caption("Carregue uma lista para poder atualizá-la")
+
+            # Painel avançado (renomear, excluir, carregar, reordenar)
             painel_salvar(st.session_state.itens_entrada, "entrada", key_suffix="ent")
 
             _user_setor_ent = _user_data.get("setor", "vendas")
