@@ -603,6 +603,38 @@ _nome_usr    = _user_data.get("nome", _user)
 _is_admin    = _setor == "admin"
 _setor_lbl   = _setor_cfg.get("label", _setor)
 
+# ── Monitor de saúde da persistência (nunca falhar em silêncio) ───────────────
+# O GitHub é o ÚNICO armazenamento durável: no Railway o disco é temporário, então
+# se a gravação na nuvem não estiver funcionando, TUDO que for salvo se perde no
+# próximo restart. Aqui testamos o acesso de verdade (não só se o token existe) e,
+# se houver falha, mostramos um aviso vermelho global — impossível de ignorar.
+# Foi a ausência disso que causou a perda de 4h de bipagem (token falhando em
+# silêncio). O teste é cacheado na sessão para não consultar a cada rerun.
+if "_health_cloud" not in st.session_state:
+    try:
+        st.session_state["_health_cloud"] = api.diagnostico_config()
+    except Exception:
+        st.session_state["_health_cloud"] = {"github_token": False, "github_ok": False}
+_health = st.session_state["_health_cloud"]
+if not _health.get("github_ok"):
+    _hc1, _hc2 = st.columns([5, 1])
+    with _hc1:
+        if not _health.get("github_token"):
+            st.error("🔴 **ARMAZENAMENTO NA NUVEM DESATIVADO** — o GITHUB_TOKEN não está "
+                     "configurado. **Nada que você salvar vai sobreviver a um reinício do "
+                     "servidor.** Configure o GITHUB_TOKEN no Railway antes de usar para "
+                     "trabalho real.")
+        else:
+            st.error("🔴 **FALHA DE ACESSO À NUVEM** — o GITHUB_TOKEN está **inválido ou "
+                     "expirado**. Os salvamentos **NÃO estão sendo persistidos**. Gere um "
+                     "token novo no GitHub e atualize no Railway **antes de continuar "
+                     "bipando** — caso contrário o trabalho será perdido.")
+    with _hc2:
+        if st.button("🔄 Re-testar", key="health_recheck", use_container_width=True):
+            st.session_state.pop("_health_cloud", None)
+            st.rerun()
+
+
 # ── Menu estruturado (como GestaoClick) ──
 # (id, icon, label, grupo, aba_idx_ou_None, placeholder)
 _MENU_FULL = [
