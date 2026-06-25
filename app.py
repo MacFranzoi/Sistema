@@ -2374,6 +2374,43 @@ def _main_content():
                     st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
 
+        # ── Trilha de log recuperável (append-only no GitHub) ─────────────────
+        # Mostra tudo que foi bipado por dia, mesmo que nunca tenha sido salvo
+        # como lista. Permite recuperar itens de qualquer dia para a lista atual.
+        with st.expander("🧾 Recuperar de log (bipagens salvas automaticamente)", expanded=False):
+            try:
+                _dias_log = api.listar_logs_disponiveis()
+            except Exception:
+                _dias_log = []
+            if not _dias_log:
+                st.caption("Nenhum log de bipagem encontrado ainda.")
+            else:
+                _dia_sel = st.selectbox("Dia", _dias_log, key="ent_log_dia")
+                _eventos = api.ler_log_bipagem(_dia_sel)
+                _itens_log = [e.get("dados", {}) for e in _eventos
+                              if e.get("evento") in ("item_bipado", "item_manual", "item_nfe")]
+                # Consolida por variação, somando quantidades
+                _consol = {}
+                for _it in _itens_log:
+                    _k = _it.get("variacao_id") or f'{_it.get("produto_id")}|{_it.get("variacao_cod")}'
+                    if _k in _consol:
+                        _consol[_k]["quantidade"] = _consol[_k].get("quantidade", 0) + _it.get("quantidade", 0)
+                    else:
+                        _consol[_k] = dict(_it)
+                _itens_consol = list(_consol.values())
+                st.caption(f"{len(_eventos)} evento(s) registrado(s) · "
+                           f"{len(_itens_consol)} variação(ões) distintas neste dia.")
+                if _itens_consol:
+                    import pandas as _pd_log
+                    st.dataframe(_pd_log.DataFrame(_itens_consol)[
+                        [c for c in ["produto_nome","variacao_nome","variacao_cod","quantidade"]
+                         if c in _pd_log.DataFrame(_itens_consol).columns]],
+                        use_container_width=True, hide_index=True)
+                    if st.button(f"♻️ Recuperar {len(_itens_consol)} item(ns) para a lista atual",
+                                 type="primary", use_container_width=True, key="ent_log_recuperar"):
+                        st.session_state.itens_entrada = _itens_consol
+                        st.rerun()
+
         # Carregar da área de transferência
         clip = st.session_state.get("clipboard")
         if clip and clip.get("tipo") == "entrada":
@@ -2428,8 +2465,13 @@ def _main_content():
                 for _ex in st.session_state.itens_entrada:
                     if _ex.get("variacao_id") == _vid:
                         _ex["quantidade"] = _ex.get("quantidade", 1) + qtd
+                        try:
+                            api.registrar_log_evento("item_bipado", {**_ex, "incremento": qtd},
+                                                     user=_user, contexto="entrada")
+                        except Exception:
+                            pass
                         return
-            st.session_state.itens_entrada.append({
+            _novo_item = {
                 "produto_id":    prod.get("id",""),
                 "produto_nome":  prod.get("nome",""),
                 "cod_interno":   prod.get("codigo_interno",""),
@@ -2437,7 +2479,13 @@ def _main_content():
                 "variacao_cod":  var.get("codigo","") if var else "",
                 "variacao_nome": var.get("nome","") if var else "",
                 "quantidade":    qtd,
-            })
+            }
+            st.session_state.itens_entrada.append(_novo_item)
+            # Trilha append-only: grava o item no GitHub na hora (recuperável)
+            try:
+                api.registrar_log_evento("item_bipado", _novo_item, user=_user, contexto="entrada")
+            except Exception:
+                pass
 
         # ── Modo de entrada — radio garante que só uma câmera renderiza por vez ──
         _ent_modo = st.radio(
@@ -2895,6 +2943,10 @@ def _main_content():
                                 for _ni in _nfe_match:
                                     _ni_clean = {k:v for k,v in _ni.items() if not k.startswith("_")}
                                     st.session_state.itens_entrada.append(_ni_clean)
+                                    try:
+                                        api.registrar_log_evento("item_nfe", _ni_clean, user=_user, contexto="entrada")
+                                    except Exception:
+                                        pass
                                 st.rerun()
                         if _nfe_nmatch:
                             st.warning(f"⚠️ {len(_nfe_nmatch)} item(ns) da NF-e sem correspondência no catálogo:")
@@ -2934,9 +2986,10 @@ def _main_content():
                                 if _ex_m.get("variacao_id") == _vid_m:
                                     _ex_m["quantidade"] = _ex_m.get("quantidade", 1) + int(row["Qtd Entrada"])
                                     _found_m = True
+                                    _item_log_m = dict(_ex_m)
                                     break
                         if not _found_m:
-                            st.session_state.itens_entrada.append({
+                            _item_log_m = {
                                 "produto_id": produto_sel["id"],
                                 "produto_nome": produto_sel["nome"],
                                 "cod_interno": produto_sel.get("codigo_interno", ""),
@@ -2944,7 +2997,12 @@ def _main_content():
                                 "variacao_cod": row["Código Var."],
                                 "variacao_nome": row["Variação"],
                                 "quantidade": int(row["Qtd Entrada"])
-                            })
+                            }
+                            st.session_state.itens_entrada.append(_item_log_m)
+                        try:
+                            api.registrar_log_evento("item_manual", _item_log_m, user=_user, contexto="entrada")
+                        except Exception:
+                            pass
                     st.success(f"{len(selecionadas)} adicionada(s)!")
 
         # Lista acumulada

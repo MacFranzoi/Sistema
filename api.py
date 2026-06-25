@@ -3453,6 +3453,135 @@ def limpar_rascunho_entrada(user: str):
     threading.Thread(target=lambda: _gh_delete_arquivo(f"entrada_rascunho_{user}.json"), daemon=True).start()
 
 
+# ──────────────────────────────────────────────
+# Trilha de LOG append-only (recuperável)
+# ──────────────────────────────────────────────
+# Cada evento (ex.: item bipado) vira uma linha JSON num arquivo diário em
+# logs/. A gravação é SÍNCRONA e direto no GitHub (não em thread de background,
+# que foi o que falhou antes), e o arquivo NUNCA é sobrescrito — só recebe
+# append. Assim, mesmo sem ninguém clicar em "salvar" e mesmo que o container
+# do Railway reinicie, nada se perde: a trilha completa fica no GitHub.
+
+import threading as _threading_log
+_log_lock = _threading_log.Lock()
+
+def _log_path_local(nome_arquivo: str) -> str:
+    pasta = os.path.join(DIR, "logs")
+    os.makedirs(pasta, exist_ok=True)
+    return os.path.join(pasta, nome_arquivo)
+
+def registrar_log_evento(evento: str, dados: dict, user: str = "", contexto: str = "geral") -> bool:
+    """Grava um evento na trilha append-only do dia. Síncrono + GitHub.
+
+    Retorna True se conseguiu persistir no GitHub (recuperável após restart),
+    False se só salvou local (vai sumir no próximo restart do Railway).
+    """
+    linha = json.dumps({
+        "ts": datetime.now().isoformat(),
+        "user": user,
+        "contexto": contexto,
+        "evento": evento,
+        "dados": dados,
+    }, ensure_ascii=False, default=str)
+
+    nome = f"bipagem_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+    gh_path = f"logs/{nome}"
+    local = _log_path_local(nome)
+
+    with _log_lock:
+        # 1) Append local imediato (instantâneo, nunca perde dentro da sessão)
+        try:
+            with open(local, "a", encoding="utf-8") as f:
+                f.write(linha + "\n")
+        except Exception:
+            pass
+
+        # 2) Persiste no GitHub de forma SÍNCRONA (read-modify-write, append-only)
+        if not _gh_token():
+            return False
+        try:
+            sha = _gh_get_sha(gh_path)
+            conteudo_atual = ""
+            if sha:
+                r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                                 headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+                if r.status_code == 200:
+                    conteudo_atual = base64.b64decode(r.json()["content"]).decode()
+            novo = conteudo_atual + linha + "\n"
+            payload = {
+                "message": f"log {contexto}: {evento}",
+                "content": base64.b64encode(novo.encode()).decode(),
+                "branch":  _GH_BRANCH,
+            }
+            if sha:
+                payload["sha"] = sha
+            r = requests.put(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                             headers=_gh_headers(), json=payload, timeout=15)
+            return r.status_code in (200, 201)
+        except Exception:
+            return False
+
+def ler_log_bipagem(data: str = None) -> list:
+    """Lê a trilha de bipagem de um dia (default: hoje). data no formato AAAA-MM-DD.
+
+    Tenta local primeiro; se não houver, baixa do GitHub. Retorna lista de eventos.
+    """
+    if not data:
+        data = datetime.now().strftime("%Y-%m-%d")
+    nome = f"bipagem_{data}.jsonl"
+    gh_path = f"logs/{nome}"
+    local = _log_path_local(nome)
+
+    conteudo = ""
+    if os.path.exists(local):
+        try:
+            with open(local, encoding="utf-8") as f:
+                conteudo = f.read()
+        except Exception:
+            conteudo = ""
+    if not conteudo and _gh_token():
+        try:
+            r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                             headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+            if r.status_code == 200:
+                conteudo = base64.b64decode(r.json()["content"]).decode()
+        except Exception:
+            conteudo = ""
+
+    eventos = []
+    for ln in conteudo.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            eventos.append(json.loads(ln))
+        except Exception:
+            pass
+    return eventos
+
+def listar_logs_disponiveis() -> list:
+    """Lista os dias com trilha de log disponíveis no GitHub (mais recentes primeiro)."""
+    dias = set()
+    try:
+        for f in os.listdir(_log_path_local("")):
+            if f.startswith("bipagem_") and f.endswith(".jsonl"):
+                dias.add(f[len("bipagem_"):-len(".jsonl")])
+    except Exception:
+        pass
+    if _gh_token():
+        try:
+            r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/logs",
+                             headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+            if r.status_code == 200:
+                for item in r.json():
+                    n = item.get("name", "")
+                    if n.startswith("bipagem_") and n.endswith(".jsonl"):
+                        dias.add(n[len("bipagem_"):-len(".jsonl")])
+        except Exception:
+            pass
+    return sorted(dias, reverse=True)
+
+
 def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:
     funcs = buscar_funcionarios(limite=200)
     criados = []
