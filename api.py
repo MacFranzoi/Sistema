@@ -996,9 +996,23 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    # Sobe pro GitHub em background (falha silenciosamente)
-    _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
+    # Sobe pro GitHub de forma SÍNCRONA — no Railway o disco é temporário, então
+    # se não persistir no GitHub a lista se perde no próximo restart. Guardamos o
+    # resultado para a interface poder avisar quando o salvamento na nuvem falhar.
+    global _ultimo_push_lista_ok
+    _ultimo_push_lista_ok = _gh_push_arquivo(f"listas/{nome_arq}", conteudo, f"Lista: {nome}")
     return caminho
+
+
+# Guarda se o último salvar_lista conseguiu persistir no GitHub (nuvem).
+_ultimo_push_lista_ok = None
+
+def ultimo_salvamento_nuvem_ok():
+    """True/False/None — se o último salvar_lista persistiu no GitHub.
+    None = não houve tentativa ou GITHUB_TOKEN ausente."""
+    if not _gh_token():
+        return None
+    return _ultimo_push_lista_ok
 
 
 def listar_listas_salvas(tipo=None):
@@ -3402,6 +3416,41 @@ def limpar_rascunho_pedido(user: str):
     if os.path.exists(path):
         os.remove(path)
     threading.Thread(target=lambda: _gh_delete_arquivo(f"pedido_rascunho_{user}.json"), daemon=True).start()
+
+
+# ── Rascunho de ENTRADA de mercadoria (mesma lógica do pedido) ──────────────
+def _rascunho_ent_path(user: str) -> str:
+    return os.path.join(DIR, f"entrada_rascunho_{user}.json")
+
+def salvar_rascunho_entrada(user: str, dados: dict):
+    import threading
+    path = _rascunho_ent_path(user)
+    payload = {"user": user, "salvo_em": datetime.now().isoformat(), **dados}
+    conteudo = json.dumps(payload, ensure_ascii=False, default=str)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    def _push():
+        _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
+    threading.Thread(target=_push, daemon=True).start()
+
+def carregar_rascunho_entrada(user: str) -> dict | None:
+    path = _rascunho_ent_path(user)
+    if not os.path.exists(path):
+        _gh_baixar_arquivo(f"entrada_rascunho_{user}.json", path)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def limpar_rascunho_entrada(user: str):
+    import threading
+    path = _rascunho_ent_path(user)
+    if os.path.exists(path):
+        os.remove(path)
+    threading.Thread(target=lambda: _gh_delete_arquivo(f"entrada_rascunho_{user}.json"), daemon=True).start()
 
 
 def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:
