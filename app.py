@@ -4357,41 +4357,49 @@ def _main_content():
                                         api_key=_ant_key,
                                         max_retries=3,  # tenta de novo automaticamente em erros 500
                                     )
-                                    _msg = _client.messages.create(
-                                        model="claude-sonnet-4-6",
-                                        max_tokens=8192,
-                                        messages=[{"role": "user", "content": _prompt}]
-                                    )
-                                    _raw = _msg.content[0].text.strip()
-                                    # Extrai o array JSON — tenta completo primeiro, depois recupera parcial
+                                    # Chamada com CONTINUAÇÃO automática: se a resposta cortar
+                                    # (stop_reason=max_tokens), pedimos pra IA continuar de onde
+                                    # parou e concatenamos — assim o JSON sai inteiro, sem precisar
+                                    # adivinhar (e reprocessar) as linhas restantes.
+                                    _messages = [{"role": "user", "content": _prompt}]
+                                    _raw_partes = []
+                                    _stop = None
+                                    with st.spinner("Interpretando o pedido…"):
+                                        for _cont_i in range(6):
+                                            _msg = _client.messages.create(
+                                                model="claude-sonnet-4-6",
+                                                max_tokens=8192,
+                                                messages=_messages,
+                                            )
+                                            _parte = _msg.content[0].text
+                                            _raw_partes.append(_parte)
+                                            _stop = _msg.stop_reason
+                                            if _stop != "max_tokens":
+                                                break
+                                            # Continua exatamente de onde parou (prefill do assistant)
+                                            _messages.append({"role": "assistant", "content": _parte})
+                                            _messages.append({"role": "user", "content":
+                                                "Continue EXATAMENTE de onde parou, sem repetir nada "
+                                                "do que já enviou e sem reabrir o array. Apenas "
+                                                "continue o JSON a partir do último caractere."})
+                                    _raw = "".join(_raw_partes).strip()
+                                    # Extrai o array JSON
                                     _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
                                     _json_str = _m.group() if _m else _raw
                                     try:
                                         _parsed = _json.loads(_json_str)
+                                        st.session_state.pop("wpp_truncado_resto", None)
                                     except _json.JSONDecodeError:
-                                        # JSON truncado: encontra o último objeto completo e fecha o array
+                                        # Fallback: ainda truncado após as continuações — recupera
+                                        # o máximo de objetos completos e avisa.
                                         _ultimo_ok = _json_str.rfind('},')
                                         if _ultimo_ok == -1:
                                             _ultimo_ok = _json_str.rfind('}')
                                         if _ultimo_ok > 0:
-                                            _json_rec = _json_str[:_ultimo_ok + 1] + ']'
-                                            _parsed = _json.loads(_json_rec)
-                                            # Descobre quais linhas do texto original NÃO foram processadas
-                                            _modelos_proc = {
-                                                (e.get("modelo_digitado") or "").strip().lower()
-                                                for e in _parsed
-                                            }
-                                            _linhas_orig = [l for l in _texto_proc.splitlines() if l.strip()]
-                                            _resto = []
-                                            _encontrados = 0
-                                            for _lo in reversed(_linhas_orig):
-                                                if _lo.strip().lower() in _modelos_proc and _encontrados < len(_parsed):
-                                                    _encontrados += 1
-                                                else:
-                                                    _resto.insert(0, _lo)
-                                            _resto_txt = "\n".join(_resto) if _resto else ""
-                                            st.session_state["wpp_truncado_resto"] = _resto_txt
-                                            st.warning(f"⚠ Resposta da IA foi truncada — {len(_parsed)} linha(s) processadas.")
+                                            _parsed = _json.loads(_json_str[:_ultimo_ok + 1] + ']')
+                                            st.warning(f"⚠ Pedido muito grande — processei {len(_parsed)} "
+                                                       f"item(ns). Se faltou algo, mande o restante "
+                                                       f"separadamente.")
                                         else:
                                             raise
 
