@@ -1280,8 +1280,20 @@ def _main_content():
                     _cam = api.salvar_lista(_nome_novo.strip(), tipo, itens_atuais,
                                             loja_id=loja_id, loja_nome=loja_sel_nome)
                     st.session_state[f"lista_arq_{key_suffix}"] = _pos.path.basename(_cam)
-                    st.success("✅ Lista salva!")
-                    st.rerun()
+                    _nuvem_ok = api.ultimo_salvamento_nuvem_ok()
+                    if _nuvem_ok is True:
+                        st.success("✅ Lista salva na nuvem (segura contra reinício do servidor)!")
+                    elif _nuvem_ok is False:
+                        st.error("⚠️ Lista salva LOCALMENTE, mas o envio para a nuvem (GitHub) "
+                                 "FALHOU. Ela pode se perder se o servidor reiniciar. "
+                                 "Tente salvar de novo ou avise o suporte — o GITHUB_TOKEN pode "
+                                 "estar inválido.")
+                    else:
+                        st.warning("✅ Lista salva localmente. ⚠️ Persistência na nuvem desativada "
+                                   "(GITHUB_TOKEN ausente) — a lista pode se perder se o servidor "
+                                   "reiniciar.")
+                    # Não dá rerun imediato para o aviso acima ficar visível.
+                    st.session_state[f"_lista_salva_msg_{key_suffix}"] = True
             if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
                 _cam = _pos.path.join(api.DIR_LISTAS, arq_atual)
                 if _pos.path.exists(_cam):
@@ -2342,6 +2354,26 @@ def _main_content():
         if "itens_entrada" not in st.session_state:
             st.session_state.itens_entrada = []
 
+        # ── Recuperação de rascunho automático ────────────────────────────────
+        # Se a sessão caiu/recarregou e a lista está vazia, oferece recuperar
+        # o que foi bipado por último (auto-salvo a cada mudança).
+        if not st.session_state.itens_entrada and not st.session_state.get("_ent_rasc_dispensado"):
+            _rasc_ent = api.carregar_rascunho_entrada(_user)
+            if _rasc_ent and _rasc_ent.get("itens"):
+                _n_rasc = len(_rasc_ent["itens"])
+                _quando = (_rasc_ent.get("salvo_em", "") or "")[:16].replace("T", " ")
+                st.warning(f"💾 Há uma bipagem não finalizada com **{_n_rasc} item(ns)** "
+                           f"(salva em {_quando}). Deseja recuperar?")
+                _rc1, _rc2 = st.columns(2)
+                if _rc1.button("♻️ Recuperar bipagem", type="primary", use_container_width=True,
+                               key="ent_rasc_recuperar"):
+                    st.session_state.itens_entrada = _rasc_ent["itens"]
+                    st.rerun()
+                if _rc2.button("🗑️ Descartar", use_container_width=True, key="ent_rasc_descartar"):
+                    api.limpar_rascunho_entrada(_user)
+                    st.session_state["_ent_rasc_dispensado"] = True
+                    st.rerun()
+
         # Carregar da área de transferência
         clip = st.session_state.get("clipboard")
         if clip and clip.get("tipo") == "entrada":
@@ -2739,6 +2771,18 @@ def _main_content():
                         st.rerun()
 
 
+        # ── Auto-save da bipagem (recupera se a sessão cair) ──────────────────
+        # Salva sempre que a lista muda; assim nada se perde se a página recarregar.
+        if st.session_state.itens_entrada:
+            import hashlib as _hs_ent, json as _json_ent
+            _ent_hash_now = _hs_ent.md5(
+                _json_ent.dumps(st.session_state.itens_entrada, sort_keys=True, default=str).encode()
+            ).hexdigest()
+            if _ent_hash_now != st.session_state.get("_ent_hash_saved", ""):
+                api.salvar_rascunho_entrada(_user, {"itens": st.session_state.itens_entrada})
+                st.session_state["_ent_hash_saved"] = _ent_hash_now
+                st.session_state.pop("_ent_rasc_dispensado", None)
+
         # ── 3. Histórico de fotos (90 dias) ────────────────────────────────
         _fotos_hist = api.listar_fotos_entrada()
         if _fotos_hist:
@@ -2952,6 +2996,8 @@ def _main_content():
             with col_x:
                 if st.button("🗑️ Limpar lista", use_container_width=True):
                     st.session_state.itens_entrada = []
+                    api.limpar_rascunho_entrada(_user)
+                    st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
             with col_y:
                 if _pode_confirmar:
@@ -2975,6 +3021,7 @@ def _main_content():
                                 st.error(f"❌ {e['produto_nome']} / {e['variacao_nome']}: {e['erro']}")
                             if not erros:
                                 st.session_state.itens_entrada = []
+                                api.limpar_rascunho_entrada(_user)
             with col_z:
                 if st.button("📤 Enviar para Aprovação", use_container_width=True,
                              type="primary" if not _pode_confirmar else "secondary"):
@@ -3000,6 +3047,7 @@ def _main_content():
                                 de_usuario=_user,
                             )
                         st.session_state.itens_entrada = []
+                        api.limpar_rascunho_entrada(_user)
                         st.success(f"✅ Entrada enviada para aprovação! ID: `{_ap_id}`")
                         st.rerun()
             with col_w:
