@@ -1007,6 +1007,33 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
 # Guarda se o último salvar_lista conseguiu persistir no GitHub (nuvem).
 _ultimo_push_lista_ok = None
 
+def atualizar_lista(nome_arquivo: str, itens: list) -> bool:
+    """Sobrescreve os itens de uma lista já existente e sobe pra nuvem (síncrono).
+
+    Mantém nome/tipo/loja originais, só troca os itens. Atualiza
+    _ultimo_push_lista_ok para a interface poder avisar se a nuvem falhou.
+    Retorna True se persistiu no GitHub.
+    """
+    global _ultimo_push_lista_ok
+    caminho = os.path.join(DIR_LISTAS, nome_arquivo)
+    if not os.path.exists(caminho):
+        # Pode estar só na nuvem (disco efêmero) — tenta baixar primeiro
+        _gh_baixar_arquivo(f"listas/{nome_arquivo}", caminho)
+    if not os.path.exists(caminho):
+        _ultimo_push_lista_ok = False
+        return False
+    with open(caminho, encoding="utf-8") as f:
+        dados = json.load(f)
+    dados["itens"] = itens
+    dados["atualizado_em"] = datetime.now().isoformat()
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    with open(caminho, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _ultimo_push_lista_ok = _gh_push_arquivo(f"listas/{nome_arquivo}", conteudo,
+                                             f"Atualiza lista: {dados.get('nome', nome_arquivo)}")
+    return _ultimo_push_lista_ok
+
+
 def ultimo_salvamento_nuvem_ok():
     """True/False/None — se o último salvar_lista persistiu no GitHub.
     None = não houve tentativa ou GITHUB_TOKEN ausente."""
@@ -3423,15 +3450,16 @@ def _rascunho_ent_path(user: str) -> str:
     return os.path.join(DIR, f"entrada_rascunho_{user}.json")
 
 def salvar_rascunho_entrada(user: str, dados: dict):
-    import threading
+    # Push SÍNCRONO (não em thread): se o container for reciclado logo depois
+    # (redeploy do Railway), uma thread de background morreria no meio e o
+    # rascunho não chegaria ao GitHub — quebrando a recuperação automática.
+    # Síncrono garante que o rascunho completo esteja na nuvem antes de seguir.
     path = _rascunho_ent_path(user)
     payload = {"user": user, "salvo_em": datetime.now().isoformat(), **dados}
     conteudo = json.dumps(payload, ensure_ascii=False, default=str)
     with open(path, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    def _push():
-        _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
-    threading.Thread(target=_push, daemon=True).start()
+    return _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
 
 def carregar_rascunho_entrada(user: str) -> dict | None:
     path = _rascunho_ent_path(user)
@@ -3451,6 +3479,135 @@ def limpar_rascunho_entrada(user: str):
     if os.path.exists(path):
         os.remove(path)
     threading.Thread(target=lambda: _gh_delete_arquivo(f"entrada_rascunho_{user}.json"), daemon=True).start()
+
+
+# ──────────────────────────────────────────────
+# Trilha de LOG append-only (recuperável)
+# ──────────────────────────────────────────────
+# Cada evento (ex.: item bipado) vira uma linha JSON num arquivo diário em
+# logs/. A gravação é SÍNCRONA e direto no GitHub (não em thread de background,
+# que foi o que falhou antes), e o arquivo NUNCA é sobrescrito — só recebe
+# append. Assim, mesmo sem ninguém clicar em "salvar" e mesmo que o container
+# do Railway reinicie, nada se perde: a trilha completa fica no GitHub.
+
+import threading as _threading_log
+_log_lock = _threading_log.Lock()
+
+def _log_path_local(nome_arquivo: str) -> str:
+    pasta = os.path.join(DIR, "logs")
+    os.makedirs(pasta, exist_ok=True)
+    return os.path.join(pasta, nome_arquivo)
+
+def registrar_log_evento(evento: str, dados: dict, user: str = "", contexto: str = "geral") -> bool:
+    """Grava um evento na trilha append-only do dia. Síncrono + GitHub.
+
+    Retorna True se conseguiu persistir no GitHub (recuperável após restart),
+    False se só salvou local (vai sumir no próximo restart do Railway).
+    """
+    linha = json.dumps({
+        "ts": datetime.now().isoformat(),
+        "user": user,
+        "contexto": contexto,
+        "evento": evento,
+        "dados": dados,
+    }, ensure_ascii=False, default=str)
+
+    nome = f"bipagem_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+    gh_path = f"logs/{nome}"
+    local = _log_path_local(nome)
+
+    with _log_lock:
+        # 1) Append local imediato (instantâneo, nunca perde dentro da sessão)
+        try:
+            with open(local, "a", encoding="utf-8") as f:
+                f.write(linha + "\n")
+        except Exception:
+            pass
+
+        # 2) Persiste no GitHub de forma SÍNCRONA (read-modify-write, append-only)
+        if not _gh_token():
+            return False
+        try:
+            sha = _gh_get_sha(gh_path)
+            conteudo_atual = ""
+            if sha:
+                r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                                 headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+                if r.status_code == 200:
+                    conteudo_atual = base64.b64decode(r.json()["content"]).decode()
+            novo = conteudo_atual + linha + "\n"
+            payload = {
+                "message": f"log {contexto}: {evento}",
+                "content": base64.b64encode(novo.encode()).decode(),
+                "branch":  _GH_BRANCH,
+            }
+            if sha:
+                payload["sha"] = sha
+            r = requests.put(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                             headers=_gh_headers(), json=payload, timeout=15)
+            return r.status_code in (200, 201)
+        except Exception:
+            return False
+
+def ler_log_bipagem(data: str = None) -> list:
+    """Lê a trilha de bipagem de um dia (default: hoje). data no formato AAAA-MM-DD.
+
+    Tenta local primeiro; se não houver, baixa do GitHub. Retorna lista de eventos.
+    """
+    if not data:
+        data = datetime.now().strftime("%Y-%m-%d")
+    nome = f"bipagem_{data}.jsonl"
+    gh_path = f"logs/{nome}"
+    local = _log_path_local(nome)
+
+    conteudo = ""
+    if os.path.exists(local):
+        try:
+            with open(local, encoding="utf-8") as f:
+                conteudo = f.read()
+        except Exception:
+            conteudo = ""
+    if not conteudo and _gh_token():
+        try:
+            r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/{gh_path}",
+                             headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+            if r.status_code == 200:
+                conteudo = base64.b64decode(r.json()["content"]).decode()
+        except Exception:
+            conteudo = ""
+
+    eventos = []
+    for ln in conteudo.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            eventos.append(json.loads(ln))
+        except Exception:
+            pass
+    return eventos
+
+def listar_logs_disponiveis() -> list:
+    """Lista os dias com trilha de log disponíveis no GitHub (mais recentes primeiro)."""
+    dias = set()
+    try:
+        for f in os.listdir(_log_path_local("")):
+            if f.startswith("bipagem_") and f.endswith(".jsonl"):
+                dias.add(f[len("bipagem_"):-len(".jsonl")])
+    except Exception:
+        pass
+    if _gh_token():
+        try:
+            r = requests.get(f"{_GH_API}/repos/{_GH_REPO}/contents/logs",
+                             headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
+            if r.status_code == 200:
+                for item in r.json():
+                    n = item.get("name", "")
+                    if n.startswith("bipagem_") and n.endswith(".jsonl"):
+                        dias.add(n[len("bipagem_"):-len(".jsonl")])
+        except Exception:
+            pass
+    return sorted(dias, reverse=True)
 
 
 def criar_usuarios_funcionarios(usuarios_db: dict) -> dict:

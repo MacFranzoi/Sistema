@@ -603,6 +603,38 @@ _nome_usr    = _user_data.get("nome", _user)
 _is_admin    = _setor == "admin"
 _setor_lbl   = _setor_cfg.get("label", _setor)
 
+# ── Monitor de saúde da persistência (nunca falhar em silêncio) ───────────────
+# O GitHub é o ÚNICO armazenamento durável: no Railway o disco é temporário, então
+# se a gravação na nuvem não estiver funcionando, TUDO que for salvo se perde no
+# próximo restart. Aqui testamos o acesso de verdade (não só se o token existe) e,
+# se houver falha, mostramos um aviso vermelho global — impossível de ignorar.
+# Foi a ausência disso que causou a perda de 4h de bipagem (token falhando em
+# silêncio). O teste é cacheado na sessão para não consultar a cada rerun.
+if "_health_cloud" not in st.session_state:
+    try:
+        st.session_state["_health_cloud"] = api.diagnostico_config()
+    except Exception:
+        st.session_state["_health_cloud"] = {"github_token": False, "github_ok": False}
+_health = st.session_state["_health_cloud"]
+if not _health.get("github_ok"):
+    _hc1, _hc2 = st.columns([5, 1])
+    with _hc1:
+        if not _health.get("github_token"):
+            st.error("🔴 **ARMAZENAMENTO NA NUVEM DESATIVADO** — o GITHUB_TOKEN não está "
+                     "configurado. **Nada que você salvar vai sobreviver a um reinício do "
+                     "servidor.** Configure o GITHUB_TOKEN no Railway antes de usar para "
+                     "trabalho real.")
+        else:
+            st.error("🔴 **FALHA DE ACESSO À NUVEM** — o GITHUB_TOKEN está **inválido ou "
+                     "expirado**. Os salvamentos **NÃO estão sendo persistidos**. Gere um "
+                     "token novo no GitHub e atualize no Railway **antes de continuar "
+                     "bipando** — caso contrário o trabalho será perdido.")
+    with _hc2:
+        if st.button("🔄 Re-testar", key="health_recheck", use_container_width=True):
+            st.session_state.pop("_health_cloud", None)
+            st.rerun()
+
+
 # ── Menu estruturado (como GestaoClick) ──
 # (id, icon, label, grupo, aba_idx_ou_None, placeholder)
 _MENU_FULL = [
@@ -1252,6 +1284,8 @@ def _main_content():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📂 Carregar", use_container_width=True, key=f"btn_load_{key_suffix}"):
+                    # Marca como lista "aberta" para habilitar o botão 'Atualizar aberta'
+                    st.session_state[f"lista_arq_{key_suffix}"] = lista_sel["_arquivo"]
                     if retornar_arquivo:
                         return lista_sel["itens"], lista_sel["_arquivo"]
                     return lista_sel["itens"]
@@ -1294,20 +1328,28 @@ def _main_content():
                                    "reiniciar.")
                     # Não dá rerun imediato para o aviso acima ficar visível.
                     st.session_state[f"_lista_salva_msg_{key_suffix}"] = True
-            if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
-                _cam = _pos.path.join(api.DIR_LISTAS, arq_atual)
-                if _pos.path.exists(_cam):
-                    with open(_cam, encoding="utf-8") as _f:
-                        _d = _pj.load(_f)
-                    _d["itens"] = itens_atuais
-                    _d["atualizado_em"] = datetime.now().isoformat()
-                    with open(_cam, "w", encoding="utf-8") as _f:
-                        _pj.dump(_d, _f, ensure_ascii=False, indent=2)
-                    st.success("✅ Lista atualizada!")
-                    st.rerun()
+            if arq_atual and _c3.button("🔄 Atualizar aberta", use_container_width=True,
+                                        key=f"ls_atual_{key_suffix}", type="primary",
+                                        help="Salva os itens atuais NA MESMA lista que está aberta (sobrescreve)."):
+                _ok_upd = api.atualizar_lista(arq_atual, itens_atuais)
+                _nuvem_upd = api.ultimo_salvamento_nuvem_ok()
+                if not _ok_upd and _nuvem_upd is not False:
+                    st.error("⚠️ Não encontrei a lista aberta para atualizar. Use 'Salvar novo'.")
+                elif _nuvem_upd is True:
+                    st.success("✅ Lista atualizada na nuvem (segura contra reinício)!")
+                elif _nuvem_upd is False:
+                    st.error("⚠️ Atualizada LOCALMENTE, mas o envio para a nuvem (GitHub) FALHOU. "
+                             "Pode se perder se o servidor reiniciar — tente de novo ou verifique o GITHUB_TOKEN.")
+                else:
+                    st.warning("✅ Atualizada localmente. ⚠️ Persistência na nuvem desativada "
+                               "(GITHUB_TOKEN ausente).")
+                st.session_state[f"_lista_salva_msg_{key_suffix}"] = True
 
             if arq_atual:
-                st.caption(f"Lista aberta: **{arq_atual}**")
+                st.caption(f"📂 Lista aberta: **{arq_atual}** — use **🔄 Atualizar aberta** para salvar nela mesma.")
+            else:
+                st.caption("Nenhuma lista aberta. Carregue uma lista abaixo para poder atualizá-la, "
+                           "ou use **💾 Salvar novo** para criar uma.")
 
             if not listas:
                 st.info("Nenhuma lista salva ainda.")
@@ -2354,25 +2396,68 @@ def _main_content():
         if "itens_entrada" not in st.session_state:
             st.session_state.itens_entrada = []
 
-        # ── Recuperação de rascunho automático ────────────────────────────────
-        # Se a sessão caiu/recarregou e a lista está vazia, oferece recuperar
-        # o que foi bipado por último (auto-salvo a cada mudança).
+        # ── Recuperação AUTOMÁTICA de rascunho ────────────────────────────────
+        # Se a sessão caiu/recarregou (ex.: redeploy do Railway, F5, queda de
+        # conexão) e a lista ficou vazia, restauramos AUTOMATICAMENTE o que foi
+        # bipado por último — sem depender de clique. O rascunho só é limpo em
+        # ações intencionais (Limpar / Confirmar / Enviar p/ aprovação), então,
+        # se ele existe, é porque o trabalho não foi finalizado: é seguro voltar.
         if not st.session_state.itens_entrada and not st.session_state.get("_ent_rasc_dispensado"):
             _rasc_ent = api.carregar_rascunho_entrada(_user)
             if _rasc_ent and _rasc_ent.get("itens"):
+                st.session_state.itens_entrada = list(_rasc_ent["itens"])
                 _n_rasc = len(_rasc_ent["itens"])
                 _quando = (_rasc_ent.get("salvo_em", "") or "")[:16].replace("T", " ")
-                st.warning(f"💾 Há uma bipagem não finalizada com **{_n_rasc} item(ns)** "
-                           f"(salva em {_quando}). Deseja recuperar?")
-                _rc1, _rc2 = st.columns(2)
-                if _rc1.button("♻️ Recuperar bipagem", type="primary", use_container_width=True,
-                               key="ent_rasc_recuperar"):
-                    st.session_state.itens_entrada = _rasc_ent["itens"]
-                    st.rerun()
-                if _rc2.button("🗑️ Descartar", use_container_width=True, key="ent_rasc_descartar"):
+                try:
+                    st.toast(f"♻️ Lista recuperada automaticamente — {_n_rasc} item(ns).", icon="♻️")
+                except Exception:
+                    pass
+                _rb1, _rb2 = st.columns([4, 1])
+                _rb1.info(f"♻️ **Lista recuperada automaticamente** — {_n_rasc} item(ns) "
+                          f"bipado(s) por último (salvos em {_quando}). Pode continuar de onde parou.")
+                if _rb2.button("🗑️ Começar do zero", use_container_width=True, key="ent_rasc_descartar"):
                     api.limpar_rascunho_entrada(_user)
+                    st.session_state.itens_entrada = []
                     st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
+
+
+        # ── Trilha de log recuperável (append-only no GitHub) ─────────────────
+        # Mostra tudo que foi bipado por dia, mesmo que nunca tenha sido salvo
+        # como lista. Permite recuperar itens de qualquer dia para a lista atual.
+        with st.expander("🧾 Recuperar de log (bipagens salvas automaticamente)", expanded=False):
+            try:
+                _dias_log = api.listar_logs_disponiveis()
+            except Exception:
+                _dias_log = []
+            if not _dias_log:
+                st.caption("Nenhum log de bipagem encontrado ainda.")
+            else:
+                _dia_sel = st.selectbox("Dia", _dias_log, key="ent_log_dia")
+                _eventos = api.ler_log_bipagem(_dia_sel)
+                _itens_log = [e.get("dados", {}) for e in _eventos
+                              if e.get("evento") in ("item_bipado", "item_manual", "item_nfe")]
+                # Consolida por variação, somando quantidades
+                _consol = {}
+                for _it in _itens_log:
+                    _k = _it.get("variacao_id") or f'{_it.get("produto_id")}|{_it.get("variacao_cod")}'
+                    if _k in _consol:
+                        _consol[_k]["quantidade"] = _consol[_k].get("quantidade", 0) + _it.get("quantidade", 0)
+                    else:
+                        _consol[_k] = dict(_it)
+                _itens_consol = list(_consol.values())
+                st.caption(f"{len(_eventos)} evento(s) registrado(s) · "
+                           f"{len(_itens_consol)} variação(ões) distintas neste dia.")
+                if _itens_consol:
+                    import pandas as _pd_log
+                    st.dataframe(_pd_log.DataFrame(_itens_consol)[
+                        [c for c in ["produto_nome","variacao_nome","variacao_cod","quantidade"]
+                         if c in _pd_log.DataFrame(_itens_consol).columns]],
+                        use_container_width=True, hide_index=True)
+                    if st.button(f"♻️ Recuperar {len(_itens_consol)} item(ns) para a lista atual",
+                                 type="primary", use_container_width=True, key="ent_log_recuperar"):
+                        st.session_state.itens_entrada = _itens_consol
+                        st.rerun()
 
         # Carregar da área de transferência
         clip = st.session_state.get("clipboard")
@@ -2428,8 +2513,13 @@ def _main_content():
                 for _ex in st.session_state.itens_entrada:
                     if _ex.get("variacao_id") == _vid:
                         _ex["quantidade"] = _ex.get("quantidade", 1) + qtd
+                        try:
+                            api.registrar_log_evento("item_bipado", {**_ex, "incremento": qtd},
+                                                     user=_user, contexto="entrada")
+                        except Exception:
+                            pass
                         return
-            st.session_state.itens_entrada.append({
+            _novo_item = {
                 "produto_id":    prod.get("id",""),
                 "produto_nome":  prod.get("nome",""),
                 "cod_interno":   prod.get("codigo_interno",""),
@@ -2437,7 +2527,13 @@ def _main_content():
                 "variacao_cod":  var.get("codigo","") if var else "",
                 "variacao_nome": var.get("nome","") if var else "",
                 "quantidade":    qtd,
-            })
+            }
+            st.session_state.itens_entrada.append(_novo_item)
+            # Trilha append-only: grava o item no GitHub na hora (recuperável)
+            try:
+                api.registrar_log_evento("item_bipado", _novo_item, user=_user, contexto="entrada")
+            except Exception:
+                pass
 
         # ── Modo de entrada — radio garante que só uma câmera renderiza por vez ──
         _ent_modo = st.radio(
@@ -2895,6 +2991,10 @@ def _main_content():
                                 for _ni in _nfe_match:
                                     _ni_clean = {k:v for k,v in _ni.items() if not k.startswith("_")}
                                     st.session_state.itens_entrada.append(_ni_clean)
+                                    try:
+                                        api.registrar_log_evento("item_nfe", _ni_clean, user=_user, contexto="entrada")
+                                    except Exception:
+                                        pass
                                 st.rerun()
                         if _nfe_nmatch:
                             st.warning(f"⚠️ {len(_nfe_nmatch)} item(ns) da NF-e sem correspondência no catálogo:")
@@ -2934,9 +3034,10 @@ def _main_content():
                                 if _ex_m.get("variacao_id") == _vid_m:
                                     _ex_m["quantidade"] = _ex_m.get("quantidade", 1) + int(row["Qtd Entrada"])
                                     _found_m = True
+                                    _item_log_m = dict(_ex_m)
                                     break
                         if not _found_m:
-                            st.session_state.itens_entrada.append({
+                            _item_log_m = {
                                 "produto_id": produto_sel["id"],
                                 "produto_nome": produto_sel["nome"],
                                 "cod_interno": produto_sel.get("codigo_interno", ""),
@@ -2944,7 +3045,12 @@ def _main_content():
                                 "variacao_cod": row["Código Var."],
                                 "variacao_nome": row["Variação"],
                                 "quantidade": int(row["Qtd Entrada"])
-                            })
+                            }
+                            st.session_state.itens_entrada.append(_item_log_m)
+                        try:
+                            api.registrar_log_evento("item_manual", _item_log_m, user=_user, contexto="entrada")
+                        except Exception:
+                            pass
                     st.success(f"{len(selecionadas)} adicionada(s)!")
 
         # Lista acumulada
