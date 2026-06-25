@@ -1,0 +1,595 @@
+{
+  "nome": "Bipagem",
+  "tipo": "entrada",
+  "loja_id": null,
+  "loja_nome": "Todas",
+  "criado_em": "2026-06-25T14:40:43.062341",
+  "ordem": 3,
+  "itens": [
+    {
+      "produto_id": "81349755",
+      "produto_nome": "A07",
+      "cod_interno": "A07",
+      "variacao_id": "138780039",
+      "variacao_cod": "A070047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "81349755",
+      "produto_nome": "A07",
+      "cod_interno": "A07",
+      "variacao_id": "138779983",
+      "variacao_cod": "A070033",
+      "variacao_nome": "Preto / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349755",
+      "produto_nome": "A07",
+      "cod_interno": "A07",
+      "variacao_id": "138780031",
+      "variacao_cod": "A070045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 8
+    },
+    {
+      "produto_id": "81349755",
+      "produto_nome": "A07",
+      "cod_interno": "A07",
+      "variacao_id": "138779855",
+      "variacao_cod": "A070001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780134",
+      "variacao_cod": "A170014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780138",
+      "variacao_cod": "A170015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780146",
+      "variacao_cod": "A170017",
+      "variacao_nome": "Nude / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780109",
+      "variacao_cod": "A170008",
+      "variacao_nome": "Cinza / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780190",
+      "variacao_cod": "A170028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780101",
+      "variacao_cod": "A170006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780081",
+      "variacao_cod": "A170001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "70153065",
+      "produto_nome": "A16",
+      "cod_interno": "A16",
+      "variacao_id": "118775472",
+      "variacao_cod": "A160045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349764",
+      "produto_nome": "A17",
+      "cod_interno": "A17",
+      "variacao_id": "138780174",
+      "variacao_cod": "A170024",
+      "variacao_nome": "Roxo / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116837022",
+      "variacao_cod": "A060028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116836986",
+      "variacao_cod": "A060016",
+      "variacao_nome": "Marsala / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116837073",
+      "variacao_cod": "A060044",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116837076",
+      "variacao_cod": "A060045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 5
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116837082",
+      "variacao_cod": "A060047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69005761",
+      "produto_nome": "A06",
+      "cod_interno": "A06",
+      "variacao_id": "116837037",
+      "variacao_cod": "A060033",
+      "variacao_nome": "Preto / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "81349786",
+      "produto_nome": "A06 5G",
+      "cod_interno": "A065G",
+      "variacao_id": "138781161",
+      "variacao_cod": "A065G0047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "70153065",
+      "produto_nome": "A16",
+      "cod_interno": "A16",
+      "variacao_id": "118775475",
+      "variacao_cod": "A160046",
+      "variacao_nome": "R$69,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "70153065",
+      "produto_nome": "A16",
+      "cod_interno": "A16",
+      "variacao_id": "118775478",
+      "variacao_cod": "A160047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 5
+    },
+    {
+      "produto_id": "70153065",
+      "produto_nome": "A16",
+      "cod_interno": "A16",
+      "variacao_id": "118775436",
+      "variacao_cod": "A160033",
+      "variacao_nome": "Preto / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208555",
+      "variacao_cod": "A260047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208515",
+      "variacao_cod": "A260037",
+      "variacao_nome": "Lilás / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208523",
+      "variacao_cod": "A260039",
+      "variacao_nome": "Verde Militar / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208427",
+      "variacao_cod": "A260015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208435",
+      "variacao_cod": "A260017",
+      "variacao_nome": "Nude / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208423",
+      "variacao_cod": "A260014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208487",
+      "variacao_cod": "A260030",
+      "variacao_nome": "Vermelho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208371",
+      "variacao_cod": "A260001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208399",
+      "variacao_cod": "A260008",
+      "variacao_nome": "Cinza / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532465",
+      "produto_nome": "A26",
+      "cod_interno": "A26",
+      "variacao_id": "130208391",
+      "variacao_cod": "A260006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208153",
+      "variacao_cod": "A560001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 4
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208205",
+      "variacao_cod": "A560014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 4
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208165",
+      "variacao_cod": "A560004",
+      "variacao_nome": "Azul / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208269",
+      "variacao_cod": "A560030",
+      "variacao_nome": "Vermelho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208221",
+      "variacao_cod": "A560018",
+      "variacao_nome": "Pink / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208181",
+      "variacao_cod": "A560008",
+      "variacao_nome": "Cinza / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208261",
+      "variacao_cod": "A560028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208173",
+      "variacao_cod": "A560006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208217",
+      "variacao_cod": "A560017",
+      "variacao_nome": "Nude / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208329",
+      "variacao_cod": "A560045",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "76532462",
+      "produto_nome": "A36",
+      "cod_interno": "A36",
+      "variacao_id": "130208337",
+      "variacao_cod": "A560047",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076226",
+      "produto_nome": "S26",
+      "cod_interno": "S26",
+      "variacao_id": "156549345",
+      "variacao_cod": "S260093",
+      "variacao_nome": "- / Couro",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "90076226",
+      "produto_nome": "S26",
+      "cod_interno": "S26",
+      "variacao_id": "156549277",
+      "variacao_cod": "S260076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 7
+    },
+    {
+      "produto_id": "90076226",
+      "produto_nome": "S26",
+      "cod_interno": "S26",
+      "variacao_id": "156549373",
+      "variacao_cod": "S260100",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "90202740",
+      "produto_nome": "S26 Plus",
+      "cod_interno": "S26Plus",
+      "variacao_id": "156756398",
+      "variacao_cod": "S26Plus0093",
+      "variacao_nome": "- / Couro",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "90202740",
+      "produto_nome": "S26 Plus",
+      "cod_interno": "S26Plus",
+      "variacao_id": "156756329",
+      "variacao_cod": "S26Plus0076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 6
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548349",
+      "variacao_cod": "S26ULTRA0001",
+      "variacao_nome": "Preto / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548464",
+      "variacao_cod": "S26ULTRA0029",
+      "variacao_nome": "Verde Neon / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548361",
+      "variacao_cod": "S26ULTRA0004",
+      "variacao_nome": "Azul / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548405",
+      "variacao_cod": "S26ULTRA0015",
+      "variacao_nome": "Marrom / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548428",
+      "variacao_cod": "S26ULTRA0020",
+      "variacao_nome": "Rosa / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548401",
+      "variacao_cod": "S26ULTRA0014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548476",
+      "variacao_cod": "S26ULTRA0032",
+      "variacao_nome": "Vinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548444",
+      "variacao_cod": "S26ULTRA0024",
+      "variacao_nome": "Roxo / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548413",
+      "variacao_cod": "S26ULTRA0017",
+      "variacao_nome": "Nude / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548369",
+      "variacao_cod": "S26ULTRA0006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548460",
+      "variacao_cod": "S26ULTRA0028",
+      "variacao_nome": "Verde Militar / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548745",
+      "variacao_cod": "S26ULTRA0099",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548721",
+      "variacao_cod": "S26ULTRA0093",
+      "variacao_nome": "- / Couro",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548657",
+      "variacao_cod": "S26ULTRA0077",
+      "variacao_nome": "R$139,99 / MagSafe",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548653",
+      "variacao_cod": "S26ULTRA0076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "90076133",
+      "produto_nome": "S26 Ultra",
+      "cod_interno": "S26ULTRA",
+      "variacao_id": "156548749",
+      "variacao_cod": "S26ULTRA0100",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 6
+    }
+  ]
+}
