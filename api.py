@@ -3423,15 +3423,16 @@ def _rascunho_ent_path(user: str) -> str:
     return os.path.join(DIR, f"entrada_rascunho_{user}.json")
 
 def salvar_rascunho_entrada(user: str, dados: dict):
-    import threading
+    # Push SÍNCRONO (não em thread): se o container for reciclado logo depois
+    # (redeploy do Railway), uma thread de background morreria no meio e o
+    # rascunho não chegaria ao GitHub — quebrando a recuperação automática.
+    # Síncrono garante que o rascunho completo esteja na nuvem antes de seguir.
     path = _rascunho_ent_path(user)
     payload = {"user": user, "salvo_em": datetime.now().isoformat(), **dados}
     conteudo = json.dumps(payload, ensure_ascii=False, default=str)
     with open(path, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    def _push():
-        _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
-    threading.Thread(target=_push, daemon=True).start()
+    return _gh_push_arquivo(f"entrada_rascunho_{user}.json", conteudo, f"Rascunho entrada {user}")
 
 def carregar_rascunho_entrada(user: str) -> dict | None:
     path = _rascunho_ent_path(user)

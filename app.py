@@ -2386,25 +2386,31 @@ def _main_content():
         if "itens_entrada" not in st.session_state:
             st.session_state.itens_entrada = []
 
-        # ── Recuperação de rascunho automático ────────────────────────────────
-        # Se a sessão caiu/recarregou e a lista está vazia, oferece recuperar
-        # o que foi bipado por último (auto-salvo a cada mudança).
+        # ── Recuperação AUTOMÁTICA de rascunho ────────────────────────────────
+        # Se a sessão caiu/recarregou (ex.: redeploy do Railway, F5, queda de
+        # conexão) e a lista ficou vazia, restauramos AUTOMATICAMENTE o que foi
+        # bipado por último — sem depender de clique. O rascunho só é limpo em
+        # ações intencionais (Limpar / Confirmar / Enviar p/ aprovação), então,
+        # se ele existe, é porque o trabalho não foi finalizado: é seguro voltar.
         if not st.session_state.itens_entrada and not st.session_state.get("_ent_rasc_dispensado"):
             _rasc_ent = api.carregar_rascunho_entrada(_user)
             if _rasc_ent and _rasc_ent.get("itens"):
+                st.session_state.itens_entrada = list(_rasc_ent["itens"])
                 _n_rasc = len(_rasc_ent["itens"])
                 _quando = (_rasc_ent.get("salvo_em", "") or "")[:16].replace("T", " ")
-                st.warning(f"💾 Há uma bipagem não finalizada com **{_n_rasc} item(ns)** "
-                           f"(salva em {_quando}). Deseja recuperar?")
-                _rc1, _rc2 = st.columns(2)
-                if _rc1.button("♻️ Recuperar bipagem", type="primary", use_container_width=True,
-                               key="ent_rasc_recuperar"):
-                    st.session_state.itens_entrada = _rasc_ent["itens"]
-                    st.rerun()
-                if _rc2.button("🗑️ Descartar", use_container_width=True, key="ent_rasc_descartar"):
+                try:
+                    st.toast(f"♻️ Lista recuperada automaticamente — {_n_rasc} item(ns).", icon="♻️")
+                except Exception:
+                    pass
+                _rb1, _rb2 = st.columns([4, 1])
+                _rb1.info(f"♻️ **Lista recuperada automaticamente** — {_n_rasc} item(ns) "
+                          f"bipado(s) por último (salvos em {_quando}). Pode continuar de onde parou.")
+                if _rb2.button("🗑️ Começar do zero", use_container_width=True, key="ent_rasc_descartar"):
                     api.limpar_rascunho_entrada(_user)
+                    st.session_state.itens_entrada = []
                     st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
+
 
         # ── Trilha de log recuperável (append-only no GitHub) ─────────────────
         # Mostra tudo que foi bipado por dia, mesmo que nunca tenha sido salvo
