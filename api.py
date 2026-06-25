@@ -3504,13 +3504,31 @@ def registrar_log_evento(evento: str, dados: dict, user: str = "", contexto: str
     Retorna True se conseguiu persistir no GitHub (recuperável após restart),
     False se só salvou local (vai sumir no próximo restart do Railway).
     """
-    linha = json.dumps({
-        "ts": datetime.now().isoformat(),
-        "user": user,
-        "contexto": contexto,
-        "evento": evento,
-        "dados": dados,
-    }, ensure_ascii=False, default=str)
+    return registrar_log_eventos_lote([{"evento": evento, "dados": dados}],
+                                      user=user, contexto=contexto, _msg=evento)
+
+
+def registrar_log_eventos_lote(eventos: list, user: str = "", contexto: str = "geral",
+                               _msg: str = None) -> bool:
+    """Grava VÁRIOS eventos de uma vez, com UM ÚNICO push ao GitHub.
+
+    Essencial para lotes (ex.: Leitor externo com 200 códigos) — gravar item a
+    item de forma síncrona travaria o app (centenas de round-trips na rede).
+    Aqui montamos todas as linhas e fazemos uma só ida ao GitHub.
+    """
+    if not eventos:
+        return True
+    agora = datetime.now().isoformat()
+    linhas = []
+    for ev in eventos:
+        linhas.append(json.dumps({
+            "ts": agora,
+            "user": user,
+            "contexto": contexto,
+            "evento": ev.get("evento", "evento"),
+            "dados": ev.get("dados", {}),
+        }, ensure_ascii=False, default=str))
+    bloco = "\n".join(linhas) + "\n"
 
     nome = f"bipagem_{datetime.now().strftime('%Y-%m-%d')}.jsonl"
     gh_path = f"logs/{nome}"
@@ -3520,7 +3538,7 @@ def registrar_log_evento(evento: str, dados: dict, user: str = "", contexto: str
         # 1) Append local imediato (instantâneo, nunca perde dentro da sessão)
         try:
             with open(local, "a", encoding="utf-8") as f:
-                f.write(linha + "\n")
+                f.write(bloco)
         except Exception:
             pass
 
@@ -3535,9 +3553,10 @@ def registrar_log_evento(evento: str, dados: dict, user: str = "", contexto: str
                                  headers=_gh_headers(), params={"ref": _GH_BRANCH}, timeout=10)
                 if r.status_code == 200:
                     conteudo_atual = base64.b64decode(r.json()["content"]).decode()
-            novo = conteudo_atual + linha + "\n"
+            novo = conteudo_atual + bloco
+            msg = _msg or f"{len(eventos)} evento(s)"
             payload = {
-                "message": f"log {contexto}: {evento}",
+                "message": f"log {contexto}: {msg}",
                 "content": base64.b64encode(novo.encode()).decode(),
                 "branch":  _GH_BRANCH,
             }

@@ -2506,19 +2506,21 @@ def _main_content():
                 if _vc:
                     _bc_map[_vc] = (_p, _vd)
 
-        def _bc_add_item(prod, var, qtd=1):
-            """Adiciona item; soma quantidade se variação já está na lista."""
+        def _bc_add_item(prod, var, qtd=1, log=True):
+            """Adiciona item; soma quantidade se variação já está na lista.
+            log=False pula a gravação por item (usado em lote — ver Leitor externo)."""
             _vid = var.get("id","") if var else ""
             if _vid:
                 for _ex in st.session_state.itens_entrada:
                     if _ex.get("variacao_id") == _vid:
                         _ex["quantidade"] = _ex.get("quantidade", 1) + qtd
-                        try:
-                            api.registrar_log_evento("item_bipado", {**_ex, "incremento": qtd},
-                                                     user=_user, contexto="entrada")
-                        except Exception:
-                            pass
-                        return
+                        if log:
+                            try:
+                                api.registrar_log_evento("item_bipado", {**_ex, "incremento": qtd},
+                                                         user=_user, contexto="entrada")
+                            except Exception:
+                                pass
+                        return dict(_ex)
             _novo_item = {
                 "produto_id":    prod.get("id",""),
                 "produto_nome":  prod.get("nome",""),
@@ -2530,10 +2532,12 @@ def _main_content():
             }
             st.session_state.itens_entrada.append(_novo_item)
             # Trilha append-only: grava o item no GitHub na hora (recuperável)
-            try:
-                api.registrar_log_evento("item_bipado", _novo_item, user=_user, contexto="entrada")
-            except Exception:
-                pass
+            if log:
+                try:
+                    api.registrar_log_evento("item_bipado", _novo_item, user=_user, contexto="entrada")
+                except Exception:
+                    pass
+            return dict(_novo_item)
 
         # ── Modo de entrada — radio garante que só uma câmera renderiza por vez ──
         _ent_modo = st.radio(
@@ -2804,19 +2808,29 @@ def _main_content():
             if _processar and _leitor_area.strip():
                 _codigos_l = [c.strip() for c in _leitor_area.splitlines() if c.strip()]
                 _ok_l, _nf_l, _sem_var_l = [], [], []
-                for _cod_l in _codigos_l:
-                    _match_l = _bc_map.get(_cod_l)
-                    if not _match_l:
-                        _nf_l.append(_cod_l)
-                        continue
-                    _prod_l, _var_l = _match_l
-                    if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
-                        _var_l = _prod_l["variacoes"][0].get("variacao", {})
-                    if _var_l:
-                        _bc_add_item(_prod_l, _var_l)
-                        _ok_l.append(f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}")
-                    else:
-                        _sem_var_l.append(_cod_l)
+                _eventos_lote = []   # log em lote: 1 só push no fim (não trava com 200 códigos)
+                with st.spinner(f"Processando {len(_codigos_l)} código(s)…"):
+                    for _cod_l in _codigos_l:
+                        _match_l = _bc_map.get(_cod_l)
+                        if not _match_l:
+                            _nf_l.append(_cod_l)
+                            continue
+                        _prod_l, _var_l = _match_l
+                        if not _var_l and len(_prod_l.get("variacoes", [])) == 1:
+                            _var_l = _prod_l["variacoes"][0].get("variacao", {})
+                        if _var_l:
+                            _item_add = _bc_add_item(_prod_l, _var_l, log=False)
+                            if _item_add:
+                                _eventos_lote.append({"evento": "item_lote", "dados": _item_add})
+                            _ok_l.append(f"{_prod_l.get('nome','')} / {_var_l.get('nome','')}")
+                        else:
+                            _sem_var_l.append(_cod_l)
+                    # UMA única gravação no GitHub para o lote inteiro
+                    if _eventos_lote:
+                        try:
+                            api.registrar_log_eventos_lote(_eventos_lote, user=_user, contexto="entrada")
+                        except Exception:
+                            pass
                 if _ok_l:
                     st.success(f"✅ {len(_ok_l)} código(s) adicionado(s) à lista.")
                 if _nf_l:
