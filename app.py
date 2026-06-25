@@ -1284,6 +1284,8 @@ def _main_content():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📂 Carregar", use_container_width=True, key=f"btn_load_{key_suffix}"):
+                    # Marca como lista "aberta" para habilitar o botão 'Atualizar aberta'
+                    st.session_state[f"lista_arq_{key_suffix}"] = lista_sel["_arquivo"]
                     if retornar_arquivo:
                         return lista_sel["itens"], lista_sel["_arquivo"]
                     return lista_sel["itens"]
@@ -1326,20 +1328,28 @@ def _main_content():
                                    "reiniciar.")
                     # Não dá rerun imediato para o aviso acima ficar visível.
                     st.session_state[f"_lista_salva_msg_{key_suffix}"] = True
-            if arq_atual and _c3.button("🔄 Atualizar atual", use_container_width=True, key=f"ls_atual_{key_suffix}"):
-                _cam = _pos.path.join(api.DIR_LISTAS, arq_atual)
-                if _pos.path.exists(_cam):
-                    with open(_cam, encoding="utf-8") as _f:
-                        _d = _pj.load(_f)
-                    _d["itens"] = itens_atuais
-                    _d["atualizado_em"] = datetime.now().isoformat()
-                    with open(_cam, "w", encoding="utf-8") as _f:
-                        _pj.dump(_d, _f, ensure_ascii=False, indent=2)
-                    st.success("✅ Lista atualizada!")
-                    st.rerun()
+            if arq_atual and _c3.button("🔄 Atualizar aberta", use_container_width=True,
+                                        key=f"ls_atual_{key_suffix}", type="primary",
+                                        help="Salva os itens atuais NA MESMA lista que está aberta (sobrescreve)."):
+                _ok_upd = api.atualizar_lista(arq_atual, itens_atuais)
+                _nuvem_upd = api.ultimo_salvamento_nuvem_ok()
+                if not _ok_upd and _nuvem_upd is not False:
+                    st.error("⚠️ Não encontrei a lista aberta para atualizar. Use 'Salvar novo'.")
+                elif _nuvem_upd is True:
+                    st.success("✅ Lista atualizada na nuvem (segura contra reinício)!")
+                elif _nuvem_upd is False:
+                    st.error("⚠️ Atualizada LOCALMENTE, mas o envio para a nuvem (GitHub) FALHOU. "
+                             "Pode se perder se o servidor reiniciar — tente de novo ou verifique o GITHUB_TOKEN.")
+                else:
+                    st.warning("✅ Atualizada localmente. ⚠️ Persistência na nuvem desativada "
+                               "(GITHUB_TOKEN ausente).")
+                st.session_state[f"_lista_salva_msg_{key_suffix}"] = True
 
             if arq_atual:
-                st.caption(f"Lista aberta: **{arq_atual}**")
+                st.caption(f"📂 Lista aberta: **{arq_atual}** — use **🔄 Atualizar aberta** para salvar nela mesma.")
+            else:
+                st.caption("Nenhuma lista aberta. Carregue uma lista abaixo para poder atualizá-la, "
+                           "ou use **💾 Salvar novo** para criar uma.")
 
             if not listas:
                 st.info("Nenhuma lista salva ainda.")

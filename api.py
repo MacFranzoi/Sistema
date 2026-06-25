@@ -1007,6 +1007,33 @@ def salvar_lista(nome, tipo, itens, loja_id=None, loja_nome=None):
 # Guarda se o último salvar_lista conseguiu persistir no GitHub (nuvem).
 _ultimo_push_lista_ok = None
 
+def atualizar_lista(nome_arquivo: str, itens: list) -> bool:
+    """Sobrescreve os itens de uma lista já existente e sobe pra nuvem (síncrono).
+
+    Mantém nome/tipo/loja originais, só troca os itens. Atualiza
+    _ultimo_push_lista_ok para a interface poder avisar se a nuvem falhou.
+    Retorna True se persistiu no GitHub.
+    """
+    global _ultimo_push_lista_ok
+    caminho = os.path.join(DIR_LISTAS, nome_arquivo)
+    if not os.path.exists(caminho):
+        # Pode estar só na nuvem (disco efêmero) — tenta baixar primeiro
+        _gh_baixar_arquivo(f"listas/{nome_arquivo}", caminho)
+    if not os.path.exists(caminho):
+        _ultimo_push_lista_ok = False
+        return False
+    with open(caminho, encoding="utf-8") as f:
+        dados = json.load(f)
+    dados["itens"] = itens
+    dados["atualizado_em"] = datetime.now().isoformat()
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    with open(caminho, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _ultimo_push_lista_ok = _gh_push_arquivo(f"listas/{nome_arquivo}", conteudo,
+                                             f"Atualiza lista: {dados.get('nome', nome_arquivo)}")
+    return _ultimo_push_lista_ok
+
+
 def ultimo_salvamento_nuvem_ok():
     """True/False/None — se o último salvar_lista persistiu no GitHub.
     None = não houve tentativa ou GITHUB_TOKEN ausente."""
