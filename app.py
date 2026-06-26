@@ -654,6 +654,7 @@ _MENU_FULL = [
     ("entrada",         "📥", "Entrada",              "ESTOQUE",      0,     False),
     ("acerto",          "🔧", "Acerto",               "ESTOQUE",      1,     False),
     ("estoque_loja",    "🏪", "Por Loja",             "ESTOQUE",      4,     False),
+    ("balanco_lojas",   "⚖️", "Balanço entre Lojas",  "ESTOQUE",      None,  False),
     ("disponibilidade", "🔘", "Disponibilidade",      "ESTOQUE",      5,     False),
     ("etiquetas",       "🏷️", "Etiquetas",            "ESTOQUE",      2,     False),
     ("aprovacoes",      "✅", "Aprovações de Entrada","ESTOQUE",      None,  False),
@@ -6187,6 +6188,101 @@ def _main_content():
                 })
                 st.session_state["_ped_hash_saved"] = _ped_hash_now
 
+
+    # ══════════════════════════════════════════════
+    # ══════════════════════════════════════════════
+    # BALANÇO ENTRE LOJAS — comparar e sugerir transferências
+    # ══════════════════════════════════════════════
+    if _pg == "balanco_lojas":
+        st.subheader("⚖️ Balanço entre Lojas")
+        st.caption("Compare o estoque entre lojas e veja sugestões de transferência — "
+                   "onde sobra capa de um lado e falta do outro.")
+
+        _lojas_opts = list(api.LOJAS.items())  # [(id, nome), ...]
+        _nomes_por_id = dict(_lojas_opts)
+        _sel_lojas = st.multiselect(
+            "Lojas a comparar (escolha 2 ou mais)",
+            options=[lid for lid, _ in _lojas_opts],
+            default=[lid for lid, _ in _lojas_opts if _nomes_por_id[lid] != "Estoque"],
+            format_func=lambda lid: _nomes_por_id.get(lid, lid),
+            key="bl_lojas",
+        )
+
+        # Filtros: por grupo e/ou por modelos digitados
+        _cache_bl = api.carregar_cache(None) or cache
+        _todos_grupos_bl = sorted({(p.get("nome_grupo") or "") for p in (_cache_bl.get("produtos", []) if _cache_bl else []) if p.get("nome_grupo")})
+        _fc1, _fc2 = st.columns(2)
+        _sel_grupos = _fc1.multiselect("Filtrar por grupo (opcional)", _todos_grupos_bl, key="bl_grupos")
+        _txt_modelos = _fc2.text_input(
+            "Filtrar por modelos (opcional)", key="bl_modelos",
+            placeholder="ex: iPhone 15, S24, Edge 50  (separe por vírgula)")
+        _modelos_lst = [m.strip() for m in _txt_modelos.split(",") if m.strip()] if _txt_modelos else None
+
+        _so_diverg = st.checkbox("Mostrar só itens desequilibrados (com sugestão de transferência)",
+                                 value=True, key="bl_so_diverg")
+
+        if st.button("🔍 Comparar lojas", type="primary", use_container_width=True,
+                     disabled=len(_sel_lojas) < 2):
+            with st.spinner("Comparando estoques..."):
+                st.session_state["bl_resultado"] = api.comparar_estoque_lojas(
+                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
+                    somente_divergentes=_so_diverg)
+        if len(_sel_lojas) < 2:
+            st.info("Selecione pelo menos 2 lojas para comparar.")
+
+        _res_bl = st.session_state.get("bl_resultado")
+        if _res_bl:
+            _lojas_res = _res_bl["lojas"]
+            _linhas_res = _res_bl["linhas"]
+            if not _linhas_res:
+                st.success("✅ Nenhum desequilíbrio encontrado nos filtros escolhidos — "
+                           "o estoque já está distribuído.")
+            else:
+                # Tabela: uma coluna por loja + total + sugestão de transferência
+                import pandas as _pd_bl
+                _rows = []
+                for _ln in _linhas_res:
+                    _r = {
+                        "Grupo": _ln["grupo"],
+                        "Produto": _ln["produto"],
+                        "Variação": _ln["variacao"],
+                    }
+                    for _lj in _lojas_res:
+                        _r[_lj["nome"]] = _ln["estoque"].get(_lj["id"], 0)
+                    _r["Total"] = _ln["total"]
+                    _r["Transferir"] = "  •  ".join(
+                        f'{t["qtd"]}: {_nomes_por_id.get(t["de"], t["de"])}→{_nomes_por_id.get(t["para"], t["para"])}'
+                        for t in _ln["transferencias"]
+                    ) or "—"
+                    _rows.append(_r)
+                _df_bl = _pd_bl.DataFrame(_rows)
+                st.caption(f"**{len(_linhas_res)}** variação(ões) listada(s).")
+                st.dataframe(_df_bl, use_container_width=True, hide_index=True)
+
+                # Resumo consolidado das transferências (de → para: total de unidades)
+                _resumo_tr = {}
+                for _ln in _linhas_res:
+                    for _t in _ln["transferencias"]:
+                        _k = (_t["de"], _t["para"])
+                        _resumo_tr[_k] = _resumo_tr.get(_k, 0) + _t["qtd"]
+                if _resumo_tr:
+                    st.markdown("##### 🔁 Resumo das transferências sugeridas")
+                    _resumo_rows = [{
+                        "De": _nomes_por_id.get(_de, _de),
+                        "Para": _nomes_por_id.get(_para, _para),
+                        "Unidades": _qt,
+                    } for (_de, _para), _qt in sorted(_resumo_tr.items(), key=lambda x: -x[1])]
+                    st.dataframe(_pd_bl.DataFrame(_resumo_rows), use_container_width=True, hide_index=True)
+
+                # Exportar para Excel
+                import io as _io_bl
+                _buf_bl = _io_bl.BytesIO()
+                _df_bl.to_excel(_buf_bl, index=False)
+                _buf_bl.seek(0)
+                st.download_button("📤 Exportar comparação (Excel)", _buf_bl,
+                                   file_name=f"balanco_lojas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                   use_container_width=True, key="bl_export")
 
     # ══════════════════════════════════════════════
     # ABA 5 — ESTOQUE POR LOJA
