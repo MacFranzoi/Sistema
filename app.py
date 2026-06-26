@@ -4405,7 +4405,10 @@ def _main_content():
                                     _m = _re.search(r'\[.*\]', _raw, _re.DOTALL)
                                     _json_str = _m.group() if _m else _raw
                                     try:
-                                        _parsed = _json.loads(_json_str)
+                                        # strict=False tolera quebras de linha/controle dentro
+                                        # das strings (a IA às vezes mete um \n literal numa
+                                        # observação → "invalid control character").
+                                        _parsed = _json.loads(_json_str, strict=False)
                                         st.session_state.pop("wpp_truncado_resto", None)
                                     except _json.JSONDecodeError:
                                         # Fallback: ainda truncado após as continuações — recupera
@@ -4414,7 +4417,7 @@ def _main_content():
                                         if _ultimo_ok == -1:
                                             _ultimo_ok = _json_str.rfind('}')
                                         if _ultimo_ok > 0:
-                                            _parsed = _json.loads(_json_str[:_ultimo_ok + 1] + ']')
+                                            _parsed = _json.loads(_json_str[:_ultimo_ok + 1] + ']', strict=False)
                                             st.warning(f"⚠ Pedido muito grande — processei {len(_parsed)} "
                                                        f"item(ns). Se faltou algo, mande o restante "
                                                        f"separadamente.")
