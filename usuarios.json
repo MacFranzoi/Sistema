@@ -13,5 +13,10 @@
     "nome": "Thamiris",
     "senha": "plug123",
     "setor": "gerencia"
+  },
+  "miguel": {
+    "nome": "Miguel",
+    "senha": "plug123",
+    "setor": "gerencia"
   }
 }
