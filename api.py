@@ -659,7 +659,23 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
             }
         ],
     }
-    _resp = _post("compras", body, loja_id=loja_id)
+    try:
+        _resp = _post("compras", body, loja_id=loja_id)
+    except Exception as _e:
+        _msg = str(_e)
+        # Resposta vazia/inválida = servidor do GestãoClick não respondeu direito.
+        # Comum com payloads grandes (muitos itens) ou instabilidade do lado deles.
+        if any(s in _msg for s in ("Expecting value", "line 1 column 1",
+                                   "Resposta inválida", "não respondeu")):
+            raise Exception(
+                f"O GestãoClick não respondeu corretamente ao enviar {len(produtos)} "
+                f"itens (resposta vazia/inválida do servidor DELES). Isso costuma ser "
+                f"instabilidade ou limite do lado do GestãoClick — não é erro de cadastro "
+                f"seu. Tente: (1) enviar em lotes menores, ou (2) de novo em alguns minutos. "
+                f"Se persistir, registre um chamado no suporte do GestãoClick. "
+                f"[técnico: {_msg[:200]}]"
+            )
+        raise
     # Anexa o body enviado para depuração (não afeta a API)
     if isinstance(_resp, dict):
         _resp["_body_enviado"] = body
