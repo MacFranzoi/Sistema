@@ -48,7 +48,7 @@ _SETORES_PADRAO = {
             "dashboard","clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
-            "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
+            "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios","rel_estoque",
             "sincronizacao","listas","usuarios",
@@ -60,7 +60,7 @@ _SETORES_PADRAO = {
             "dashboard","clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
-            "entrada","acerto","estoque_loja","disponibilidade","etiquetas","aprovacoes",
+            "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas","aprovacoes",
             "pedido","compras_hist",
             "financeiro","relatorios","rel_estoque",
             "listas",
@@ -70,7 +70,7 @@ _SETORES_PADRAO = {
         "label": "Estoque",
         "paginas": [
             "dashboard",
-            "entrada","acerto","estoque_loja","disponibilidade","etiquetas",
+            "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas",
             "pedido","compras_hist",
             "rel_estoque",
         ],
@@ -741,6 +741,110 @@ def _criar_uma_compra_acerto(produtos, fornecedor_id, situacao_id,
     if isinstance(_resp, dict):
         _resp["_body_enviado"] = body
     return _resp
+
+
+def _sugerir_transferencias(est: dict) -> list:
+    """Dado {loja_id: qtd}, sugere transferências para equilibrar (divisão igual).
+
+    Retorna lista de {"de": loja_id, "para": loja_id, "qtd": n}. Vazia se já balanceado.
+    """
+    lojas = list(est.keys())
+    n = len(lojas)
+    total = sum(est.values())
+    if n < 2 or total <= 0:
+        return []
+    base = total // n
+    resto = total - base * n
+    # Alvo: 'base' para todos; o excedente (resto) fica nas lojas que JÁ têm mais
+    # (evita transferências desnecessárias).
+    alvo = {l: base for l in lojas}
+    for l in sorted(lojas, key=lambda x: -est[x])[:resto]:
+        alvo[l] += 1
+    sobra  = sorted(((l, est[l] - alvo[l]) for l in lojas if est[l] > alvo[l]),
+                    key=lambda x: -x[1])
+    falta  = sorted(((l, alvo[l] - est[l]) for l in lojas if est[l] < alvo[l]),
+                    key=lambda x: -x[1])
+    transf = []
+    gi = 0
+    for needer, need in falta:
+        while need > 0 and gi < len(sobra):
+            giver, have = sobra[gi]
+            if have <= 0:
+                gi += 1
+                continue
+            mov = min(need, have)
+            transf.append({"de": giver, "para": needer, "qtd": int(mov)})
+            need -= mov
+            sobra[gi] = (giver, have - mov)
+            if sobra[gi][1] <= 0:
+                gi += 1
+    return transf
+
+
+def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergentes=True):
+    """Compara o estoque de cada variação entre lojas e sugere transferências
+    para equilibrar (onde sobra → onde falta).
+
+    loja_ids: lista de IDs de loja (str) a comparar (2 ou mais).
+    grupos:   lista de nome_grupo a incluir (None = todos).
+    modelos:  lista de termos; inclui produtos cujo nome contém algum termo (None = todos).
+    somente_divergentes: se True, retorna só variações com desequilíbrio entre lojas.
+
+    Retorna {"lojas": [{"id","nome"}...], "linhas": [...]}.
+    """
+    grupos_lower  = {g.strip().lower() for g in grupos if g.strip()} if grupos else None
+    modelos_lower = [m.strip().lower() for m in modelos if m.strip()] if modelos else None
+
+    por_codigo = {}
+    for lid in loja_ids:
+        cache = carregar_cache(lid)
+        if not cache:
+            continue
+        for p in cache.get("produtos", []):
+            nome_grupo = p.get("nome_grupo") or ""
+            nome_prod  = p.get("nome") or ""
+            if grupos_lower and nome_grupo.lower() not in grupos_lower:
+                continue
+            if modelos_lower and not any(t in nome_prod.lower() for t in modelos_lower):
+                continue
+            for v in p.get("variacoes", []):
+                vd  = v.get("variacao", {})
+                cod = (vd.get("codigo") or "").strip()
+                if not cod:
+                    continue
+                try:
+                    est = int(float(vd.get("estoque") or 0))
+                except (TypeError, ValueError):
+                    est = 0
+                row = por_codigo.setdefault(cod, {
+                    "codigo":   cod,
+                    "produto":  nome_prod,
+                    "variacao": vd.get("nome") or "",
+                    "grupo":    nome_grupo,
+                    "estoque":  {},
+                })
+                row["estoque"][lid] = est
+
+    linhas = []
+    for cod, row in por_codigo.items():
+        est = {lid: row["estoque"].get(lid, 0) for lid in loja_ids}
+        total = sum(est.values())
+        if total <= 0:
+            continue
+        transf = _sugerir_transferencias(est)
+        if somente_divergentes and not transf:
+            continue
+        row = dict(row)
+        row["estoque"] = est
+        row["total"] = total
+        row["transferencias"] = transf
+        linhas.append(row)
+
+    linhas.sort(key=lambda r: (r["grupo"], r["produto"], r["variacao"]))
+    return {
+        "lojas":  [{"id": lid, "nome": LOJAS.get(str(lid), str(lid))} for lid in loja_ids],
+        "linhas": linhas,
+    }
 
 
 def estoque_produto_por_loja(produto_id):
