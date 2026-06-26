@@ -2911,8 +2911,8 @@ Retorne SOMENTE um JSON válido, array de objetos com esta estrutura:
     # extrai JSON do output
     m = re.search(r'\[.*\]', raw, re.DOTALL)
     if m:
-        return json.loads(m.group())
-    return json.loads(raw)
+        return json.loads(m.group(), strict=False)
+    return json.loads(raw, strict=False)
 
 
 # ──────────────────────────────────────────────
@@ -3130,8 +3130,8 @@ Retorne SOMENTE um JSON válido, sem markdown, sem explicações:
     raw = msg.content[0].text.strip()
     m = re.search(r'\[.*\]', raw, re.DOTALL)
     if m:
-        return json.loads(m.group())
-    return json.loads(raw)
+        return json.loads(m.group(), strict=False)
+    return json.loads(raw, strict=False)
 
 
 # ──────────────────────────────────────────────
