@@ -2452,15 +2452,15 @@ def _main_content():
                 _dia_sel = st.selectbox("Dia", _dias_log, key="ent_log_dia")
                 _eventos = api.ler_log_bipagem(_dia_sel)
                 _itens_log = [e.get("dados", {}) for e in _eventos
-                              if e.get("evento") in ("item_bipado", "item_manual", "item_nfe")]
-                # Consolida por variação, somando quantidades
+                              if e.get("evento") in ("item_bipado", "item_manual",
+                                                     "item_nfe", "item_lote")]
+                # Consolida por variação. Cada evento registra a quantidade ACUMULADA
+                # daquela variação naquele instante (1, 2, 3…), então o correto é
+                # "última vence" — a última quantidade logada é a final. Somar inflaria.
                 _consol = {}
                 for _it in _itens_log:
                     _k = _it.get("variacao_id") or f'{_it.get("produto_id")}|{_it.get("variacao_cod")}'
-                    if _k in _consol:
-                        _consol[_k]["quantidade"] = _consol[_k].get("quantidade", 0) + _it.get("quantidade", 0)
-                    else:
-                        _consol[_k] = dict(_it)
+                    _consol[_k] = dict(_it)   # última ocorrência prevalece
                 _itens_consol = list(_consol.values())
                 st.caption(f"{len(_eventos)} evento(s) registrado(s) · "
                            f"{len(_itens_consol)} variação(ões) distintas neste dia.")
