@@ -3116,23 +3116,41 @@ def _main_content():
 
         if st.session_state.itens_entrada:
             _n_ent = len(st.session_state.itens_entrada)
-            _CORES_ENT = ["#1a3560", "#0f2040"]
-            for _i in range(_n_ent - 1, -1, -1):
-                _it = st.session_state.itens_entrada[_i]
-                _cor_ent = _CORES_ENT[_i % 2]
-                _lc1, _lc2 = st.columns([9, 1])
-                _lc1.markdown(
-                    f'<div style="background:{_cor_ent};padding:6px 12px;border-radius:6px;margin:2px 0;'
-                    f'border-left:4px solid #4a8aff;color:#ffffff">'
-                    f'<b>{_it.get("produto_nome","")}</b>'
-                    f'<span style="color:#c8d8f0"> / {_it.get("variacao_nome","")}</span>'
-                    f' &nbsp;·&nbsp; <span style="color:#7ef7a0;font-weight:bold">x{_it.get("quantidade", 1)}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-                if _lc2.button("🗑️", key=f"del_ent_{_i}"):
-                    st.session_state.itens_entrada.pop(_i)
+            # Lista grande: renderizar 1 botão por item (1347 botões!) trava/embranquece
+            # a tela. Acima de 60 itens, mostramos uma TABELA rápida + remoção por número.
+            if _n_ent > 60:
+                import pandas as _pd_le
+                _df_le = _pd_le.DataFrame([{
+                    "#": _i + 1,
+                    "Produto": _it.get("produto_nome", ""),
+                    "Variação": _it.get("variacao_nome", ""),
+                    "Qtd": _it.get("quantidade", 1),
+                } for _i, _it in enumerate(st.session_state.itens_entrada)])
+                st.dataframe(_df_le, use_container_width=True, hide_index=True, height=420)
+                _rm1, _rm2 = st.columns([3, 1])
+                _rm_num = _rm1.number_input("Remover item nº (0 = nenhum)", min_value=0,
+                                            max_value=_n_ent, value=0, step=1, key="ent_rm_num")
+                if _rm2.button("🗑️ Remover", key="ent_rm_btn", use_container_width=True) and _rm_num >= 1:
+                    st.session_state.itens_entrada.pop(int(_rm_num) - 1)
                     st.rerun()
+            else:
+                _CORES_ENT = ["#1a3560", "#0f2040"]
+                for _i in range(_n_ent - 1, -1, -1):
+                    _it = st.session_state.itens_entrada[_i]
+                    _cor_ent = _CORES_ENT[_i % 2]
+                    _lc1, _lc2 = st.columns([9, 1])
+                    _lc1.markdown(
+                        f'<div style="background:{_cor_ent};padding:6px 12px;border-radius:6px;margin:2px 0;'
+                        f'border-left:4px solid #4a8aff;color:#ffffff">'
+                        f'<b>{_it.get("produto_nome","")}</b>'
+                        f'<span style="color:#c8d8f0"> / {_it.get("variacao_nome","")}</span>'
+                        f' &nbsp;·&nbsp; <span style="color:#7ef7a0;font-weight:bold">x{_it.get("quantidade", 1)}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if _lc2.button("🗑️", key=f"del_ent_{_i}"):
+                        st.session_state.itens_entrada.pop(_i)
+                        st.rerun()
 
             # Somatória por modelo
             _mod_totais: dict[str, int] = {}
