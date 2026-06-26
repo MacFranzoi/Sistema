@@ -3623,14 +3623,31 @@ def _main_content():
                              use_container_width=True, disabled=_ac_btn_dis, help=_ac_btn_tip):
                     with st.spinner("Criando compra de acerto…"):
                         try:
-                            st.info(f"📤 Enviando **{len(st.session_state.itens_acerto)} itens** para a API...")
+                            _n_itens_ac = len(st.session_state.itens_acerto)
+                            _lote_max = api.ACERTO_LOTE_MAX
+                            if _n_itens_ac > _lote_max:
+                                import math as _math_ac
+                                _n_lotes_prev = _math_ac.ceil(_n_itens_ac / _lote_max)
+                                st.info(f"📤 Enviando **{_n_itens_ac} itens** em **{_n_lotes_prev} lote(s)** "
+                                        f"de até {_lote_max} (o GestãoClick não aceita tudo de uma vez)...")
+                            else:
+                                st.info(f"📤 Enviando **{_n_itens_ac} itens** para a API...")
+                            _prog_ac = st.progress(0.0)
+                            def _cb_ac(i, total):
+                                try: _prog_ac.progress(i / total, text=f"Lote {i} de {total}…")
+                                except Exception: pass
                             _res_ac = api.criar_compra_acerto(
                                 st.session_state.itens_acerto,
                                 fornecedor_id=_ac_forn_id,
                                 situacao_id=_ac_sit_id,
                                 forma_pagamento_id=_ac_fp_id,
                                 loja_id=loja_id,
+                                progress_callback=_cb_ac,
                             )
+                            _prog_ac.progress(1.0)
+                            if _res_ac.get("_n_lotes"):
+                                st.success(f"✅ Enviado em **{_res_ac['_n_lotes']} lotes** — "
+                                           f"compras criadas: {_res_ac['data'].get('id','')}")
                             _data_ac = _res_ac.get("data") or {}
                             _compra_id = _data_ac.get("id", "?")
                             _valor_prod = float(_data_ac.get("valor_produtos") or 0)

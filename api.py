@@ -588,24 +588,70 @@ def _resolver_variacao_id_loja(produto_id, variacao_cod, variacao_nome, loja_id)
     return None
 
 
-def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=None, loja_id=None):
-    """Cria uma Compra para lançar estoque (acerto).
-    itens: lista de dicts com produto_id, variacao_id, produto_nome,
-           possui_variacao, quantidade, valor_custo.
-    Envia cada item separadamente conforme a API espera.
+ACERTO_LOTE_MAX = 300  # itens por compra; acima disso o GestãoClick costuma falhar
+
+def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=None,
+                        loja_id=None, lote_max=ACERTO_LOTE_MAX, progress_callback=None):
+    """Cria Compra(s) para lançar estoque (acerto).
+
+    Se houver mais de `lote_max` itens, divide automaticamente em vários POSTs
+    (uma compra por lote) — o GestãoClick não aguenta payloads muito grandes.
+    Retorna a resposta da API (no caso de lote único) ou um agregado com os
+    resultados de todos os lotes.
     """
-    from datetime import date as _date
+    # Monta a lista completa de 'produtos' uma vez; depois fatia em lotes.
+    produtos_all = _montar_produtos_acerto(itens, loja_id)
 
-    hoje = _date.today().strftime("%Y-%m-%d")
+    if len(produtos_all) <= lote_max:
+        return _criar_uma_compra_acerto(produtos_all, fornecedor_id, situacao_id,
+                                        forma_pagamento_id, loja_id)
 
-    _total = 0.0
+    # ── Vários lotes ──────────────────────────────────────────────────────────
+    lotes = [produtos_all[i:i + lote_max] for i in range(0, len(produtos_all), lote_max)]
+    resultados, ids, total_valor, enviados_all = [], [], 0.0, []
+    for _li, _chunk in enumerate(lotes, 1):
+        if progress_callback:
+            try: progress_callback(_li, len(lotes))
+            except Exception: pass
+        try:
+            _r = _criar_uma_compra_acerto(_chunk, fornecedor_id, situacao_id,
+                                          forma_pagamento_id, loja_id)
+        except Exception as _e:
+            # Já criou alguns lotes — informa o que entrou antes de falhar.
+            _feitos = ", ".join(f"#{i}" for i in ids) or "nenhum"
+            raise Exception(
+                f"Falha no lote {_li}/{len(lotes)} ({len(_chunk)} itens). "
+                f"Lotes já criados com sucesso: {_feitos}. "
+                f"Reenvie apenas os itens restantes. [detalhe: {str(_e)[:200]}]"
+            )
+        resultados.append(_r)
+        _d = (_r.get("data") or {}) if isinstance(_r, dict) else {}
+        if _d.get("id"):
+            ids.append(_d["id"])
+        total_valor += float(_d.get("valor_produtos") or 0)
+        enviados_all.extend((_r.get("_body_enviado") or {}).get("produtos", []))
+
+    return {
+        "data": {
+            "id": " + ".join(f"#{i}" for i in ids),
+            "codigo": "",
+            "valor_produtos": total_valor,
+        },
+        "_body_enviado": {"produtos": enviados_all},
+        "_lotes": resultados,
+        "_compras_ids": ids,
+        "_n_lotes": len(lotes),
+    }
+
+
+def _montar_produtos_acerto(itens, loja_id):
+    """Constrói a lista de 'produtos' no formato da API a partir dos itens."""
     produtos = []
     for it in itens:
         _qtd    = int(it.get("quantidade", 1))
         _custo  = float(it.get("valor_custo") or 0)
         if _custo <= 0:
             _custo = 0.01
-        _total += _qtd * _custo
         _vid    = it.get("variacao_id") or ""
         # Re-resolve o variacao_id para a LOJA de destino (o ID é por loja).
         if _vid:
@@ -639,6 +685,22 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
                 "altura":           0,
             }
         })
+    return produtos
+
+
+def _criar_uma_compra_acerto(produtos, fornecedor_id, situacao_id,
+                             forma_pagamento_id=None, loja_id=None):
+    """Faz UM POST de compra de acerto com a lista de 'produtos' dada (um lote)."""
+    from datetime import date as _date
+    hoje = _date.today().strftime("%Y-%m-%d")
+
+    _total = 0.0
+    for _p in produtos:
+        _pp = _p.get("produto", {})
+        try:
+            _total += float(_pp.get("quantidade") or 0) * float(_pp.get("valor_custo") or 0)
+        except (TypeError, ValueError):
+            pass
 
     body = {
         "fornecedor_id": str(fornecedor_id),
@@ -671,9 +733,8 @@ def criar_compra_acerto(itens, fornecedor_id, situacao_id, forma_pagamento_id=No
                 f"O GestãoClick não respondeu corretamente ao enviar {len(produtos)} "
                 f"itens (resposta vazia/inválida do servidor DELES). Isso costuma ser "
                 f"instabilidade ou limite do lado do GestãoClick — não é erro de cadastro "
-                f"seu. Tente: (1) enviar em lotes menores, ou (2) de novo em alguns minutos. "
-                f"Se persistir, registre um chamado no suporte do GestãoClick. "
-                f"[técnico: {_msg[:200]}]"
+                f"seu. Tente de novo em alguns minutos; se persistir, registre um chamado "
+                f"no suporte do GestãoClick. [técnico: {_msg[:200]}]"
             )
         raise
     # Anexa o body enviado para depuração (não afeta a API)
