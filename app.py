@@ -2397,6 +2397,46 @@ def _main_content():
         if "itens_entrada" not in st.session_state:
             st.session_state.itens_entrada = []
 
+        # ── Nova bipagem: limpa TUDO para começar do zero (com confirmação) ───
+        _qtd_atual_ent = len(st.session_state.itens_entrada)
+        if not st.session_state.get("_ent_nova_confirm"):
+            if st.button(f"🆕 Nova bipagem (limpar {_qtd_atual_ent} item(ns))",
+                         use_container_width=True, key="ent_nova_bipagem"):
+                if _qtd_atual_ent == 0:
+                    # Nada na lista — só garante que está tudo limpo
+                    st.session_state.itens_entrada = []
+                    st.session_state["leitor_area_ver"] = st.session_state.get("leitor_area_ver", 0) + 1
+                    st.session_state["_leitor_raw_restore"] = ""
+                    st.session_state.pop("_leitor_raw_current", None)
+                    st.session_state.pop("_leitor_raw_hash", None)
+                    st.session_state.pop("lista_arq_ent", None)
+                    api.limpar_rascunho_entrada(_user)
+                    st.session_state["_ent_rasc_dispensado"] = True
+                    st.rerun()
+                else:
+                    st.session_state["_ent_nova_confirm"] = True
+                    st.rerun()
+        else:
+            st.warning(f"⚠️ Isso vai **apagar os {_qtd_atual_ent} itens** da lista atual para "
+                       f"começar uma bipagem nova. Tem certeza?")
+            _nc1, _nc2 = st.columns(2)
+            if _nc1.button("✅ Sim, limpar tudo", type="primary", use_container_width=True,
+                           key="ent_nova_sim"):
+                st.session_state.itens_entrada = []
+                st.session_state["leitor_area_ver"] = st.session_state.get("leitor_area_ver", 0) + 1
+                st.session_state["_leitor_raw_restore"] = ""
+                st.session_state.pop("_leitor_raw_current", None)
+                st.session_state.pop("_leitor_raw_hash", None)
+                st.session_state.pop("lista_arq_ent", None)
+                st.session_state.pop("_ent_hash_saved", None)
+                api.limpar_rascunho_entrada(_user)
+                st.session_state["_ent_rasc_dispensado"] = True
+                st.session_state.pop("_ent_nova_confirm", None)
+                st.rerun()
+            if _nc2.button("Cancelar", use_container_width=True, key="ent_nova_nao"):
+                st.session_state.pop("_ent_nova_confirm", None)
+                st.rerun()
+
         # ── Recuperação AUTOMÁTICA de rascunho ────────────────────────────────
         # Se a sessão caiu/recarregou (ex.: redeploy do Railway, F5, queda de
         # conexão) e a lista ficou vazia, restauramos AUTOMATICAMENTE o que foi
@@ -3220,6 +3260,11 @@ def _main_content():
             with col_x:
                 if st.button("🗑️ Limpar lista", use_container_width=True):
                     st.session_state.itens_entrada = []
+                    st.session_state["leitor_area_ver"] = st.session_state.get("leitor_area_ver", 0) + 1
+                    st.session_state["_leitor_raw_restore"] = ""
+                    st.session_state.pop("_leitor_raw_current", None)
+                    st.session_state.pop("_leitor_raw_hash", None)
+                    st.session_state.pop("lista_arq_ent", None)
                     api.limpar_rascunho_entrada(_user)
                     st.session_state["_ent_rasc_dispensado"] = True
                     st.rerun()
