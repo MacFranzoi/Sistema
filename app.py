@@ -6714,30 +6714,43 @@ def _main_content():
                 st.caption(f"**{len(_linhas_res)}** variação(ões) listada(s).")
                 st.dataframe(_df_bl, use_container_width=True, hide_index=True)
 
-                # ── 📊 Ranking de vendas por loja (top 50 do grupo) ───────────
-                _rank_src = st.session_state.get("bl_ranking") or _res_bl
-                _linhas_rank = _rank_src.get("linhas", [])
-                if any(_l.get("vendas") for _l in _linhas_rank):
-                    st.markdown("##### 📊 Ranking de vendas por loja (top 50 do filtro)")
-                    st.caption("As mais vendidas em cada loja — ajuda a decidir onde o estoque deve ficar.")
-                    _cols_rank = st.columns(len(_lojas_res))
-                    for _ci, _lj in enumerate(_lojas_res):
-                        _vendas_loja = []
-                        for _l in _linhas_rank:
-                            _q = _l.get("vendas", {}).get(_lj["id"], 0)
-                            if _q > 0:
-                                _lab = f'{_l["produto"]} {_l["variacao"]}'[:40]
-                                _vendas_loja.append((_lab, _q))
-                        _vendas_loja.sort(key=lambda x: -x[1])
-                        _top50 = _vendas_loja[:50]
-                        with _cols_rank[_ci]:
-                            st.caption(f"🏪 **{_lj['nome']}** — top {len(_top50)}")
-                            if _top50:
-                                _df_rk = _pd_bl.DataFrame(
-                                    {"Vendas": dict(_top50)})
-                                st.bar_chart(_df_rk, height=320)
+                # ── 📈 Análise de vendas por modelo (pizza + tabela) ──────────
+                _rk_inline = st.session_state.get("bl_rk_res")
+                if _rk_inline and _rk_inline.get("ranking"):
+                    st.markdown("##### 📈 Análise de vendas por modelo (últimos 90 dias)")
+                    try:
+                        import altair as _alt_bl
+                    except Exception:
+                        _alt_bl = None
+                    import pandas as _pd_bl2
+                    _nomes_rk_bl = {l["id"]: l["nome"] for l in _rk_inline.get("lojas", [])}
+                    for _lid_bl, _itens_bl in _rk_inline.get("ranking", {}).items():
+                        st.markdown(f"###### 🏪 {_nomes_rk_bl.get(_lid_bl, _lid_bl)} — top {len(_itens_bl)}")
+                        if not _itens_bl:
+                            st.caption("Sem vendas no período.")
+                            continue
+                        _gc, _tc = st.columns([1, 1])
+                        with _gc:
+                            _top12_bl = _itens_bl[:12]
+                            _resto_bl = sum(i["qtd"] for i in _itens_bl[12:])
+                            _dados_pie_bl = [{"Item": i["label"][:30], "Vendas": i["qtd"]} for i in _top12_bl]
+                            if _resto_bl > 0:
+                                _dados_pie_bl.append({"Item": "Outros", "Vendas": _resto_bl})
+                            _df_pie_bl = _pd_bl2.DataFrame(_dados_pie_bl)
+                            if _alt_bl is not None:
+                                _ch_bl = (_alt_bl.Chart(_df_pie_bl)
+                                          .mark_arc()
+                                          .encode(theta=_alt_bl.Theta("Vendas:Q", stack=True),
+                                                  color=_alt_bl.Color("Item:N", legend=_alt_bl.Legend(title="Modelo")),
+                                                  tooltip=["Item", "Vendas"]))
+                                st.altair_chart(_ch_bl, use_container_width=True)
                             else:
-                                st.caption("sem vendas no período")
+                                st.bar_chart(_df_pie_bl.set_index("Item"))
+                        with _tc:
+                            _df_tab_bl = _pd_bl2.DataFrame([
+                                {"#": _i + 1, "Modelo": it["produto"], "Vendas": it["qtd"]}
+                                for _i, it in enumerate(_itens_bl)])
+                            st.dataframe(_df_tab_bl, use_container_width=True, hide_index=True, height=300)
 
                 # Resumo consolidado das transferências (de → para: total de unidades)
                 _resumo_tr = {}
@@ -6801,68 +6814,21 @@ def _main_content():
                                                                observacao=_obs_transf)
                         st.code(_cmd_alg, language="javascript")
 
-        # ── 📈 Análise de vendas (90 dias) por loja ───────────────────────────
-        st.divider()
-        st.markdown("### 📈 Análise de vendas por loja (90 dias)")
-        st.caption("Gerado automaticamente ao comparar lojas. Top 50 modelos mais vendidos por loja — "
-                   "pizza + tabela. Incluído no PDF de transferência.")
-        _cva1, _cva2 = st.columns([3, 1])
-        _dias_rk = _cva2.number_input("Dias", min_value=7, max_value=365, value=90, step=1, key="bl_rk_dias")
-        if _cva1.button("📈 Carregar análise de vendas", use_container_width=True,
-                        key="bl_rk_btn", disabled=len(_sel_lojas) < 1):
-            with st.spinner(f"Buscando vendas dos últimos {int(_dias_rk)} dias (pode levar alguns segundos)…"):
-                # Filtra pelos modelos presentes na tabela de comparação (se houver)
-                _modelos_rk = _modelos_lst
-                _bl_tab = st.session_state.get("bl_resultado")
-                if _bl_tab and _bl_tab.get("linhas"):
-                    _modelos_rk = list({ln["produto"] for ln in _bl_tab["linhas"] if ln.get("produto")}) or _modelos_lst
-                st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
-                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_rk,
-                    dias=int(_dias_rk), top=50)
-
-        _rk_res = st.session_state.get("bl_rk_res")
-        if _rk_res:
-            import pandas as _pd_rk
-            try:
-                import altair as _alt
-            except Exception:
-                _alt = None
-            _nomes_rk = {l["id"]: l["nome"] for l in _rk_res.get("lojas", [])}
-            for _lid, _itens in _rk_res.get("ranking", {}).items():
-                st.markdown(f"#### 🏪 {_nomes_rk.get(_lid, _lid)} — top {len(_itens)} ({_rk_res.get('dias',90)} dias)")
-                if not _itens:
-                    st.caption("Sem vendas no período para o filtro escolhido.")
-                    continue
-                _g, _t = st.columns([1, 1])
-                # Pizza (top 12 + Outros) colorida com legenda
-                with _g:
-                    _top12 = _itens[:12]
-                    _resto = sum(i["qtd"] for i in _itens[12:])
-                    _dados_pie = [{"Item": i["label"][:30], "Vendas": i["qtd"]} for i in _top12]
-                    if _resto > 0:
-                        _dados_pie.append({"Item": "Outros", "Vendas": _resto})
-                    _df_pie = _pd_rk.DataFrame(_dados_pie)
-                    if _alt is not None:
-                        _ch = (_alt.Chart(_df_pie)
-                               .mark_arc()
-                               .encode(theta=_alt.Theta("Vendas:Q", stack=True),
-                                       color=_alt.Color("Item:N", legend=_alt.Legend(title="Item")),
-                                       tooltip=["Item", "Vendas"]))
-                        st.altair_chart(_ch, use_container_width=True)
-                    else:
-                        st.bar_chart(_df_pie.set_index("Item"))
-                # Tabela com os números (top 50)
-                with _t:
-                    _df_tab = _pd_rk.DataFrame([
-                        {"#": _i + 1, "Modelo": it["produto"], "Vendas": it["qtd"]}
-                        for _i, it in enumerate(_itens)])
-                    st.dataframe(_df_tab, use_container_width=True, hide_index=True, height=320)
-
-            # Adicionar ao PDF
-            _pdf_rk = gerar_pdf_ranking_vendas(_rk_res)
-            st.download_button("🖨️ Adicionar ranking ao PDF (baixar)", _pdf_rk,
-                               file_name=f"ranking_vendas_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                               mime="application/pdf", use_container_width=True, key="bl_rk_pdf")
+        # ── 📈 Recarregar análise de vendas com período diferente ─────────────
+        with st.expander("📈 Recarregar análise de vendas com período diferente", expanded=False):
+            _cva1, _cva2 = st.columns([3, 1])
+            _dias_rk = _cva2.number_input("Dias", min_value=7, max_value=365, value=90, step=1, key="bl_rk_dias")
+            if _cva1.button("Recarregar", use_container_width=True,
+                            key="bl_rk_btn", disabled=len(_sel_lojas) < 1):
+                with st.spinner(f"Buscando vendas dos últimos {int(_dias_rk)} dias…"):
+                    _bl_tab2 = st.session_state.get("bl_resultado")
+                    _modelos_rk2 = _modelos_lst
+                    if _bl_tab2 and _bl_tab2.get("linhas"):
+                        _modelos_rk2 = list({ln["produto"] for ln in _bl_tab2["linhas"] if ln.get("produto")}) or _modelos_lst
+                    st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
+                        _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_rk2,
+                        dias=int(_dias_rk), top=50)
+                    st.rerun()
 
         # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
         st.divider()
@@ -6973,6 +6939,43 @@ def _main_content():
                                 _pp[_m["produto"]] = _pp.get(_m["produto"], 0) + _m["qtd"]
                             _top = dict(sorted(_pp.items(), key=lambda x: -x[1])[:15])
                             st.bar_chart(_pd_ia.DataFrame({"Unidades": _top}))
+
+                    # Pizza de vendas por modelo (mesma análise que aparece na tabela do sistema)
+                    _rk_ia = st.session_state.get("bl_rk_res")
+                    if _rk_ia and _rk_ia.get("ranking"):
+                        st.markdown("##### 📈 Análise de vendas por modelo (últimos 90 dias)")
+                        try:
+                            import altair as _alt_ia
+                        except Exception:
+                            _alt_ia = None
+                        import pandas as _pd_ia2
+                        _nomes_rk_ia = {l["id"]: l["nome"] for l in _rk_ia.get("lojas", [])}
+                        for _lid_ia, _itens_ia in _rk_ia.get("ranking", {}).items():
+                            st.markdown(f"###### 🏪 {_nomes_rk_ia.get(_lid_ia, _lid_ia)} — top {len(_itens_ia)}")
+                            if not _itens_ia:
+                                continue
+                            _gci, _tci = st.columns([1, 1])
+                            with _gci:
+                                _top12_ia = _itens_ia[:12]
+                                _resto_ia = sum(i["qtd"] for i in _itens_ia[12:])
+                                _dp_ia = [{"Item": i["label"][:30], "Vendas": i["qtd"]} for i in _top12_ia]
+                                if _resto_ia > 0:
+                                    _dp_ia.append({"Item": "Outros", "Vendas": _resto_ia})
+                                _dfp_ia = _pd_ia2.DataFrame(_dp_ia)
+                                if _alt_ia is not None:
+                                    _ch_ia = (_alt_ia.Chart(_dfp_ia)
+                                              .mark_arc()
+                                              .encode(theta=_alt_ia.Theta("Vendas:Q", stack=True),
+                                                      color=_alt_ia.Color("Item:N", legend=_alt_ia.Legend(title="Modelo")),
+                                                      tooltip=["Item", "Vendas"]))
+                                    st.altair_chart(_ch_ia, use_container_width=True)
+                                else:
+                                    st.bar_chart(_dfp_ia.set_index("Item"))
+                            with _tci:
+                                _dft_ia = _pd_ia2.DataFrame([
+                                    {"#": _i + 1, "Modelo": it["produto"], "Vendas": it["qtd"]}
+                                    for _i, it in enumerate(_itens_ia)])
+                                st.dataframe(_dft_ia, use_container_width=True, hide_index=True, height=300)
 
                     # Resumo de → para
                     _res_ia_tr = {}
