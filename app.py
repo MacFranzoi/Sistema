@@ -6839,38 +6839,49 @@ def _main_content():
                    "“deixe o dobro na loja Centro porque vende mais”.")
         _regra_ia = st.text_area("Sua regra de distribuição", key="bl_regra_ia", height=90,
                                  placeholder="Escreva aqui a regra...")
+        # URL da FastAPI v2 (Railway injeta V2_URL; fallback local)
+        _V2_URL = os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
+
         if st.button("🤖 Gerar distribuição com IA", type="primary", use_container_width=True,
                      key="bl_ia_btn", disabled=(len(_sel_lojas) < 2 or not _regra_ia.strip())):
-            with st.spinner("A IA está montando a distribuição…"):
-                try:
-                    _full_ia = api.comparar_estoque_lojas(
-                        _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
-                        somente_divergentes=False, incluir_vendas=True)
-                    _prog_ia = st.progress(0.0)
-                    def _cb_ia(i, n):
-                        try: _prog_ia.progress(i / n, text=f"IA — lote {i} de {n}…")
-                        except Exception: pass
-                    _res_ia = api.balancear_lojas_ia(_full_ia["lojas"], _full_ia["linhas"],
-                                                     _regra_ia.strip(), progress_callback=_cb_ia)
-                    _prog_ia.progress(1.0)
-                    # Enriquece os movimentos com produto/variação e estoque pelo código
-                    _cod_map = {ln["codigo"]: ln for ln in _full_ia["linhas"]}
-                    _id_por_nome_ia = {l["nome"]: l["id"] for l in _full_ia["lojas"]}
-                    for _mv in _res_ia.get("movimentos", []):
-                        _info = _cod_map.get(_mv["codigo"], {})
-                        _mv["produto"] = _info.get("produto", "")
-                        _mv["variacao"] = _info.get("variacao", "")
-                        _est = _info.get("estoque", {})
-                        _mv["est_de"] = _est.get(_id_por_nome_ia.get(_mv["de"]), 0)
-                        _mv["est_para"] = _est.get(_id_por_nome_ia.get(_mv["para"]), 0)
-                    st.session_state["bl_ia_res"] = _res_ia
-                    # Gera/atualiza ranking de vendas com os modelos usados pela IA
-                    _modelos_ia_rk = list({ln["produto"] for ln in _full_ia["linhas"] if ln.get("produto")}) or _modelos_lst
-                    st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
-                        _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_ia_rk,
-                        dias=90, top=50)
-                except Exception as _e_ia:
-                    st.session_state["bl_ia_res"] = {"erro": str(_e_ia)}
+            import requests as _req_ia
+            try:
+                _r = _req_ia.post(
+                    f"{_V2_URL}/api/balanco/ia",
+                    json={"loja_ids": _sel_lojas,
+                          "grupos": _sel_grupos or [],
+                          "modelos": _modelos_lst or [],
+                          "regra": _regra_ia.strip()},
+                    timeout=10)
+                _r.raise_for_status()
+                st.session_state["bl_ia_job_id"] = _r.json()["job_id"]
+                st.session_state["bl_ia_res"] = None
+            except Exception as _e_ia:
+                st.session_state["bl_ia_res"] = {"erro": f"Falha ao iniciar IA: {_e_ia}"}
+                st.session_state.pop("bl_ia_job_id", None)
+
+        # Polling do job em background
+        _job_id_ia = st.session_state.get("bl_ia_job_id")
+        if _job_id_ia and not st.session_state.get("bl_ia_res"):
+            import requests as _req_poll, time as _time_poll
+            try:
+                _rp = _req_poll.get(f"{_V2_URL}/api/balanco/ia/{_job_id_ia}", timeout=5)
+                _jp = _rp.json()
+                if _jp["status"] == "done":
+                    st.session_state["bl_ia_res"] = _jp["result"]
+                    st.session_state["bl_rk_res"] = _jp.get("ranking")
+                    st.session_state.pop("bl_ia_job_id", None)
+                elif _jp["status"] == "error":
+                    st.session_state["bl_ia_res"] = _jp["result"]
+                    st.session_state.pop("bl_ia_job_id", None)
+                else:
+                    st.info("⏳ IA processando em segundo plano… você pode navegar e voltar.")
+                    _time_poll.sleep(3)
+                    st.rerun()
+            except Exception as _ep:
+                st.warning(f"Aguardando IA… ({_ep})")
+                _time_poll.sleep(3)
+                st.rerun()
 
         _ia_res = st.session_state.get("bl_ia_res")
         if _ia_res:

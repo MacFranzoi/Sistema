@@ -14,10 +14,15 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import api  # noqa: E402
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query  # noqa: E402
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query, BackgroundTasks  # noqa: E402
 from fastapi.responses import JSONResponse, FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
+import uuid, threading  # noqa: E402
+
+# ── Store em memória para jobs de IA em background ───────────────────────────
+_ia_jobs: dict = {}  # job_id → {"status": "running"|"done"|"error", "result": ...}
+_ia_jobs_lock = threading.Lock()
 
 app = FastAPI(title="Plug ERP 2.0", docs_url="/api/docs")
 
@@ -200,6 +205,63 @@ def estoque(
 def diagnostico(request: Request):
     usuario_atual(request)
     return api.diagnostico_config()
+
+
+# ── IA Balanço em background ─────────────────────────────────────────────────
+class _BalancoIAReq(BaseModel):
+    loja_ids: list
+    grupos: list = []
+    modelos: list = []
+    regra: str
+
+
+def _rodar_ia_background(job_id: str, loja_ids, grupos, modelos, regra):
+    try:
+        full = api.comparar_estoque_lojas(
+            loja_ids,
+            grupos=grupos or None,
+            modelos=modelos or None,
+            somente_divergentes=False,
+            incluir_vendas=True,
+        )
+        res = api.balancear_lojas_ia(full["lojas"], full["linhas"], regra)
+        cod_map = {ln["codigo"]: ln for ln in full["linhas"]}
+        id_por_nome = {l["nome"]: l["id"] for l in full["lojas"]}
+        for mv in res.get("movimentos", []):
+            info = cod_map.get(mv["codigo"], {})
+            mv["produto"] = info.get("produto", "")
+            mv["variacao"] = info.get("variacao", "")
+            est = info.get("estoque", {})
+            mv["est_de"] = est.get(id_por_nome.get(mv["de"]), 0)
+            mv["est_para"] = est.get(id_por_nome.get(mv["para"]), 0)
+        # Ranking de vendas do cache (rápido)
+        modelos_rk = list({ln["produto"] for ln in full["linhas"] if ln.get("produto")}) or modelos or None
+        ranking = api.ranking_vendas_lojas(loja_ids, grupos=grupos or None, modelos=modelos_rk, dias=90, top=50)
+        with _ia_jobs_lock:
+            _ia_jobs[job_id] = {"status": "done", "result": res, "ranking": ranking}
+    except Exception as e:
+        with _ia_jobs_lock:
+            _ia_jobs[job_id] = {"status": "error", "result": {"erro": str(e)}}
+
+
+@app.post("/api/balanco/ia")
+def balanco_ia_start(req: _BalancoIAReq, request: Request, background_tasks: BackgroundTasks):
+    usuario_atual(request)
+    job_id = str(uuid.uuid4())
+    with _ia_jobs_lock:
+        _ia_jobs[job_id] = {"status": "running", "result": None}
+    background_tasks.add_task(_rodar_ia_background, job_id, req.loja_ids, req.grupos, req.modelos, req.regra)
+    return {"job_id": job_id}
+
+
+@app.get("/api/balanco/ia/{job_id}")
+def balanco_ia_status(job_id: str, request: Request):
+    usuario_atual(request)
+    with _ia_jobs_lock:
+        job = _ia_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job não encontrado")
+    return job
 
 
 # ── Frontend estático (SPA) ──────────────────────────────────────────────────

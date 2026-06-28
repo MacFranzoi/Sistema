@@ -891,10 +891,14 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
                 vd = v.get("variacao", {})
                 vmap[str(vd.get("id", ""))] = (nome, vd.get("nome") or "")
 
-        # vendas no período (ao vivo)
+        # vendas do cache (atualizado pelo scheduler — evita chamada ao vivo)
         try:
-            vv = vendas_por_variacao(dias=dias, loja_id=lid)
-            por_var = vv.get("por_variacao", {}) or {}
+            cv = carregar_cache_vendas(lid) or {}
+            por_var = cv.get("por_variacao", {}) or {}
+            # fallback para API ao vivo se cache vazio
+            if not por_var:
+                vv = vendas_por_variacao(dias=dias, loja_id=lid)
+                por_var = vv.get("por_variacao", {}) or {}
         except Exception:
             por_var = {}
 
