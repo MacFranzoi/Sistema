@@ -1,5 +1,6 @@
 # Sistema Plug 2.0 — backend FastAPI + frontend estático
 # Build a partir da RAIZ do repositório:  docker build -f v2/Dockerfile .
+# v2.1 — endpoints IA background adicionados
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
