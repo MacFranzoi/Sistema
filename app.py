@@ -6841,6 +6841,7 @@ def _main_content():
                                  placeholder="Escreva aqui a regra...")
         # URL da FastAPI v2 (Railway injeta V2_URL; fallback local)
         _V2_URL = os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
+        _V2_HEADERS = {"x-internal-token": os.environ.get("INTERNAL_TOKEN", "")}
 
         if st.button("🤖 Gerar distribuição com IA", type="primary", use_container_width=True,
                      key="bl_ia_btn", disabled=(len(_sel_lojas) < 2 or not _regra_ia.strip())):
@@ -6852,6 +6853,7 @@ def _main_content():
                           "grupos": _sel_grupos or [],
                           "modelos": _modelos_lst or [],
                           "regra": _regra_ia.strip()},
+                    headers=_V2_HEADERS,
                     timeout=10)
                 _r.raise_for_status()
                 st.session_state["bl_ia_job_id"] = _r.json()["job_id"]
@@ -6865,7 +6867,7 @@ def _main_content():
         if _job_id_ia and not st.session_state.get("bl_ia_res"):
             import requests as _req_poll, time as _time_poll
             try:
-                _rp = _req_poll.get(f"{_V2_URL}/api/balanco/ia/{_job_id_ia}", timeout=5)
+                _rp = _req_poll.get(f"{_V2_URL}/api/balanco/ia/{_job_id_ia}", headers=_V2_HEADERS, timeout=5)
                 _jp = _rp.json()
                 if _jp["status"] == "done":
                     st.session_state["bl_ia_res"] = _jp["result"]

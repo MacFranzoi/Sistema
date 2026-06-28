@@ -244,9 +244,18 @@ def _rodar_ia_background(job_id: str, loja_ids, grupos, modelos, regra):
             _ia_jobs[job_id] = {"status": "error", "result": {"erro": str(e)}}
 
 
+def _autenticar_interno(request: Request):
+    """Aceita cookie de sessão normal OU header X-Internal-Token (chamadas server-to-server)."""
+    token_interno = os.environ.get("INTERNAL_TOKEN", "")
+    header_token = request.headers.get("x-internal-token", "")
+    if token_interno and header_token == token_interno:
+        return  # autenticado via token interno
+    usuario_atual(request)  # fallback: cookie normal
+
+
 @app.post("/api/balanco/ia")
 def balanco_ia_start(req: _BalancoIAReq, request: Request, background_tasks: BackgroundTasks):
-    usuario_atual(request)
+    _autenticar_interno(request)
     job_id = str(uuid.uuid4())
     with _ia_jobs_lock:
         _ia_jobs[job_id] = {"status": "running", "result": None}
@@ -256,7 +265,7 @@ def balanco_ia_start(req: _BalancoIAReq, request: Request, background_tasks: Bac
 
 @app.get("/api/balanco/ia/{job_id}")
 def balanco_ia_status(job_id: str, request: Request):
-    usuario_atual(request)
+    _autenticar_interno(request)
     with _ia_jobs_lock:
         job = _ia_jobs.get(job_id)
     if not job:
