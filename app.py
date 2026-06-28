@@ -219,9 +219,16 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None):
     FNORM = "Arial" if USE_UNICODE else "Helvetica"
     _data = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    cols   = ["produto", "variacao", "codigo", "para", "qtd"]
-    heads  = ["Produto", "Variacao", "Codigo", "Enviar para", "Qtd"]
-    widths = [55, 50, 30, 35, 15]
+    # Inclui estoque de origem/destino quando disponível nos movimentos
+    _tem_est = any(("est_de" in m or "est_para" in m) for m in movimentos)
+    if _tem_est:
+        cols   = ["produto", "variacao", "codigo", "para", "est_de", "est_para", "qtd"]
+        heads  = ["Produto", "Variacao", "Codigo", "Enviar p/", "Est.orig", "Est.dest", "Qtd"]
+        widths = [46, 40, 26, 26, 16, 16, 14]
+    else:
+        cols   = ["produto", "variacao", "codigo", "para", "qtd"]
+        heads  = ["Produto", "Variacao", "Codigo", "Enviar para", "Qtd"]
+        widths = [55, 50, 30, 35, 15]
 
     for _origem, _itens in sorted(por_origem.items()):
         pdf.add_page()
@@ -6634,6 +6641,8 @@ def _main_content():
                             "codigo": _ln["codigo"],
                             "de": _nomes_por_id.get(_t["de"], _t["de"]),
                             "para": _nomes_por_id.get(_t["para"], _t["para"]),
+                            "est_de": _ln["estoque"].get(_t["de"], 0),
+                            "est_para": _ln["estoque"].get(_t["para"], 0),
                             "qtd": _t["qtd"],
                         })
                 if _movs_alg:
@@ -6675,12 +6684,16 @@ def _main_content():
                         somente_divergentes=False)
                     _res_ia = api.balancear_lojas_ia(_full_ia["lojas"], _full_ia["linhas"],
                                                      _regra_ia.strip())
-                    # Enriquece os movimentos com produto/variação pelo código
+                    # Enriquece os movimentos com produto/variação e estoque pelo código
                     _cod_map = {ln["codigo"]: ln for ln in _full_ia["linhas"]}
+                    _id_por_nome_ia = {l["nome"]: l["id"] for l in _full_ia["lojas"]}
                     for _mv in _res_ia.get("movimentos", []):
                         _info = _cod_map.get(_mv["codigo"], {})
                         _mv["produto"] = _info.get("produto", "")
                         _mv["variacao"] = _info.get("variacao", "")
+                        _est = _info.get("estoque", {})
+                        _mv["est_de"] = _est.get(_id_por_nome_ia.get(_mv["de"]), 0)
+                        _mv["est_para"] = _est.get(_id_por_nome_ia.get(_mv["para"]), 0)
                     st.session_state["bl_ia_res"] = _res_ia
                 except Exception as _e_ia:
                     st.session_state["bl_ia_res"] = {"erro": str(_e_ia)}
