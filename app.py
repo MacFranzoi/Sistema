@@ -6891,14 +6891,21 @@ def _main_content():
                     headers=_V2_HEADERS,
                     timeout=10)
                 _r.raise_for_status()
-                st.session_state["bl_ia_job_id"] = _r.json()["job_id"]
+                _jid = _r.json()["job_id"]
+                st.session_state["bl_ia_job_id"] = _jid
                 st.session_state["bl_ia_res"] = None
+                # Persiste job_id na URL para sobreviver a reloads
+                st.query_params["ia_job"] = _jid
             except Exception as _e_ia:
                 st.session_state["bl_ia_res"] = {"erro": f"Falha ao iniciar IA: {_e_ia}"}
                 st.session_state.pop("bl_ia_job_id", None)
+                st.query_params.pop("ia_job", None)
 
-        # Polling do job em background
-        _job_id_ia = st.session_state.get("bl_ia_job_id")
+        # Recupera job_id da URL se session_state foi perdido (reload/navegação)
+        _job_id_ia = st.session_state.get("bl_ia_job_id") or st.query_params.get("ia_job")
+        if _job_id_ia:
+            st.session_state["bl_ia_job_id"] = _job_id_ia
+
         if _job_id_ia and not st.session_state.get("bl_ia_res"):
             import requests as _req_poll, time as _time_poll
             try:
@@ -6908,11 +6915,13 @@ def _main_content():
                     st.session_state["bl_ia_res"] = _jp["result"]
                     st.session_state["bl_rk_res"] = _jp.get("ranking")
                     st.session_state.pop("bl_ia_job_id", None)
+                    st.query_params.pop("ia_job", None)
                 elif _jp["status"] == "error":
                     st.session_state["bl_ia_res"] = _jp["result"]
                     st.session_state.pop("bl_ia_job_id", None)
+                    st.query_params.pop("ia_job", None)
                 else:
-                    st.info("⏳ IA processando em segundo plano… você pode navegar e voltar.")
+                    st.info("⏳ IA ainda processando… aguarde ou volte em instantes.")
                     _time_poll.sleep(3)
                     st.rerun()
             except Exception as _ep:
