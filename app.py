@@ -126,6 +126,78 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
 
     return bytes(pdf.output())
 
+
+def gerar_pdf_separacao(movimentos, origem_filtro=None):
+    """Gera PDF de separação para transferência entre lojas.
+
+    movimentos: lista de {produto, variacao, codigo, de, para, qtd} (de/para = NOME da loja).
+    Agrupa por loja de ORIGEM (a que precisa separar e enviar). Uma seção/página por loja.
+    origem_filtro: se informado, gera só para essa loja de origem.
+    """
+    import os
+    FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
+    USE_UNICODE = os.path.exists(FONT_PATH)
+
+    def _s(v):
+        text = str(v or "").replace("—", "-").replace("–", "-")
+        if not USE_UNICODE:
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+        return text
+
+    # Agrupa por origem
+    por_origem = {}
+    for m in movimentos:
+        if origem_filtro and m.get("de") != origem_filtro:
+            continue
+        por_origem.setdefault(m.get("de", "—"), []).append(m)
+
+    pdf = FPDF()
+    if USE_UNICODE:
+        pdf.add_font("Arial", "", FONT_PATH)
+        pdf.add_font("Arial", "B", FONT_PATH)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    FNORM = "Arial" if USE_UNICODE else "Helvetica"
+    _data = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    cols   = ["produto", "variacao", "codigo", "para", "qtd"]
+    heads  = ["Produto", "Variacao", "Codigo", "Enviar para", "Qtd"]
+    widths = [55, 50, 30, 35, 15]
+
+    for _origem, _itens in sorted(por_origem.items()):
+        pdf.add_page()
+        pdf.set_font(FNORM, "B", 14)
+        pdf.cell(0, 8, _s(f"SEPARACAO PARA TRANSFERENCIA"), ln=True, align="C")
+        pdf.set_font(FNORM, "B", 12)
+        pdf.cell(0, 7, _s(f"Loja: {_origem}"), ln=True, align="C")
+        pdf.set_font(FNORM, "", 9)
+        _tot_un = sum(int(i.get("qtd", 0)) for i in _itens)
+        pdf.cell(0, 6, _s(f"{len(_itens)} itens · {_tot_un} unidades · {_data}"), ln=True, align="C")
+        pdf.ln(3)
+
+        pdf.set_font(FNORM, "B", 9)
+        pdf.set_fill_color(220, 220, 220)
+        for h, w in zip(heads, widths):
+            pdf.cell(w, 7, _s(h), border=1, fill=True)
+        pdf.ln()
+
+        pdf.set_font(FNORM, "", 8)
+        fill = False
+        pdf.set_fill_color(245, 245, 245)
+        # ordena por destino e produto para facilitar a separação
+        for it in sorted(_itens, key=lambda x: (x.get("para", ""), x.get("produto", ""))):
+            for col, w in zip(cols, widths):
+                val = _s(it.get(col, ""))
+                pdf.cell(w, 6, val[:32], border=1, fill=fill)
+            pdf.ln()
+            fill = not fill
+
+    if not por_origem:
+        pdf.add_page()
+        pdf.set_font(FNORM, "", 11)
+        pdf.cell(0, 8, _s("Nenhum item para separar."), ln=True, align="C")
+
+    return bytes(pdf.output())
+
 # ── Tema fixo claro (ignora preferência do sistema) ──
 if "tema" not in st.session_state:
     st.session_state.tema = "light"
@@ -6493,6 +6565,27 @@ def _main_content():
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    use_container_width=True, key="bl_export")
 
+                # PDF de separação para transferência (por loja de origem)
+                _movs_alg = []
+                for _ln in _linhas_res:
+                    for _t in _ln["transferencias"]:
+                        _movs_alg.append({
+                            "produto": _ln["produto"], "variacao": _ln["variacao"],
+                            "codigo": _ln["codigo"],
+                            "de": _nomes_por_id.get(_t["de"], _t["de"]),
+                            "para": _nomes_por_id.get(_t["para"], _t["para"]),
+                            "qtd": _t["qtd"],
+                        })
+                if _movs_alg:
+                    _origens_alg = sorted({_m["de"] for _m in _movs_alg})
+                    _org_sel = st.selectbox("PDF de separação — loja de origem",
+                                            ["(todas)"] + _origens_alg, key="bl_pdf_org")
+                    _pdf_alg = gerar_pdf_separacao(
+                        _movs_alg, origem_filtro=None if _org_sel == "(todas)" else _org_sel)
+                    st.download_button("🖨️ PDF de separação p/ transferência", _pdf_alg,
+                                       file_name=f"separacao_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                       mime="application/pdf", use_container_width=True, key="bl_pdf_btn")
+
         # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
         st.divider()
         st.markdown("### 🤖 Distribuir com regra própria (IA)")
@@ -6560,6 +6653,15 @@ def _main_content():
                                        file_name=f"distribuicao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                        use_container_width=True, key="bl_ia_export")
+                    # PDF de separação a partir dos movimentos da IA
+                    _origens_ia = sorted({_m["de"] for _m in _movs_ia})
+                    _org_sel_ia = st.selectbox("PDF de separação (IA) — loja de origem",
+                                               ["(todas)"] + _origens_ia, key="bl_ia_pdf_org")
+                    _pdf_ia = gerar_pdf_separacao(
+                        _movs_ia, origem_filtro=None if _org_sel_ia == "(todas)" else _org_sel_ia)
+                    st.download_button("🖨️ PDF de separação (IA)", _pdf_ia,
+                                       file_name=f"separacao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                       mime="application/pdf", use_container_width=True, key="bl_ia_pdf_btn")
 
     # ══════════════════════════════════════════════
     # ABA 5 — ESTOQUE POR LOJA
