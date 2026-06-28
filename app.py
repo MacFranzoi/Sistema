@@ -6582,7 +6582,11 @@ def _main_content():
             with st.spinner("Comparando estoques..."):
                 st.session_state["bl_resultado"] = api.comparar_estoque_lojas(
                     _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
-                    somente_divergentes=_so_diverg)
+                    somente_divergentes=_so_diverg, incluir_vendas=True)
+                # Ranking completo (todas as variações do filtro) p/ os gráficos de vendas
+                st.session_state["bl_ranking"] = api.comparar_estoque_lojas(
+                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
+                    somente_divergentes=False, incluir_vendas=True)
         if len(_sel_lojas) < 2:
             st.info("Selecione pelo menos 2 lojas para comparar.")
 
@@ -6614,6 +6618,31 @@ def _main_content():
                 _df_bl = _pd_bl.DataFrame(_rows)
                 st.caption(f"**{len(_linhas_res)}** variação(ões) listada(s).")
                 st.dataframe(_df_bl, use_container_width=True, hide_index=True)
+
+                # ── 📊 Ranking de vendas por loja (top 50 do grupo) ───────────
+                _rank_src = st.session_state.get("bl_ranking") or _res_bl
+                _linhas_rank = _rank_src.get("linhas", [])
+                if any(_l.get("vendas") for _l in _linhas_rank):
+                    st.markdown("##### 📊 Ranking de vendas por loja (top 50 do filtro)")
+                    st.caption("As mais vendidas em cada loja — ajuda a decidir onde o estoque deve ficar.")
+                    _cols_rank = st.columns(len(_lojas_res))
+                    for _ci, _lj in enumerate(_lojas_res):
+                        _vendas_loja = []
+                        for _l in _linhas_rank:
+                            _q = _l.get("vendas", {}).get(_lj["id"], 0)
+                            if _q > 0:
+                                _lab = f'{_l["produto"]} {_l["variacao"]}'[:40]
+                                _vendas_loja.append((_lab, _q))
+                        _vendas_loja.sort(key=lambda x: -x[1])
+                        _top50 = _vendas_loja[:50]
+                        with _cols_rank[_ci]:
+                            st.caption(f"🏪 **{_lj['nome']}** — top {len(_top50)}")
+                            if _top50:
+                                _df_rk = _pd_bl.DataFrame(
+                                    {"Vendas": dict(_top50)})
+                                st.bar_chart(_df_rk, height=320)
+                            else:
+                                st.caption("sem vendas no período")
 
                 # Resumo consolidado das transferências (de → para: total de unidades)
                 _resumo_tr = {}
