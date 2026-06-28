@@ -898,17 +898,18 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
         except Exception:
             por_var = {}
 
-        itens = []
+        model_totals = {}
         for vid, qtd in por_var.items():
             if str(vid) in vmap:
-                nome, varn = vmap[str(vid)]
+                nome, _ = vmap[str(vid)]
                 try:
                     q = int(float(qtd))
                 except (TypeError, ValueError):
                     q = 0
                 if q > 0:
-                    itens.append({"label": f"{nome} {varn}".strip(),
-                                  "produto": nome, "variacao": varn, "qtd": q})
+                    model_totals[nome] = model_totals.get(nome, 0) + q
+        itens = [{"label": nome, "produto": nome, "variacao": "", "qtd": total}
+                 for nome, total in model_totals.items()]
         itens.sort(key=lambda x: -x["qtd"])
         ranking[lid] = itens[:top]
 
