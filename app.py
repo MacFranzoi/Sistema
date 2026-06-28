@@ -388,7 +388,36 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
                 _pct = f"{sz/_tot_rk*100:.0f}%" if _tot_rk else ""
                 pdf.cell(0, 4, _s(f"{lbl[:24]:<24}  {sz:>4}  {_pct}"), ln=True)
 
-            pdf.set_y(_y_leg + 75)
+            # Fill remaining page space with compact full ranking
+            _y_tabela = _y_leg + 77
+            _page_h = pdf.h - pdf.b_margin  # usable bottom
+            _row_h = 4.2
+            _col_w = 85  # two columns
+            pdf.set_font(FNORM, "B", 6.5)
+            pdf.set_xy(10, _y_tabela)
+            pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Modelo':<30} {'Vend':>5}  {'%':>4}"), ln=False)
+            pdf.set_xy(10 + _col_w, _y_tabela)
+            pdf.cell(0, _row_h, _s(f"{'#':<3} {'Modelo':<30} {'Vend':>5}  {'%':>4}"), ln=True)
+            pdf.set_font(FNORM, "", 6)
+            _col = 0  # 0=left, 1=right
+            _row_in_col = 0
+            _tot_all = sum(i.get("qtd", 0) for i in _itens_rk)
+            for _ri, _item in enumerate(_itens_rk):
+                _y_row = _y_tabela + _row_h + _row_in_col * _row_h
+                if _y_row + _row_h > _page_h:
+                    if _col == 0:
+                        _col = 1
+                        _row_in_col = 0
+                        _y_row = _y_tabela + _row_h
+                    else:
+                        break  # page full
+                _x_row = 10 if _col == 0 else 10 + _col_w
+                _q = _item.get("qtd", 0)
+                _pp = f"{_q/_tot_all*100:.0f}%" if _tot_all else ""
+                _nome = _s(_item["produto"][:30])
+                pdf.set_xy(_x_row, _y_row)
+                pdf.cell(_col_w, _row_h, _s(f"{_ri+1:<3} {_nome:<30} {_q:>5}  {_pp:>4}"))
+                _row_in_col += 1
 
     return bytes(pdf.output())
 
