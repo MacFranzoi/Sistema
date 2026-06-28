@@ -6840,8 +6840,9 @@ def _main_content():
         _regra_ia = st.text_area("Sua regra de distribuição", key="bl_regra_ia", height=90,
                                  placeholder="Escreva aqui a regra...")
         # URL da FastAPI v2 (Railway injeta V2_URL; fallback local)
-        _V2_URL = _os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
-        _V2_HEADERS = {"x-internal-token": _os.environ.get("INTERNAL_TOKEN", "")}
+        import os as _osenv
+        _V2_URL = _osenv.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
+        _V2_HEADERS = {"x-internal-token": _osenv.environ.get("INTERNAL_TOKEN", "")}
 
         if st.button("🤖 Gerar distribuição com IA", type="primary", use_container_width=True,
                      key="bl_ia_btn", disabled=(len(_sel_lojas) < 2 or not _regra_ia.strip())):
