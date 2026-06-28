@@ -1,4 +1,5 @@
 fastapi
+matplotlib
 uvicorn[standard]
 python-multipart
 # As libs abaixo são usadas pelo api.py (reaproveitado da raiz)

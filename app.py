@@ -326,35 +326,69 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
         pdf.set_font(FNORM, "", 11)
         pdf.cell(0, 8, _s("Nenhum item para separar."), ln=True, align="C")
 
-    # Anexa ranking de vendas por loja (se fornecido)
+    # Anexa ranking de vendas por loja — pizza + legenda compacta
     if ranking_res and ranking_res.get("ranking"):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import io as _io_plt
+        import tempfile, os as _os_pdf
+
         _dias_rk = ranking_res.get("dias", 90)
         _nomes_rk = {l["id"]: l["nome"] for l in ranking_res.get("lojas", [])}
+
         for _lid, _itens_rk in ranking_res.get("ranking", {}).items():
             if not _itens_rk:
                 continue
             pdf.add_page()
-            pdf.set_font(FNORM, "B", 14)
-            pdf.cell(0, 8, _s("RANKING DE VENDAS"), ln=True, align="C")
-            pdf.set_font(FNORM, "B", 12)
-            pdf.cell(0, 7, _s(f"Loja: {_nomes_rk.get(_lid, _lid)} — ultimos {_dias_rk} dias"), ln=True, align="C")
-            pdf.set_font(FNORM, "", 9)
-            _tot_rk = sum(int(i.get("qtd", 0)) for i in _itens_rk)
-            pdf.cell(0, 6, _s(f"Top {len(_itens_rk)} modelos · {_tot_rk} unidades vendidas"), ln=True, align="C")
-            pdf.ln(3)
-            pdf.set_font(FNORM, "B", 9)
-            pdf.set_fill_color(220, 220, 220)
-            for h, w in zip(["#", "Modelo", "Vendas"], [12, 150, 25]):
-                pdf.cell(w, 7, _s(h), border=1, fill=True)
-            pdf.ln()
-            pdf.set_font(FNORM, "", 8)
-            _fill_rk = False
-            pdf.set_fill_color(245, 245, 245)
-            for _i, it in enumerate(_itens_rk, 1):
-                for val, w in zip([str(_i), it.get("produto", ""), str(it.get("qtd", 0))], [12, 150, 25]):
-                    pdf.cell(w, 6, _s(val)[:60], border=1, fill=_fill_rk)
-                pdf.ln()
-                _fill_rk = not _fill_rk
+            pdf.set_font(FNORM, "B", 13)
+            pdf.cell(0, 8, _s(f"VENDAS — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
+            pdf.ln(2)
+
+            # Gera gráfico pizza com matplotlib
+            _top = _itens_rk[:12]
+            _resto = sum(i.get("qtd", 0) for i in _itens_rk[12:])
+            _labels = [_s(i["produto"][:22]) for i in _top]
+            _sizes  = [i.get("qtd", 0) for i in _top]
+            if _resto > 0:
+                _labels.append("Outros")
+                _sizes.append(_resto)
+
+            _cores = plt.cm.tab20.colors[:len(_labels)]
+            fig, ax = plt.subplots(figsize=(5, 4))
+            ax.pie(_sizes, labels=None, colors=_cores, startangle=140,
+                   autopct="%1.0f%%", pctdistance=0.75,
+                   textprops={"fontsize": 7})
+            ax.set_title("")
+            fig.tight_layout(pad=0.5)
+
+            # Salva como PNG temporário
+            _tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            fig.savefig(_tmp.name, dpi=130, bbox_inches="tight")
+            plt.close(fig)
+
+            # Insere pizza no PDF (lado esquerdo)
+            pdf.image(_tmp.name, x=10, y=pdf.get_y(), w=90, h=72)
+            _os_pdf.unlink(_tmp.name)
+
+            # Legenda compacta (lado direito)
+            _y_leg = pdf.get_y() + 4
+            _tot_rk = sum(_sizes)
+            pdf.set_xy(105, _y_leg)
+            pdf.set_font(FNORM, "B", 7)
+            pdf.cell(0, 5, _s("Modelo                        Vend.  %"), ln=True)
+            pdf.set_font(FNORM, "", 6.5)
+            for _i, (lbl, sz, cor) in enumerate(zip(_labels, _sizes, _cores)):
+                r, g, b = int(cor[0]*255), int(cor[1]*255), int(cor[2]*255)
+                pdf.set_fill_color(r, g, b)
+                pdf.set_xy(105, _y_leg + 6 + _i * 5)
+                pdf.cell(4, 4, "", fill=True)
+                pdf.set_x(111)
+                _pct = f"{sz/_tot_rk*100:.0f}%" if _tot_rk else ""
+                pdf.cell(0, 4, _s(f"{lbl[:24]:<24}  {sz:>4}  {_pct}"), ln=True)
+
+            pdf.set_y(_y_leg + 75)
 
     return bytes(pdf.output())
 
