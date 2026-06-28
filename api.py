@@ -889,8 +889,12 @@ Regras técnicas:
         messages=[{"role": "user", "content": prompt}],
     )
     raw = msg.content[0].text.strip()
-    m = re.search(r'\{.*\}', raw, re.DOTALL)
-    obj = json.loads(m.group() if m else raw, strict=False)
+    # A IA às vezes devolve texto/objeto a mais depois do JSON ("Extra data").
+    # raw_decode lê só o PRIMEIRO objeto JSON e ignora o que vier depois.
+    _ini = raw.find("{")
+    if _ini < 0:
+        raise ValueError("Resposta da IA sem JSON.")
+    obj, _ = json.JSONDecoder(strict=False).raw_decode(raw[_ini:])
     nomes_validos = {l["nome"] for l in lojas}
     movs = []
     for mv in obj.get("movimentos", []):
