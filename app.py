@@ -127,7 +127,7 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
     return bytes(pdf.output())
 
 
-def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None):
+def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None, observacao=""):
     """Gera um snippet JS que, colado no Console do GestaoClick (logado), cria as
     transferências de estoque oficiais usando o token de sessão (cookie x-token-auth).
 
@@ -174,7 +174,7 @@ def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None):
     }
     if(!prods.length){log.push('Transf '+t.orgN+'->'+t.dstN+': sem produtos');continue;}
     const vt=prods.reduce((s,x)=>s+(parseFloat(x.valor_total.replace(/\./g,'').replace(',','.'))||0),0).toFixed(2).replace('.',',');
-    const body=JSON.stringify({TransferenciasEstoque:{nome_loja_origem:t.orgN,loja_origem_id:t.org,nome_loja_destino:t.dstN,loja_destino_id:t.dst,valor_total:vt,observacoes:'Balanco entre lojas'},TransferenciasEstoquesProduto:prods});
+    const body=JSON.stringify({TransferenciasEstoque:{nome_loja_origem:t.orgN,loja_origem_id:t.org,nome_loja_destino:t.dstN,loja_destino_id:t.dst,valor_total:vt,observacoes:__OBS__},TransferenciasEstoquesProduto:prods});
     try{
       const r2=await fetch(B+'/transferencias_estoques/adicionar',{method:'POST',headers:Object.assign({'content-type':'multipart/form-data'},H),body:body,credentials:'include'});
       const j2=await r2.json();
@@ -184,10 +184,11 @@ def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None):
   }
   alert('Transferencias criadas: '+ok+' OK, '+fail+' falha(s)\n\n'+log.join('\n'));
 })();"""
-    return template.replace("__DATA__", data_json)
+    obs_json = _jt.dumps(observacao or "Balanco entre lojas", ensure_ascii=False)
+    return template.replace("__DATA__", data_json).replace("__OBS__", obs_json)
 
 
-def gerar_pdf_separacao(movimentos, origem_filtro=None):
+def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao=""):
     """Gera PDF de separação para transferência entre lojas.
 
     movimentos: lista de {produto, variacao, codigo, de, para, qtd} (de/para = NOME da loja).
@@ -239,6 +240,9 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None):
         pdf.set_font(FNORM, "", 9)
         _tot_un = sum(int(i.get("qtd", 0)) for i in _itens)
         pdf.cell(0, 6, _s(f"{len(_itens)} itens · {_tot_un} unidades · {_data}"), ln=True, align="C")
+        if observacao:
+            pdf.set_font(FNORM, "B", 9)
+            pdf.multi_cell(0, 5, _s(f"Obs.: {observacao}"), align="C")
         pdf.ln(3)
 
         pdf.set_font(FNORM, "B", 9)
@@ -6548,6 +6552,10 @@ def _main_content():
 
         _lojas_opts = list(api.LOJAS.items())  # [(id, nome), ...]
         _nomes_por_id = dict(_lojas_opts)
+        # Observação que vai na transferência (GestaoClick) e no PDF de separação
+        _obs_transf = st.text_input(
+            "📝 Observação (vai na transferência e no PDF)", key="bl_obs",
+            placeholder="ex: Reposição semanal, conferir com a gerente...")
         _sel_lojas = st.multiselect(
             "Lojas a comparar (escolha 2 ou mais)",
             options=[lid for lid, _ in _lojas_opts],
@@ -6650,7 +6658,8 @@ def _main_content():
                     _org_sel = st.selectbox("PDF de separação — loja de origem",
                                             ["(todas)"] + _origens_alg, key="bl_pdf_org")
                     _pdf_alg = gerar_pdf_separacao(
-                        _movs_alg, origem_filtro=None if _org_sel == "(todas)" else _org_sel)
+                        _movs_alg, origem_filtro=None if _org_sel == "(todas)" else _org_sel,
+                        observacao=_obs_transf)
                     st.download_button("🖨️ PDF de separação p/ transferência", _pdf_alg,
                                        file_name=f"separacao_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_pdf_btn")
@@ -6663,7 +6672,8 @@ def _main_content():
                             "de": _t["de"], "para": _t["para"], "codigo": _ln["codigo"],
                             "variacao": _ln["variacao"], "qtd": _t["qtd"],
                         } for _ln in _linhas_res for _t in _ln["transferencias"]]
-                        _cmd_alg = gerar_comando_transferencia(_movs_alg_ids, _nomes_por_id)
+                        _cmd_alg = gerar_comando_transferencia(_movs_alg_ids, _nomes_por_id,
+                                                               observacao=_obs_transf)
                         st.code(_cmd_alg, language="javascript")
 
         # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
@@ -6742,7 +6752,8 @@ def _main_content():
                     _org_sel_ia = st.selectbox("PDF de separação (IA) — loja de origem",
                                                ["(todas)"] + _origens_ia, key="bl_ia_pdf_org")
                     _pdf_ia = gerar_pdf_separacao(
-                        _movs_ia, origem_filtro=None if _org_sel_ia == "(todas)" else _org_sel_ia)
+                        _movs_ia, origem_filtro=None if _org_sel_ia == "(todas)" else _org_sel_ia,
+                        observacao=_obs_transf)
                     st.download_button("🖨️ PDF de separação (IA)", _pdf_ia,
                                        file_name=f"separacao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_ia_pdf_btn")
@@ -6756,7 +6767,7 @@ def _main_content():
                         _cmd_ia = gerar_comando_transferencia(
                             [{"de": _m["de"], "para": _m["para"], "codigo": _m.get("codigo", ""),
                               "variacao": _m.get("variacao", ""), "qtd": _m["qtd"]} for _m in _movs_ia],
-                            _nomes_por_id, ids_por_nome=_ids_por_nome)
+                            _nomes_por_id, ids_por_nome=_ids_por_nome, observacao=_obs_transf)
                         st.code(_cmd_ia, language="javascript")
 
     # ══════════════════════════════════════════════
