@@ -6493,6 +6493,74 @@ def _main_content():
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    use_container_width=True, key="bl_export")
 
+        # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
+        st.divider()
+        st.markdown("### 🤖 Distribuir com regra própria (IA)")
+        st.caption("Escreva, em texto livre, como quer dividir o estoque AGORA. Ex.: "
+                   "“mantenha pelo menos 2 de cada na Plaza e mande o resto pro Centro”, "
+                   "“o que estiver zerado numa loja, complete com quem tem mais”, "
+                   "“deixe o dobro na loja Centro porque vende mais”.")
+        _regra_ia = st.text_area("Sua regra de distribuição", key="bl_regra_ia", height=90,
+                                 placeholder="Escreva aqui a regra...")
+        if st.button("🤖 Gerar distribuição com IA", type="primary", use_container_width=True,
+                     key="bl_ia_btn", disabled=(len(_sel_lojas) < 2 or not _regra_ia.strip())):
+            with st.spinner("A IA está montando a distribuição…"):
+                try:
+                    _full_ia = api.comparar_estoque_lojas(
+                        _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
+                        somente_divergentes=False)
+                    _res_ia = api.balancear_lojas_ia(_full_ia["lojas"], _full_ia["linhas"],
+                                                     _regra_ia.strip())
+                    # Enriquece os movimentos com produto/variação pelo código
+                    _cod_map = {ln["codigo"]: ln for ln in _full_ia["linhas"]}
+                    for _mv in _res_ia.get("movimentos", []):
+                        _info = _cod_map.get(_mv["codigo"], {})
+                        _mv["produto"] = _info.get("produto", "")
+                        _mv["variacao"] = _info.get("variacao", "")
+                    st.session_state["bl_ia_res"] = _res_ia
+                except Exception as _e_ia:
+                    st.session_state["bl_ia_res"] = {"erro": str(_e_ia)}
+
+        _ia_res = st.session_state.get("bl_ia_res")
+        if _ia_res:
+            if _ia_res.get("erro"):
+                st.error(f"❌ Erro na IA: {_ia_res['erro']}")
+            else:
+                if _ia_res.get("explicacao"):
+                    st.info("🤖 " + _ia_res["explicacao"])
+                if _ia_res.get("truncado"):
+                    st.warning(f"⚠️ Muitos itens — a IA considerou os primeiros "
+                               f"{_ia_res.get('linhas_consideradas')} para não estourar. "
+                               f"Filtre por grupo ou modelo para cobrir tudo.")
+                _movs_ia = _ia_res.get("movimentos", [])
+                if not _movs_ia:
+                    st.success("A IA não sugeriu transferências para essa regra.")
+                else:
+                    import pandas as _pd_ia
+                    _df_movs = _pd_ia.DataFrame([{
+                        "Produto": _m.get("produto", ""),
+                        "Variação": _m.get("variacao", ""),
+                        "Cód.": _m.get("codigo", ""),
+                        "De": _m["de"], "Para": _m["para"], "Qtd": _m["qtd"],
+                    } for _m in _movs_ia])
+                    st.markdown(f"##### 🔁 {len(_movs_ia)} movimento(s) sugerido(s) pela IA")
+                    st.dataframe(_df_movs, use_container_width=True, hide_index=True)
+                    # Resumo de → para
+                    _res_ia_tr = {}
+                    for _m in _movs_ia:
+                        _kk = (_m["de"], _m["para"])
+                        _res_ia_tr[_kk] = _res_ia_tr.get(_kk, 0) + _m["qtd"]
+                    st.markdown("**Resumo:** " + "  ·  ".join(
+                        f'{q}: {de}→{para}' for (de, para), q in sorted(_res_ia_tr.items(), key=lambda x: -x[1])))
+                    import io as _io_ia
+                    _buf_ia = _io_ia.BytesIO()
+                    _df_movs.to_excel(_buf_ia, index=False)
+                    _buf_ia.seek(0)
+                    st.download_button("📤 Exportar distribuição da IA (Excel)", _buf_ia,
+                                       file_name=f"distribuicao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True, key="bl_ia_export")
+
     # ══════════════════════════════════════════════
     # ABA 5 — ESTOQUE POR LOJA
     # ══════════════════════════════════════════════
