@@ -847,6 +847,84 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
     }
 
 
+def balancear_lojas_ia(lojas, linhas, regra, max_linhas=400):
+    """Usa a IA para distribuir estoque entre lojas seguindo uma REGRA em texto livre.
+
+    lojas:  [{"id","nome"}]
+    linhas: [{"codigo","produto","variacao","estoque":{loja_id:qtd}, ...}]
+    regra:  instrução em linguagem natural (ex.: "mantenha 2 na Plaza, resto pro Centro").
+
+    Retorna {"explicacao": str, "movimentos": [{"codigo","de","para","qtd"}]} com 'de'/'para'
+    em NOME de loja. Levanta exceção se faltar chave da IA.
+    """
+    import anthropic as _ant
+    key = _get_anthropic_key()
+    if not key:
+        raise Exception("ANTHROPIC_API_KEY não configurada — a regra por IA precisa dela.")
+
+    nomes = {l["id"]: l["nome"] for l in lojas}
+    usar = linhas[:max_linhas]
+    # Representação compacta: "codigo | produto / variacao | Loja=qtd; ..."
+    linhas_txt = []
+    for ln in usar:
+        est = "; ".join(f"{nomes.get(lid, lid)}={ln['estoque'].get(lid, 0)}" for lid in nomes)
+        linhas_txt.append(f'{ln["codigo"]} | {ln["produto"]} / {ln["variacao"]} | {est}')
+    dados_txt = "\n".join(linhas_txt)
+    lojas_txt = ", ".join(l["nome"] for l in lojas)
+
+    prompt = f"""Você organiza a distribuição de estoque de capinhas entre lojas.
+
+Lojas: {lojas_txt}
+
+Regra definida pelo usuário AGORA (siga exatamente):
+{regra}
+
+Estoque atual de cada variação (codigo | produto / variação | estoque por loja):
+{dados_txt}
+
+Gere as transferências necessárias para cumprir a regra. Responda SOMENTE com JSON válido:
+{{
+  "explicacao": "1-2 frases do que você fez seguindo a regra",
+  "movimentos": [
+    {{"codigo": "<codigo da variação>", "de": "<loja origem>", "para": "<loja destino>", "qtd": <inteiro>}}
+  ]
+}}
+
+Regras técnicas:
+- Use APENAS os nomes de loja exatamente como dados: {lojas_txt}.
+- Só movimente unidades que existem na loja de origem (não crie estoque).
+- qtd inteiro e > 0. Se nada precisa mover, "movimentos": [].
+- Não invente códigos: use só os códigos listados acima.
+- Sem texto fora do JSON."""
+
+    client = _ant.Anthropic(api_key=key, max_retries=3)
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8192,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = msg.content[0].text.strip()
+    m = re.search(r'\{.*\}', raw, re.DOTALL)
+    obj = json.loads(m.group() if m else raw, strict=False)
+    # Normaliza
+    movs = []
+    nomes_validos = {l["nome"] for l in lojas}
+    for mv in obj.get("movimentos", []):
+        try:
+            q = int(mv.get("qtd", 0))
+        except (TypeError, ValueError):
+            q = 0
+        if q > 0 and mv.get("de") in nomes_validos and mv.get("para") in nomes_validos and mv.get("de") != mv.get("para"):
+            movs.append({"codigo": str(mv.get("codigo", "")), "de": mv["de"],
+                         "para": mv["para"], "qtd": q})
+    return {
+        "explicacao": obj.get("explicacao", ""),
+        "movimentos": movs,
+        "truncado": len(linhas) > max_linhas,
+        "linhas_consideradas": len(usar),
+    }
+
+
 def estoque_produto_por_loja(produto_id):
     resultado = {}
     for loja_id, loja_nome in LOJAS.items():
