@@ -6864,6 +6864,11 @@ def _main_content():
                         _mv["est_de"] = _est.get(_id_por_nome_ia.get(_mv["de"]), 0)
                         _mv["est_para"] = _est.get(_id_por_nome_ia.get(_mv["para"]), 0)
                     st.session_state["bl_ia_res"] = _res_ia
+                    # Gera/atualiza ranking de vendas com os modelos usados pela IA
+                    _modelos_ia_rk = list({ln["produto"] for ln in _full_ia["linhas"] if ln.get("produto")}) or _modelos_lst
+                    st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
+                        _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_ia_rk,
+                        dias=90, top=50)
                 except Exception as _e_ia:
                     st.session_state["bl_ia_res"] = {"erro": str(_e_ia)}
 
