@@ -372,24 +372,42 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
             pdf.image(_tmp.name, x=10, y=pdf.get_y(), w=90, h=72)
             _os_pdf.unlink(_tmp.name)
 
-            # Legenda compacta (lado direito)
+            # Legenda compacta (lado direito) com sub-linhas de variação
             _y_leg = pdf.get_y() + 4
             _tot_rk = sum(_sizes)
+            _leg_max_y = _y_leg + 74  # não ultrapassar a área da pizza
             pdf.set_xy(105, _y_leg)
             pdf.set_font(FNORM, "B", 7)
             pdf.cell(0, 5, _s("Modelo                        Vend.  %"), ln=True)
-            pdf.set_font(FNORM, "", 6.5)
-            for _i, (lbl, sz, cor) in enumerate(zip(_labels, _sizes, _cores)):
+            _y_cur = _y_leg + 6
+            for _i, (_item_leg, sz, cor) in enumerate(zip(_top, _sizes, _cores)):
+                if _y_cur + 4 > _leg_max_y:
+                    break
+                lbl = _s(_item_leg["produto"][:22])
                 r, g, b = int(cor[0]*255), int(cor[1]*255), int(cor[2]*255)
                 pdf.set_fill_color(r, g, b)
-                pdf.set_xy(105, _y_leg + 6 + _i * 5)
+                pdf.set_xy(105, _y_cur)
                 pdf.cell(4, 4, "", fill=True)
-                pdf.set_x(111)
+                pdf.set_xy(111, _y_cur)
+                pdf.set_font(FNORM, "B", 6.5)
                 _pct = f"{sz/_tot_rk*100:.0f}%" if _tot_rk else ""
-                pdf.cell(0, 4, _s(f"{lbl[:24]:<24}  {sz:>4}  {_pct}"), ln=True)
+                pdf.cell(0, 4, _s(f"{lbl[:22]:<22}  {sz:>4}  {_pct}"), ln=False)
+                _y_cur += 4.5
+                # Sub-linhas de variação
+                pdf.set_font(FNORM, "", 5.5)
+                pdf.set_text_color(90, 90, 90)
+                for _tv in _item_leg.get("top_vars", [])[:3]:
+                    if _y_cur + 3 > _leg_max_y:
+                        break
+                    _tv_nome = _s(_tv["nome"][:28]) if _tv["nome"] else "—"
+                    pdf.set_xy(113, _y_cur)
+                    pdf.cell(0, 3, _s(f"↳ {_tv_nome}  {_tv['qtd']}"), ln=False)
+                    _y_cur += 3.2
+                pdf.set_text_color(0, 0, 0)
+                _y_cur += 0.8
 
             # Fill remaining page space with compact full ranking
-            _y_tabela = _y_leg + 77
+            _y_tabela = max(_y_leg + 77, _y_cur + 3)
             _page_h = pdf.h - pdf.b_margin  # usable bottom
             _row_h = 4.2
             _col_w = 85  # two columns

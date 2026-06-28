@@ -903,17 +903,25 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
             por_var = {}
 
         model_totals = {}
+        model_vars = {}
         for vid, qtd in por_var.items():
             if str(vid) in vmap:
-                nome, _ = vmap[str(vid)]
+                nome, var_nome = vmap[str(vid)]
                 try:
                     q = int(float(qtd))
                 except (TypeError, ValueError):
                     q = 0
                 if q > 0:
                     model_totals[nome] = model_totals.get(nome, 0) + q
-        itens = [{"label": nome, "produto": nome, "variacao": "", "qtd": total}
-                 for nome, total in model_totals.items()]
+                    mv = model_vars.setdefault(nome, {})
+                    mv[var_nome] = mv.get(var_nome, 0) + q
+        itens = []
+        for nome, total in model_totals.items():
+            top_vars = sorted(model_vars.get(nome, {}).items(), key=lambda x: -x[1])[:3]
+            itens.append({
+                "label": nome, "produto": nome, "variacao": "", "qtd": total,
+                "top_vars": [{"nome": v, "qtd": q} for v, q in top_vars],
+            })
         itens.sort(key=lambda x: -x["qtd"])
         ranking[lid] = itens[:top]
 
