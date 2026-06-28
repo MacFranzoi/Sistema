@@ -246,12 +246,13 @@ def gerar_pdf_ranking_vendas(ranking_res):
     return bytes(pdf.output())
 
 
-def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao=""):
+def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_res=None):
     """Gera PDF de separação para transferência entre lojas.
 
     movimentos: lista de {produto, variacao, codigo, de, para, qtd} (de/para = NOME da loja).
     Agrupa por loja de ORIGEM (a que precisa separar e enviar). Uma seção/página por loja.
     origem_filtro: se informado, gera só para essa loja de origem.
+    ranking_res: se informado (saída de api.ranking_vendas_lojas), anexa ranking de vendas no fim.
     """
     import os
     FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
@@ -324,6 +325,36 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao=""):
         pdf.add_page()
         pdf.set_font(FNORM, "", 11)
         pdf.cell(0, 8, _s("Nenhum item para separar."), ln=True, align="C")
+
+    # Anexa ranking de vendas por loja (se fornecido)
+    if ranking_res and ranking_res.get("ranking"):
+        _dias_rk = ranking_res.get("dias", 90)
+        _nomes_rk = {l["id"]: l["nome"] for l in ranking_res.get("lojas", [])}
+        for _lid, _itens_rk in ranking_res.get("ranking", {}).items():
+            if not _itens_rk:
+                continue
+            pdf.add_page()
+            pdf.set_font(FNORM, "B", 14)
+            pdf.cell(0, 8, _s("RANKING DE VENDAS"), ln=True, align="C")
+            pdf.set_font(FNORM, "B", 12)
+            pdf.cell(0, 7, _s(f"Loja: {_nomes_rk.get(_lid, _lid)} — ultimos {_dias_rk} dias"), ln=True, align="C")
+            pdf.set_font(FNORM, "", 9)
+            _tot_rk = sum(int(i.get("qtd", 0)) for i in _itens_rk)
+            pdf.cell(0, 6, _s(f"Top {len(_itens_rk)} modelos · {_tot_rk} unidades vendidas"), ln=True, align="C")
+            pdf.ln(3)
+            pdf.set_font(FNORM, "B", 9)
+            pdf.set_fill_color(220, 220, 220)
+            for h, w in zip(["#", "Modelo", "Vendas"], [12, 150, 25]):
+                pdf.cell(w, 7, _s(h), border=1, fill=True)
+            pdf.ln()
+            pdf.set_font(FNORM, "", 8)
+            _fill_rk = False
+            pdf.set_fill_color(245, 245, 245)
+            for _i, it in enumerate(_itens_rk, 1):
+                for val, w in zip([str(_i), it.get("produto", ""), str(it.get("qtd", 0))], [12, 150, 25]):
+                    pdf.cell(w, 6, _s(val)[:60], border=1, fill=_fill_rk)
+                pdf.ln()
+                _fill_rk = not _fill_rk
 
     return bytes(pdf.output())
 
@@ -6645,6 +6676,12 @@ def _main_content():
                 st.session_state["bl_ranking"] = api.comparar_estoque_lojas(
                     _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
                     somente_divergentes=False, incluir_vendas=True)
+                # Gera ranking de vendas automaticamente junto com a comparação
+                _bl_linhas_auto = st.session_state["bl_resultado"].get("linhas", [])
+                _modelos_auto = list({ln["produto"] for ln in _bl_linhas_auto if ln.get("produto")}) or _modelos_lst
+                st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
+                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_auto,
+                    dias=90, top=50)
         if len(_sel_lojas) < 2:
             st.info("Selecione pelo menos 2 lojas para comparar.")
 
@@ -6746,7 +6783,8 @@ def _main_content():
                                             ["(todas)"] + _origens_alg, key="bl_pdf_org")
                     _pdf_alg = gerar_pdf_separacao(
                         _movs_alg, origem_filtro=None if _org_sel == "(todas)" else _org_sel,
-                        observacao=_obs_transf)
+                        observacao=_obs_transf,
+                        ranking_res=st.session_state.get("bl_rk_res"))
                     st.download_button("🖨️ PDF de separação p/ transferência", _pdf_alg,
                                        file_name=f"separacao_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_pdf_btn")
@@ -6766,8 +6804,8 @@ def _main_content():
         # ── 📈 Análise de vendas (90 dias) por loja ───────────────────────────
         st.divider()
         st.markdown("### 📈 Análise de vendas por loja (90 dias)")
-        st.caption("Top 50 mais vendidas em cada loja nos últimos 90 dias — pizza + tabela. "
-                   "Ajuda a entender a necessidade de transferência.")
+        st.caption("Gerado automaticamente ao comparar lojas. Top 50 modelos mais vendidos por loja — "
+                   "pizza + tabela. Incluído no PDF de transferência.")
         _cva1, _cva2 = st.columns([3, 1])
         _dias_rk = _cva2.number_input("Dias", min_value=7, max_value=365, value=90, step=1, key="bl_rk_dias")
         if _cva1.button("📈 Carregar análise de vendas", use_container_width=True,
@@ -6958,7 +6996,8 @@ def _main_content():
                                                ["(todas)"] + _origens_ia, key="bl_ia_pdf_org")
                     _pdf_ia = gerar_pdf_separacao(
                         _movs_ia, origem_filtro=None if _org_sel_ia == "(todas)" else _org_sel_ia,
-                        observacao=_obs_transf)
+                        observacao=_obs_transf,
+                        ranking_res=st.session_state.get("bl_rk_res"))
                     st.download_button("🖨️ PDF de separação (IA)", _pdf_ia,
                                        file_name=f"separacao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_ia_pdf_btn")
