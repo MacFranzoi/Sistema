@@ -847,27 +847,12 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
     }
 
 
-def balancear_lojas_ia(lojas, linhas, regra, max_linhas=400):
-    """Usa a IA para distribuir estoque entre lojas seguindo uma REGRA em texto livre.
-
-    lojas:  [{"id","nome"}]
-    linhas: [{"codigo","produto","variacao","estoque":{loja_id:qtd}, ...}]
-    regra:  instrução em linguagem natural (ex.: "mantenha 2 na Plaza, resto pro Centro").
-
-    Retorna {"explicacao": str, "movimentos": [{"codigo","de","para","qtd"}]} com 'de'/'para'
-    em NOME de loja. Levanta exceção se faltar chave da IA.
-    """
-    import anthropic as _ant
+def _balancear_lojas_ia_lote(client, lojas, linhas, regra):
+    """Chama a IA para UM lote de linhas. Retorna (explicacao, [movimentos])."""
     import re, json
-    key = _get_anthropic_key()
-    if not key:
-        raise Exception("ANTHROPIC_API_KEY não configurada — a regra por IA precisa dela.")
-
     nomes = {l["id"]: l["nome"] for l in lojas}
-    usar = linhas[:max_linhas]
-    # Representação compacta: "codigo | produto / variacao | Loja=qtd; ..."
     linhas_txt = []
-    for ln in usar:
+    for ln in linhas:
         est = "; ".join(f"{nomes.get(lid, lid)}={ln['estoque'].get(lid, 0)}" for lid in nomes)
         linhas_txt.append(f'{ln["codigo"]} | {ln["produto"]} / {ln["variacao"]} | {est}')
     dados_txt = "\n".join(linhas_txt)
@@ -898,7 +883,6 @@ Regras técnicas:
 - Não invente códigos: use só os códigos listados acima.
 - Sem texto fora do JSON."""
 
-    client = _ant.Anthropic(api_key=key, max_retries=3)
     msg = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=8192,
@@ -907,9 +891,8 @@ Regras técnicas:
     raw = msg.content[0].text.strip()
     m = re.search(r'\{.*\}', raw, re.DOTALL)
     obj = json.loads(m.group() if m else raw, strict=False)
-    # Normaliza
-    movs = []
     nomes_validos = {l["nome"] for l in lojas}
+    movs = []
     for mv in obj.get("movimentos", []):
         try:
             q = int(mv.get("qtd", 0))
@@ -918,13 +901,44 @@ Regras técnicas:
         if q > 0 and mv.get("de") in nomes_validos and mv.get("para") in nomes_validos and mv.get("de") != mv.get("para"):
             movs.append({"codigo": str(mv.get("codigo", "")), "de": mv["de"],
                          "para": mv["para"], "qtd": q})
-    return {
-        "explicacao": obj.get("explicacao", ""),
-        "movimentos": movs,
-        "truncado": len(linhas) > max_linhas,
-        "linhas_consideradas": len(usar),
-    }
+    return obj.get("explicacao", ""), movs
 
+
+def balancear_lojas_ia(lojas, linhas, regra, lote=250, progress_callback=None):
+    """Distribui estoque entre lojas seguindo uma REGRA em texto livre, usando a IA.
+
+    Processa TODAS as variações em lotes (a IA é chamada uma vez por lote e os
+    resultados são juntados) — assim cobre o catálogo inteiro sem você precisar
+    filtrar. Cada variação é independente, então fatiar em lotes é seguro.
+    Retorna {"explicacao", "movimentos", "truncado": False, "linhas_consideradas"}.
+    """
+    import anthropic as _ant
+    key = _get_anthropic_key()
+    if not key:
+        raise Exception("ANTHROPIC_API_KEY não configurada — a regra por IA precisa dela.")
+    client = _ant.Anthropic(api_key=key, max_retries=3)
+
+    lotes = [linhas[i:i + lote] for i in range(0, len(linhas), lote)] or [[]]
+    todos_movs = []
+    explicacoes = []
+    for _i, _chunk in enumerate(lotes, 1):
+        if progress_callback:
+            try: progress_callback(_i, len(lotes))
+            except Exception: pass
+        if not _chunk:
+            continue
+        _exp, _movs = _balancear_lojas_ia_lote(client, lojas, _chunk, regra)
+        if _exp:
+            explicacoes.append(_exp)
+        todos_movs.extend(_movs)
+
+    return {
+        "explicacao": explicacoes[0] if explicacoes else "",
+        "movimentos": todos_movs,
+        "truncado": False,
+        "linhas_consideradas": len(linhas),
+        "n_lotes": len(lotes),
+    }
 
 def estoque_produto_por_loja(produto_id):
     resultado = {}
