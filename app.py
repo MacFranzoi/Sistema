@@ -3459,6 +3459,90 @@ def _main_content():
         if "itens_acerto" not in st.session_state:
             st.session_state.itens_acerto = []
 
+        # ── 🔀 Comparar duas listas salvas ────────────────────────────────────
+        with st.expander("🔀 Comparar duas listas", expanded=False):
+            _todas_listas_cmp = api.listar_listas_salvas()  # todas (entrada/acerto/etc.)
+            if len(_todas_listas_cmp) < 2:
+                st.caption("Você precisa de pelo menos 2 listas salvas para comparar.")
+            else:
+                _ops_cmp = [
+                    f'{l["criado_em"][:16].replace("T"," ")} · {l["nome"]} ({l.get("tipo","")}) [{len(l.get("itens",[]))} itens]'
+                    for l in _todas_listas_cmp
+                ]
+                _cc1, _cc2 = st.columns(2)
+                _ia = _cc1.selectbox("Lista A", range(len(_ops_cmp)),
+                                     format_func=lambda i: _ops_cmp[i], key="cmp_a")
+                _ib = _cc2.selectbox("Lista B", range(len(_ops_cmp)),
+                                     format_func=lambda i: _ops_cmp[i],
+                                     index=min(1, len(_ops_cmp) - 1), key="cmp_b")
+
+                if st.button("🔍 Comparar", type="primary", use_container_width=True, key="cmp_btn",
+                             disabled=(_ia == _ib)):
+                    def _mapa_qtd(itens):
+                        m = {}
+                        for it in itens:
+                            k = str(it.get("variacao_id") or "") or \
+                                f'{it.get("produto_id")}|{it.get("variacao_cod")}'
+                            if k not in m:
+                                m[k] = {"info": it, "qtd": 0}
+                            m[k]["qtd"] += int(it.get("quantidade", 0) or 0)
+                        return m
+                    st.session_state["_cmp_res"] = {
+                        "A": _todas_listas_cmp[_ia], "B": _todas_listas_cmp[_ib],
+                        "mapA": _mapa_qtd(_todas_listas_cmp[_ia].get("itens", [])),
+                        "mapB": _mapa_qtd(_todas_listas_cmp[_ib].get("itens", [])),
+                    }
+                if _ia == _ib:
+                    st.caption("Escolha duas listas diferentes.")
+
+                _cmp = st.session_state.get("_cmp_res")
+                if _cmp:
+                    _mapA, _mapB = _cmp["mapA"], _cmp["mapB"]
+                    _nomeA, _nomeB = _cmp["A"]["nome"], _cmp["B"]["nome"]
+                    def _linha(d):
+                        _i = d["info"]
+                        return {"Produto": _i.get("produto_nome",""),
+                                "Variação": _i.get("variacao_nome",""),
+                                "Cód. Var.": _i.get("variacao_cod","")}
+                    _so_a = [{**_linha(_mapA[k]), "Qtd": _mapA[k]["qtd"]}
+                             for k in _mapA if k not in _mapB]
+                    _so_b = [{**_linha(_mapB[k]), "Qtd": _mapB[k]["qtd"]}
+                             for k in _mapB if k not in _mapA]
+                    _difq = [{**_linha(_mapA[k]),
+                              f"Qtd A": _mapA[k]["qtd"], f"Qtd B": _mapB[k]["qtd"],
+                              "Diferença (A−B)": _mapA[k]["qtd"] - _mapB[k]["qtd"]}
+                             for k in _mapA if k in _mapB and _mapA[k]["qtd"] != _mapB[k]["qtd"]]
+                    _iguais = sum(1 for k in _mapA if k in _mapB and _mapA[k]["qtd"] == _mapB[k]["qtd"])
+
+                    st.markdown(f"**A** = {_nomeA} ({len(_mapA)} variações) &nbsp;·&nbsp; "
+                                f"**B** = {_nomeB} ({len(_mapB)} variações) &nbsp;·&nbsp; "
+                                f"✅ {_iguais} iguais", unsafe_allow_html=True)
+
+                    st.markdown(f"##### 🅰️ Só na lista A ({len(_so_a)})")
+                    if _so_a: st.dataframe(pd.DataFrame(_so_a), use_container_width=True, hide_index=True)
+                    else: st.caption("— nada exclusivo de A —")
+
+                    st.markdown(f"##### 🅱️ Só na lista B ({len(_so_b)})")
+                    if _so_b: st.dataframe(pd.DataFrame(_so_b), use_container_width=True, hide_index=True)
+                    else: st.caption("— nada exclusivo de B —")
+
+                    st.markdown(f"##### 🔢 Quantidades diferentes ({len(_difq)})")
+                    if _difq: st.dataframe(pd.DataFrame(_difq), use_container_width=True, hide_index=True)
+                    else: st.caption("— nenhuma divergência de quantidade —")
+
+                    # Exportar a diferença completa para Excel (3 abas)
+                    import io as _io_cmp
+                    _buf_cmp = _io_cmp.BytesIO()
+                    with pd.ExcelWriter(_buf_cmp) as _xl:
+                        (pd.DataFrame(_so_a) if _so_a else pd.DataFrame(columns=["Produto","Variação","Cód. Var.","Qtd"])).to_excel(_xl, sheet_name="So_na_A", index=False)
+                        (pd.DataFrame(_so_b) if _so_b else pd.DataFrame(columns=["Produto","Variação","Cód. Var.","Qtd"])).to_excel(_xl, sheet_name="So_na_B", index=False)
+                        (pd.DataFrame(_difq) if _difq else pd.DataFrame(columns=["Produto","Variação","Cód. Var.","Qtd A","Qtd B","Diferença (A−B)"])).to_excel(_xl, sheet_name="Qtd_diferente", index=False)
+                    _buf_cmp.seek(0)
+                    st.download_button("📤 Exportar diferença (Excel)", _buf_cmp,
+                                       file_name=f"comparacao_listas_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True, key="cmp_export")
+
         # ── Configuração: Fornecedor + Situação de Compra ──────────────────────
         with st.expander("⚙️ Configuração da Compra", expanded=not st.session_state.get("_ac_cfg_ok")):
             if "ac_fornecedores" not in st.session_state:
