@@ -866,6 +866,59 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
     }
 
 
+def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
+    """Top N variações mais vendidas em cada loja nos últimos `dias` (ao vivo).
+
+    Filtra por grupo/modelo. Retorna {"dias", "lojas":[{id,nome}],
+    "ranking": {loja_id: [{"label","produto","variacao","qtd"}...]}}.
+    """
+    grupos_lower  = {g.strip().lower() for g in grupos if g.strip()} if grupos else None
+    modelos_lower = [m.strip().lower() for m in modelos if m.strip()] if modelos else None
+
+    ranking = {}
+    for lid in loja_ids:
+        # mapa variacao_id -> (produto, variacao) já filtrado por grupo/modelo
+        cache = carregar_cache(lid) or {}
+        vmap = {}
+        for p in cache.get("produtos", []):
+            g = p.get("nome_grupo") or ""
+            nome = p.get("nome") or ""
+            if grupos_lower and g.lower() not in grupos_lower:
+                continue
+            if modelos_lower and not any(t in nome.lower() for t in modelos_lower):
+                continue
+            for v in p.get("variacoes", []):
+                vd = v.get("variacao", {})
+                vmap[str(vd.get("id", ""))] = (nome, vd.get("nome") or "")
+
+        # vendas no período (ao vivo)
+        try:
+            vv = vendas_por_variacao(dias=dias, loja_id=lid)
+            por_var = vv.get("por_variacao", {}) or {}
+        except Exception:
+            por_var = {}
+
+        itens = []
+        for vid, qtd in por_var.items():
+            if str(vid) in vmap:
+                nome, varn = vmap[str(vid)]
+                try:
+                    q = int(float(qtd))
+                except (TypeError, ValueError):
+                    q = 0
+                if q > 0:
+                    itens.append({"label": f"{nome} {varn}".strip(),
+                                  "produto": nome, "variacao": varn, "qtd": q})
+        itens.sort(key=lambda x: -x["qtd"])
+        ranking[lid] = itens[:top]
+
+    return {
+        "dias": dias,
+        "lojas": [{"id": lid, "nome": LOJAS.get(str(lid), str(lid))} for lid in loja_ids],
+        "ranking": ranking,
+    }
+
+
 def _balancear_lojas_ia_lote(client, lojas, linhas, regra):
     """Chama a IA para UM lote de linhas. Retorna (explicacao, [movimentos])."""
     import re, json
