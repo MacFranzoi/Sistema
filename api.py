@@ -858,6 +858,7 @@ def balancear_lojas_ia(lojas, linhas, regra, max_linhas=400):
     em NOME de loja. Levanta exceção se faltar chave da IA.
     """
     import anthropic as _ant
+    import re, json
     key = _get_anthropic_key()
     if not key:
         raise Exception("ANTHROPIC_API_KEY não configurada — a regra por IA precisa dela.")
