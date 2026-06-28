@@ -6691,7 +6691,7 @@ def _main_content():
                 try:
                     _full_ia = api.comparar_estoque_lojas(
                         _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
-                        somente_divergentes=False)
+                        somente_divergentes=False, incluir_vendas=True)
                     _prog_ia = st.progress(0.0)
                     def _cb_ia(i, n):
                         try: _prog_ia.progress(i / n, text=f"IA — lote {i} de {n}…")
@@ -6729,14 +6729,63 @@ def _main_content():
                     st.success("A IA não sugeriu transferências para essa regra.")
                 else:
                     import pandas as _pd_ia
-                    _df_movs = _pd_ia.DataFrame([{
+                    st.markdown(f"##### 🔁 {len(_movs_ia)} movimento(s) sugerido(s) pela IA")
+                    st.caption("✏️ Você pode **editar a coluna Qtd** direto na tabela. "
+                               "Coloque 0 para não transferir aquele item. As mudanças valem "
+                               "para o PDF, o Excel e a transferência.")
+                    _df_movs_edit = _pd_ia.DataFrame([{
                         "Produto": _m.get("produto", ""),
                         "Variação": _m.get("variacao", ""),
                         "Cód.": _m.get("codigo", ""),
-                        "De": _m["de"], "Para": _m["para"], "Qtd": _m["qtd"],
+                        "De": _m["de"], "Para": _m["para"],
+                        "Est.orig": _m.get("est_de", 0), "Est.dest": _m.get("est_para", 0),
+                        "Qtd": int(_m["qtd"]),
                     } for _m in _movs_ia])
-                    st.markdown(f"##### 🔁 {len(_movs_ia)} movimento(s) sugerido(s) pela IA")
-                    st.dataframe(_df_movs, use_container_width=True, hide_index=True)
+                    _edited_movs = st.data_editor(
+                        _df_movs_edit, use_container_width=True, hide_index=True,
+                        key="bl_ia_editor",
+                        column_config={
+                            "Qtd": st.column_config.NumberColumn(min_value=0, step=1),
+                            "Produto": st.column_config.TextColumn(disabled=True),
+                            "Variação": st.column_config.TextColumn(disabled=True),
+                            "Cód.": st.column_config.TextColumn(disabled=True),
+                            "De": st.column_config.TextColumn(disabled=True),
+                            "Para": st.column_config.TextColumn(disabled=True),
+                            "Est.orig": st.column_config.NumberColumn(disabled=True),
+                            "Est.dest": st.column_config.NumberColumn(disabled=True),
+                        },
+                    )
+                    # Reconstrói os movimentos a partir do que foi editado (Qtd > 0)
+                    _movs_ia = []
+                    for _, _r in _edited_movs.iterrows():
+                        _q = int(_r["Qtd"]) if str(_r["Qtd"]).strip() not in ("", "nan") else 0
+                        if _q <= 0:
+                            continue
+                        _movs_ia.append({
+                            "produto": _r["Produto"], "variacao": _r["Variação"],
+                            "codigo": _r["Cód."], "de": _r["De"], "para": _r["Para"],
+                            "est_de": _r["Est.orig"], "est_para": _r["Est.dest"], "qtd": _q,
+                        })
+
+                    # ── 📊 Gráficos de análise ────────────────────────────────
+                    if _movs_ia:
+                        _gc1, _gc2 = st.columns(2)
+                        with _gc1:
+                            st.caption("Unidades por rota (De → Para)")
+                            _rota = {}
+                            for _m in _movs_ia:
+                                _k = f'{_m["de"]} → {_m["para"]}'
+                                _rota[_k] = _rota.get(_k, 0) + _m["qtd"]
+                            st.bar_chart(_pd_ia.DataFrame(
+                                {"Unidades": _rota}).sort_values("Unidades", ascending=False))
+                        with _gc2:
+                            st.caption("Top produtos transferidos (unidades)")
+                            _pp = {}
+                            for _m in _movs_ia:
+                                _pp[_m["produto"]] = _pp.get(_m["produto"], 0) + _m["qtd"]
+                            _top = dict(sorted(_pp.items(), key=lambda x: -x[1])[:15])
+                            st.bar_chart(_pd_ia.DataFrame({"Unidades": _top}))
+
                     # Resumo de → para
                     _res_ia_tr = {}
                     for _m in _movs_ia:
@@ -6744,6 +6793,7 @@ def _main_content():
                         _res_ia_tr[_kk] = _res_ia_tr.get(_kk, 0) + _m["qtd"]
                     st.markdown("**Resumo:** " + "  ·  ".join(
                         f'{q}: {de}→{para}' for (de, para), q in sorted(_res_ia_tr.items(), key=lambda x: -x[1])))
+                    _df_movs = _edited_movs
                     import io as _io_ia
                     _buf_ia = _io_ia.BytesIO()
                     _df_movs.to_excel(_buf_ia, index=False)

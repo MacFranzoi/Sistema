@@ -781,7 +781,8 @@ def _sugerir_transferencias(est: dict) -> list:
     return transf
 
 
-def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergentes=True):
+def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergentes=True,
+                           incluir_vendas=False):
     """Compara o estoque de cada variação entre lojas e sugere transferências
     para equilibrar (onde sobra → onde falta).
 
@@ -789,17 +790,27 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
     grupos:   lista de nome_grupo a incluir (None = todos).
     modelos:  lista de termos; inclui produtos cujo nome contém algum termo (None = todos).
     somente_divergentes: se True, retorna só variações com desequilíbrio entre lojas.
+    incluir_vendas: se True, anexa 'vendas': {loja_id: qtd_vendida} por variação
+                    (do cache de vendas) — usado para a IA rankear por venda.
 
     Retorna {"lojas": [{"id","nome"}...], "linhas": [...]}.
     """
     grupos_lower  = {g.strip().lower() for g in grupos if g.strip()} if grupos else None
     modelos_lower = [m.strip().lower() for m in modelos if m.strip()] if modelos else None
 
+    # Vendas por variação (por loja), do cache — chave = variacao_id daquela loja.
+    vendas_por_loja = {}
+    if incluir_vendas:
+        for lid in loja_ids:
+            cv = carregar_cache_vendas(lid) or {}
+            vendas_por_loja[lid] = cv.get("por_variacao", {}) or {}
+
     por_codigo = {}
     for lid in loja_ids:
         cache = carregar_cache(lid)
         if not cache:
             continue
+        vmap = vendas_por_loja.get(lid, {})
         for p in cache.get("produtos", []):
             nome_grupo = p.get("nome_grupo") or ""
             nome_prod  = p.get("nome") or ""
@@ -822,8 +833,14 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
                     "variacao": vd.get("nome") or "",
                     "grupo":    nome_grupo,
                     "estoque":  {},
+                    "vendas":   {},
                 })
                 row["estoque"][lid] = est
+                if incluir_vendas:
+                    try:
+                        row["vendas"][lid] = int(float(vmap.get(str(vd.get("id", "")), 0)))
+                    except (TypeError, ValueError):
+                        row["vendas"][lid] = 0
 
     linhas = []
     for cod, row in por_codigo.items():
@@ -836,6 +853,8 @@ def comparar_estoque_lojas(loja_ids, grupos=None, modelos=None, somente_divergen
             continue
         row = dict(row)
         row["estoque"] = est
+        if incluir_vendas:
+            row["vendas"] = {lid: row.get("vendas", {}).get(lid, 0) for lid in loja_ids}
         row["total"] = total
         row["transferencias"] = transf
         linhas.append(row)
@@ -851,12 +870,24 @@ def _balancear_lojas_ia_lote(client, lojas, linhas, regra):
     """Chama a IA para UM lote de linhas. Retorna (explicacao, [movimentos])."""
     import re, json
     nomes = {l["id"]: l["nome"] for l in lojas}
+    _tem_vendas = any(ln.get("vendas") for ln in linhas)
     linhas_txt = []
     for ln in linhas:
-        est = "; ".join(f"{nomes.get(lid, lid)}={ln['estoque'].get(lid, 0)}" for lid in nomes)
-        linhas_txt.append(f'{ln["codigo"]} | {ln["produto"]} / {ln["variacao"]} | {est}')
+        partes = []
+        for lid in nomes:
+            _e = ln["estoque"].get(lid, 0)
+            if _tem_vendas:
+                _vd = ln.get("vendas", {}).get(lid, 0)
+                partes.append(f"{nomes[lid]}=estoque:{_e},vendas:{_vd}")
+            else:
+                partes.append(f"{nomes[lid]}={_e}")
+        linhas_txt.append(f'{ln["codigo"]} | {ln["produto"]} / {ln["variacao"]} | ' + "; ".join(partes))
     dados_txt = "\n".join(linhas_txt)
     lojas_txt = ", ".join(l["nome"] for l in lojas)
+
+    _bloco_vendas = ("\nCada loja traz estoque atual E vendas no período (quanto saiu). "
+                     "Use as vendas para RANKEAR: a loja que mais vende um modelo/cor deve "
+                     "ficar com o maior estoque dele.\n") if _tem_vendas else "\n"
 
     prompt = f"""Você organiza a distribuição de estoque de capinhas entre lojas.
 
@@ -864,13 +895,13 @@ Lojas: {lojas_txt}
 
 Regra definida pelo usuário AGORA (siga exatamente):
 {regra}
-
-Estoque atual de cada variação (codigo | produto / variação | estoque por loja):
+{_bloco_vendas}
+Dados de cada variação (codigo | produto / variação | por loja):
 {dados_txt}
 
 Gere as transferências necessárias para cumprir a regra. Responda SOMENTE com JSON válido:
 {{
-  "explicacao": "1-2 frases do que você fez seguindo a regra",
+  "explicacao": "1-2 frases do que você fez seguindo a regra (cite o ranking de vendas se usou)",
   "movimentos": [
     {{"codigo": "<codigo da variação>", "de": "<loja origem>", "para": "<loja destino>", "qtd": <inteiro>}}
   ]
@@ -878,7 +909,7 @@ Gere as transferências necessárias para cumprir a regra. Responda SOMENTE com 
 
 Regras técnicas:
 - Use APENAS os nomes de loja exatamente como dados: {lojas_txt}.
-- Só movimente unidades que existem na loja de origem (não crie estoque).
+- Só movimente unidades que existem no estoque da loja de origem (não crie estoque).
 - qtd inteiro e > 0. Se nada precisa mover, "movimentos": [].
 - Não invente códigos: use só os códigos listados acima.
 - Sem texto fora do JSON."""
