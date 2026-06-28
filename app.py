@@ -3636,6 +3636,65 @@ def _main_content():
                 key=lambda it: (str(it.get("cod_interno", "")), str(it.get("variacao_cod", "")))
             )
 
+            # ── 🔍 Verificar duplicados ───────────────────────────────────────
+            # Agrupa por variação (mesmo variacao_id/cod aparecendo em + de 1 linha).
+            _dup_groups = {}
+            for _idx_d, _it_d in enumerate(st.session_state.itens_acerto):
+                _kd = str(_it_d.get("variacao_id") or "") or \
+                      f'{_it_d.get("produto_id")}|{_it_d.get("variacao_cod")}'
+                _dup_groups.setdefault(_kd, []).append(_idx_d)
+            _dups = {k: v for k, v in _dup_groups.items() if len(v) > 1}
+
+            if _dups:
+                _n_linhas_extra = sum(len(v) - 1 for v in _dups.values())
+                with st.expander(f"🔍 {len(_dups)} variação(ões) duplicada(s) — {_n_linhas_extra} linha(s) repetida(s)",
+                                 expanded=True):
+                    st.caption("Mesma variação aparece em mais de uma linha. Veja as quantidades de cada uma:")
+                    _rows_dup = []
+                    for _k, _idxs in _dups.items():
+                        _qts = [int(st.session_state.itens_acerto[i].get("quantidade", 0)) for i in _idxs]
+                        _it0 = st.session_state.itens_acerto[_idxs[0]]
+                        _rows_dup.append({
+                            "Produto": _it0.get("produto_nome", ""),
+                            "Variação": _it0.get("variacao_nome", ""),
+                            "Cód. Var.": _it0.get("variacao_cod", ""),
+                            "Vezes": len(_idxs),
+                            "Qtds": " + ".join(str(q) for q in _qts),
+                            "Soma": sum(_qts),
+                        })
+                    st.dataframe(pd.DataFrame(_rows_dup), use_container_width=True, hide_index=True)
+
+                    st.markdown("**Como resolver?**")
+                    _dc1, _dc2 = st.columns(2)
+                    if _dc1.button("🔗 Somar duplicadas (vira 1 linha com a soma)",
+                                   use_container_width=True, key="ac_dup_somar",
+                                   help="Use se foram bipagens diferentes da mesma variação que devem se somar."):
+                        _novo = {}
+                        for _it_d in st.session_state.itens_acerto:
+                            _kd = str(_it_d.get("variacao_id") or "") or \
+                                  f'{_it_d.get("produto_id")}|{_it_d.get("variacao_cod")}'
+                            if _kd in _novo:
+                                _novo[_kd]["quantidade"] = int(_novo[_kd].get("quantidade", 0)) + int(_it_d.get("quantidade", 0))
+                            else:
+                                _novo[_kd] = dict(_it_d)
+                        st.session_state.itens_acerto = list(_novo.values())
+                        st.success("✅ Duplicadas somadas em uma linha cada.")
+                        st.rerun()
+                    if _dc2.button("➖ Manter só 1 de cada (remover repetidas)",
+                                   use_container_width=True, key="ac_dup_unica",
+                                   help="Use se a lista foi duplicada por engano — mantém a 1ª e descarta as repetidas."):
+                        _novo = {}
+                        for _it_d in st.session_state.itens_acerto:
+                            _kd = str(_it_d.get("variacao_id") or "") or \
+                                  f'{_it_d.get("produto_id")}|{_it_d.get("variacao_cod")}'
+                            if _kd not in _novo:
+                                _novo[_kd] = dict(_it_d)
+                        st.session_state.itens_acerto = list(_novo.values())
+                        st.success("✅ Mantida 1 linha por variação; repetidas removidas.")
+                        st.rerun()
+            else:
+                st.caption("✅ Nenhuma variação duplicada na lista.")
+
             _df_ac = pd.DataFrame(st.session_state.itens_acerto).reset_index(drop=True)
             cols_disp = [c for c in ["cod_interno", "produto_nome", "variacao_cod", "variacao_nome", "tipo_variacao", "cor_preco_variacao", "quantidade", "valor_custo"] if c in _df_ac.columns]
             _df_ac_edit = _df_ac[cols_disp].rename(columns={
