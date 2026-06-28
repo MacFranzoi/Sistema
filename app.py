@@ -3460,13 +3460,13 @@ def _main_content():
             st.session_state.itens_acerto = []
 
         # ── 🔀 Comparar duas listas salvas ────────────────────────────────────
-        with st.expander("🔀 Comparar duas listas", expanded=False):
-            _todas_listas_cmp = api.listar_listas_salvas()  # todas (entrada/acerto/etc.)
+        with st.expander("🔀 Comparar duas listas de acerto", expanded=False):
+            _todas_listas_cmp = api.listar_listas_salvas("acerto")  # só listas de acerto
             if len(_todas_listas_cmp) < 2:
-                st.caption("Você precisa de pelo menos 2 listas salvas para comparar.")
+                st.caption("Você precisa de pelo menos 2 listas de acerto salvas para comparar.")
             else:
                 _ops_cmp = [
-                    f'{l["criado_em"][:16].replace("T"," ")} · {l["nome"]} ({l.get("tipo","")}) [{len(l.get("itens",[]))} itens]'
+                    f'{l["criado_em"][:16].replace("T"," ")} · {l["nome"]} [{len(l.get("itens",[]))} itens]'
                     for l in _todas_listas_cmp
                 ]
                 _cc1, _cc2 = st.columns(2)
