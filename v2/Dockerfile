@@ -13,7 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia o api.py (lógica compartilhada) e os dados/caches da raiz
 COPY api.py .
-COPY db.py .
 COPY scheduler.py .
 COPY *.json ./
 COPY listas/ ./listas/
