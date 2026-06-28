@@ -188,6 +188,64 @@ def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None, obs
     return template.replace("__DATA__", data_json).replace("__OBS__", obs_json)
 
 
+def gerar_pdf_ranking_vendas(ranking_res):
+    """Gera PDF com o ranking de vendas (top N) por loja. Uma página por loja.
+
+    ranking_res: dict de api.ranking_vendas_lojas -> {dias, lojas, ranking}.
+    """
+    import os
+    FONT_PATH = "/Library/Fonts/Arial Unicode.ttf"
+    USE_UNICODE = os.path.exists(FONT_PATH)
+
+    def _s(v):
+        text = str(v or "").replace("—", "-").replace("–", "-")
+        if not USE_UNICODE:
+            return text.encode("latin-1", errors="replace").decode("latin-1")
+        return text
+
+    pdf = FPDF()
+    if USE_UNICODE:
+        pdf.add_font("Arial", "", FONT_PATH)
+        pdf.add_font("Arial", "B", FONT_PATH)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    FNORM = "Arial" if USE_UNICODE else "Helvetica"
+    _dias = ranking_res.get("dias", 90)
+    _nomes = {l["id"]: l["nome"] for l in ranking_res.get("lojas", [])}
+
+    for _lid, _itens in ranking_res.get("ranking", {}).items():
+        pdf.add_page()
+        pdf.set_font(FNORM, "B", 14)
+        pdf.cell(0, 8, _s("RANKING DE VENDAS"), ln=True, align="C")
+        pdf.set_font(FNORM, "B", 12)
+        pdf.cell(0, 7, _s(f"Loja: {_nomes.get(_lid, _lid)} — ultimos {_dias} dias"), ln=True, align="C")
+        pdf.set_font(FNORM, "", 9)
+        _tot = sum(int(i.get("qtd", 0)) for i in _itens)
+        pdf.cell(0, 6, _s(f"Top {len(_itens)} variacoes · {_tot} unidades vendidas"), ln=True, align="C")
+        pdf.ln(3)
+
+        pdf.set_font(FNORM, "B", 9)
+        pdf.set_fill_color(220, 220, 220)
+        for h, w in zip(["#", "Produto", "Variacao", "Vendas"], [12, 80, 70, 25]):
+            pdf.cell(w, 7, _s(h), border=1, fill=True)
+        pdf.ln()
+        pdf.set_font(FNORM, "", 8)
+        fill = False
+        pdf.set_fill_color(245, 245, 245)
+        for _i, it in enumerate(_itens, 1):
+            for val, w in zip([str(_i), it.get("produto", ""), it.get("variacao", ""), str(it.get("qtd", 0))],
+                              [12, 80, 70, 25]):
+                pdf.cell(w, 6, _s(val)[:46], border=1, fill=fill)
+            pdf.ln()
+            fill = not fill
+
+    if not ranking_res.get("ranking"):
+        pdf.add_page()
+        pdf.set_font(FNORM, "", 11)
+        pdf.cell(0, 8, _s("Sem dados de vendas."), ln=True, align="C")
+
+    return bytes(pdf.output())
+
+
 def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao=""):
     """Gera PDF de separação para transferência entre lojas.
 
@@ -6704,6 +6762,64 @@ def _main_content():
                         _cmd_alg = gerar_comando_transferencia(_movs_alg_ids, _nomes_por_id,
                                                                observacao=_obs_transf)
                         st.code(_cmd_alg, language="javascript")
+
+        # ── 📈 Análise de vendas (90 dias) por loja ───────────────────────────
+        st.divider()
+        st.markdown("### 📈 Análise de vendas por loja (90 dias)")
+        st.caption("Top 50 mais vendidas em cada loja nos últimos 90 dias — pizza + tabela. "
+                   "Ajuda a entender a necessidade de transferência.")
+        _cva1, _cva2 = st.columns([3, 1])
+        _dias_rk = _cva2.number_input("Dias", min_value=7, max_value=365, value=90, step=1, key="bl_rk_dias")
+        if _cva1.button("📈 Carregar análise de vendas", use_container_width=True,
+                        key="bl_rk_btn", disabled=len(_sel_lojas) < 1):
+            with st.spinner(f"Buscando vendas dos últimos {int(_dias_rk)} dias (pode levar alguns segundos)…"):
+                st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
+                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
+                    dias=int(_dias_rk), top=50)
+
+        _rk_res = st.session_state.get("bl_rk_res")
+        if _rk_res:
+            import pandas as _pd_rk
+            try:
+                import altair as _alt
+            except Exception:
+                _alt = None
+            _nomes_rk = {l["id"]: l["nome"] for l in _rk_res.get("lojas", [])}
+            for _lid, _itens in _rk_res.get("ranking", {}).items():
+                st.markdown(f"#### 🏪 {_nomes_rk.get(_lid, _lid)} — top {len(_itens)} ({_rk_res.get('dias',90)} dias)")
+                if not _itens:
+                    st.caption("Sem vendas no período para o filtro escolhido.")
+                    continue
+                _g, _t = st.columns([1, 1])
+                # Pizza (top 12 + Outros) colorida com legenda
+                with _g:
+                    _top12 = _itens[:12]
+                    _resto = sum(i["qtd"] for i in _itens[12:])
+                    _dados_pie = [{"Item": i["label"][:30], "Vendas": i["qtd"]} for i in _top12]
+                    if _resto > 0:
+                        _dados_pie.append({"Item": "Outros", "Vendas": _resto})
+                    _df_pie = _pd_rk.DataFrame(_dados_pie)
+                    if _alt is not None:
+                        _ch = (_alt.Chart(_df_pie)
+                               .mark_arc()
+                               .encode(theta=_alt.Theta("Vendas:Q", stack=True),
+                                       color=_alt.Color("Item:N", legend=_alt.Legend(title="Item")),
+                                       tooltip=["Item", "Vendas"]))
+                        st.altair_chart(_ch, use_container_width=True)
+                    else:
+                        st.bar_chart(_df_pie.set_index("Item"))
+                # Tabela com os números (top 50)
+                with _t:
+                    _df_tab = _pd_rk.DataFrame([
+                        {"#": _i + 1, "Produto": it["produto"], "Variação": it["variacao"], "Vendas": it["qtd"]}
+                        for _i, it in enumerate(_itens)])
+                    st.dataframe(_df_tab, use_container_width=True, hide_index=True, height=320)
+
+            # Adicionar ao PDF
+            _pdf_rk = gerar_pdf_ranking_vendas(_rk_res)
+            st.download_button("🖨️ Adicionar ranking ao PDF (baixar)", _pdf_rk,
+                               file_name=f"ranking_vendas_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                               mime="application/pdf", use_container_width=True, key="bl_rk_pdf")
 
         # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
         st.divider()
