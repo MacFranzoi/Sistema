@@ -6692,8 +6692,13 @@ def _main_content():
                     _full_ia = api.comparar_estoque_lojas(
                         _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
                         somente_divergentes=False)
+                    _prog_ia = st.progress(0.0)
+                    def _cb_ia(i, n):
+                        try: _prog_ia.progress(i / n, text=f"IA — lote {i} de {n}…")
+                        except Exception: pass
                     _res_ia = api.balancear_lojas_ia(_full_ia["lojas"], _full_ia["linhas"],
-                                                     _regra_ia.strip())
+                                                     _regra_ia.strip(), progress_callback=_cb_ia)
+                    _prog_ia.progress(1.0)
                     # Enriquece os movimentos com produto/variação e estoque pelo código
                     _cod_map = {ln["codigo"]: ln for ln in _full_ia["linhas"]}
                     _id_por_nome_ia = {l["nome"]: l["id"] for l in _full_ia["lojas"]}
