@@ -222,9 +222,9 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None):
     # Inclui estoque de origem/destino quando disponível nos movimentos
     _tem_est = any(("est_de" in m or "est_para" in m) for m in movimentos)
     if _tem_est:
-        cols   = ["produto", "variacao", "codigo", "para", "est_de", "est_para", "qtd"]
-        heads  = ["Produto", "Variacao", "Codigo", "Enviar p/", "Est.orig", "Est.dest", "Qtd"]
-        widths = [46, 40, 26, 26, 16, 16, 14]
+        cols   = ["produto", "variacao", "codigo", "para", "qtd", "est_de", "est_para"]
+        heads  = ["Produto", "Variacao", "Codigo", "Enviar p/", "Qtd", "Est.orig", "Est.dest"]
+        widths = [46, 40, 26, 26, 14, 16, 16]
     else:
         cols   = ["produto", "variacao", "codigo", "para", "qtd"]
         heads  = ["Produto", "Variacao", "Codigo", "Enviar para", "Qtd"]
