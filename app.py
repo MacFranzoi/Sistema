@@ -127,6 +127,66 @@ def gerar_pdf_pedido(df_ped, fornecedor, data_ped, simplificado=False):
     return bytes(pdf.output())
 
 
+def gerar_comando_transferencia(movimentos, nomes_por_id, ids_por_nome=None):
+    """Gera um snippet JS que, colado no Console do GestaoClick (logado), cria as
+    transferências de estoque oficiais usando o token de sessão (cookie x-token-auth).
+
+    movimentos: lista de {de, para, codigo, variacao, qtd} — de/para podem ser id OU nome.
+    """
+    import json as _jt
+    ids_por_nome = ids_por_nome or {}
+
+    def _to_id(x):
+        return x if x in nomes_por_id else ids_por_nome.get(x, x)
+
+    def _to_nome(x):
+        return nomes_por_id.get(x, x)
+
+    grupos = {}
+    for m in movimentos:
+        _de = _to_id(m["de"]); _para = _to_id(m["para"])
+        grupos.setdefault((_de, _para), []).append(
+            {"cod": m.get("codigo", ""), "var": m.get("variacao", ""), "qtd": int(m.get("qtd", 0))})
+
+    T = [{"org": str(de), "orgN": _to_nome(de), "dst": str(pa), "dstN": _to_nome(pa), "itens": its}
+         for (de, pa), its in grupos.items()]
+    data_json = _jt.dumps(T, ensure_ascii=False)
+
+    template = r"""(async()=>{
+  const tok=(document.cookie.match(/(?:^|;\s*)x-token-auth=([^;]+)/)||[])[1];
+  if(!tok){alert('Token nao encontrado. Faca login no GestaoClick e tente de novo.');return;}
+  const B='https://app.api.click.app', H={'x-token-auth':decodeURIComponent(tok)};
+  const T=__DATA__;
+  let ok=0, fail=0, log=[];
+  for(const t of T){
+    const prods=[];
+    for(const it of t.itens){
+      try{
+        const r=await fetch(B+'/estoque/produtos/buscaProdutosCompras?loja='+t.org+'&q='+encodeURIComponent(it.cod),{headers:H,credentials:'include'});
+        const j=await r.json(); const p=(j.data||[])[0];
+        if(!p){log.push('nao achou '+it.cod);continue;}
+        const pe=(p.ProdutosEstoque||[]).find(e=>e.variacoes===it.var)||(p.ProdutosEstoque||[])[0];
+        const custo=(pe&&pe.valor_custo)||p.valor_custo||'0,00';
+        const cn=parseFloat(String(custo).replace(/\./g,'').replace(',','.'))||0;
+        const q=it.qtd;
+        prods.push({possui_variacao:p.possui_variacao=='1'?1:0,produto_id:p.produto_id,estoque_id:pe?pe.id:p.estoque_id,quantidade:q.toFixed(2).replace('.',','),unidade_id:p.unidade_saida_id,unidade:p.unidade_saida||'UN',valor_custo:custo,valor_total:(cn*q).toFixed(2).replace('.',',')});
+      }catch(e){log.push('erro '+it.cod+': '+e.message);}
+    }
+    if(!prods.length){log.push('Transf '+t.orgN+'->'+t.dstN+': sem produtos');continue;}
+    const vt=prods.reduce((s,x)=>s+(parseFloat(x.valor_total.replace(/\./g,'').replace(',','.'))||0),0).toFixed(2).replace('.',',');
+    const body=JSON.stringify({TransferenciasEstoque:{nome_loja_origem:t.orgN,loja_origem_id:t.org,nome_loja_destino:t.dstN,loja_destino_id:t.dst,valor_total:vt,observacoes:'Balanco entre lojas'},TransferenciasEstoquesProduto:prods});
+    try{
+      const r2=await fetch(B+'/transferencias_estoques/adicionar',{method:'POST',headers:Object.assign({'content-type':'multipart/form-data'},H),body:body,credentials:'include'});
+      const j2=await r2.json();
+      if(j2&&j2.status==='success'){ok++;log.push('OK '+t.orgN+'->'+t.dstN+' ('+prods.length+' itens) #'+j2.data);}
+      else{fail++;log.push('FALHA '+t.orgN+'->'+t.dstN+': '+((j2&&j2.message)||r2.status));}
+    }catch(e){fail++;log.push('FALHA '+t.orgN+'->'+t.dstN+': '+e.message);}
+  }
+  alert('Transferencias criadas: '+ok+' OK, '+fail+' falha(s)\n\n'+log.join('\n'));
+})();"""
+    return template.replace("__DATA__", data_json)
+
+
 def gerar_pdf_separacao(movimentos, origem_filtro=None):
     """Gera PDF de separação para transferência entre lojas.
 
@@ -6586,6 +6646,17 @@ def _main_content():
                                        file_name=f"separacao_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_pdf_btn")
 
+                    # Criar transferências no GestaoClick (snippet pro console logado)
+                    with st.expander("🚚 Criar transferências no GestaoClick (automático)"):
+                        st.caption("Cria as transferências OFICIAIS no GestaoClick usando seu login. "
+                                   "1) Abra o GestaoClick logado · 2) F12 → Console · 3) cole o código abaixo e Enter.")
+                        _movs_alg_ids = [{
+                            "de": _t["de"], "para": _t["para"], "codigo": _ln["codigo"],
+                            "variacao": _ln["variacao"], "qtd": _t["qtd"],
+                        } for _ln in _linhas_res for _t in _ln["transferencias"]]
+                        _cmd_alg = gerar_comando_transferencia(_movs_alg_ids, _nomes_por_id)
+                        st.code(_cmd_alg, language="javascript")
+
         # ── 🤖 Distribuir com regra própria (IA) ──────────────────────────────
         st.divider()
         st.markdown("### 🤖 Distribuir com regra própria (IA)")
@@ -6662,6 +6733,18 @@ def _main_content():
                     st.download_button("🖨️ PDF de separação (IA)", _pdf_ia,
                                        file_name=f"separacao_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                        mime="application/pdf", use_container_width=True, key="bl_ia_pdf_btn")
+
+                    # Criar transferências no GestaoClick (snippet pro console logado)
+                    with st.expander("🚚 Criar transferências no GestaoClick (automático)"):
+                        st.caption("Cria as transferências OFICIAIS no GestaoClick usando seu login. "
+                                   "1) Abra o GestaoClick logado · 2) F12 → Console · 3) cole o código abaixo e Enter.")
+                        _ids_por_nome = {l["nome"]: l["id"] for l in _ia_res.get("lojas", [])} \
+                            if _ia_res.get("lojas") else {v: k for k, v in _nomes_por_id.items()}
+                        _cmd_ia = gerar_comando_transferencia(
+                            [{"de": _m["de"], "para": _m["para"], "codigo": _m.get("codigo", ""),
+                              "variacao": _m.get("variacao", ""), "qtd": _m["qtd"]} for _m in _movs_ia],
+                            _nomes_por_id, ids_por_nome=_ids_por_nome)
+                        st.code(_cmd_ia, language="javascript")
 
     # ══════════════════════════════════════════════
     # ABA 5 — ESTOQUE POR LOJA
