@@ -220,21 +220,21 @@ def gerar_pdf_ranking_vendas(ranking_res):
         pdf.cell(0, 7, _s(f"Loja: {_nomes.get(_lid, _lid)} — ultimos {_dias} dias"), ln=True, align="C")
         pdf.set_font(FNORM, "", 9)
         _tot = sum(int(i.get("qtd", 0)) for i in _itens)
-        pdf.cell(0, 6, _s(f"Top {len(_itens)} modelos · {_tot} unidades vendidas"), ln=True, align="C")
+        pdf.cell(0, 6, _s(f"Top {len(_itens)} variacoes · {_tot} unidades vendidas"), ln=True, align="C")
         pdf.ln(3)
 
         pdf.set_font(FNORM, "B", 9)
         pdf.set_fill_color(220, 220, 220)
-        for h, w in zip(["#", "Modelo", "Vendas"], [12, 150, 25]):
+        for h, w in zip(["#", "Produto", "Variacao", "Vendas"], [12, 80, 70, 25]):
             pdf.cell(w, 7, _s(h), border=1, fill=True)
         pdf.ln()
         pdf.set_font(FNORM, "", 8)
         fill = False
         pdf.set_fill_color(245, 245, 245)
         for _i, it in enumerate(_itens, 1):
-            for val, w in zip([str(_i), it.get("produto", ""), str(it.get("qtd", 0))],
-                              [12, 150, 25]):
-                pdf.cell(w, 6, _s(val)[:60], border=1, fill=fill)
+            for val, w in zip([str(_i), it.get("produto", ""), it.get("variacao", ""), str(it.get("qtd", 0))],
+                              [12, 80, 70, 25]):
+                pdf.cell(w, 6, _s(val)[:46], border=1, fill=fill)
             pdf.ln()
             fill = not fill
 
@@ -6773,13 +6773,8 @@ def _main_content():
         if _cva1.button("📈 Carregar análise de vendas", use_container_width=True,
                         key="bl_rk_btn", disabled=len(_sel_lojas) < 1):
             with st.spinner(f"Buscando vendas dos últimos {int(_dias_rk)} dias (pode levar alguns segundos)…"):
-                # Filtra pelos modelos presentes na tabela de comparação (se houver)
-                _modelos_rk = _modelos_lst
-                _bl_tab = st.session_state.get("bl_resultado")
-                if _bl_tab and _bl_tab.get("linhas"):
-                    _modelos_rk = list({ln["produto"] for ln in _bl_tab["linhas"] if ln.get("produto")}) or _modelos_lst
                 st.session_state["bl_rk_res"] = api.ranking_vendas_lojas(
-                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_rk,
+                    _sel_lojas, grupos=_sel_grupos or None, modelos=_modelos_lst,
                     dias=int(_dias_rk), top=50)
 
         _rk_res = st.session_state.get("bl_rk_res")
@@ -6816,7 +6811,7 @@ def _main_content():
                 # Tabela com os números (top 50)
                 with _t:
                     _df_tab = _pd_rk.DataFrame([
-                        {"#": _i + 1, "Modelo": it["produto"], "Vendas": it["qtd"]}
+                        {"#": _i + 1, "Produto": it["produto"], "Variação": it["variacao"], "Vendas": it["qtd"]}
                         for _i, it in enumerate(_itens)])
                     st.dataframe(_df_tab, use_container_width=True, hide_index=True, height=320)
 
