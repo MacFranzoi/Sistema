@@ -876,6 +876,7 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
     modelos_lower = [m.strip().lower() for m in modelos if m.strip()] if modelos else None
 
     ranking = {}
+    ranking_cores = {}
     for lid in loja_ids:
         # mapa variacao_id -> (produto, variacao) já filtrado por grupo/modelo
         cache = carregar_cache(lid) or {}
@@ -904,6 +905,7 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
 
         model_totals = {}
         model_vars = {}
+        cor_totals = {}
         for vid, qtd in por_var.items():
             if str(vid) in vmap:
                 nome, var_nome = vmap[str(vid)]
@@ -915,6 +917,9 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
                     model_totals[nome] = model_totals.get(nome, 0) + q
                     mv = model_vars.setdefault(nome, {})
                     mv[var_nome] = mv.get(var_nome, 0) + q
+                    # agrupa cor: variação nome como cor
+                    cor = var_nome or "—"
+                    cor_totals[cor] = cor_totals.get(cor, 0) + q
         itens = []
         for nome, total in model_totals.items():
             top_vars = sorted(model_vars.get(nome, {}).items(), key=lambda x: -x[1])[:3]
@@ -925,10 +930,14 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
         itens.sort(key=lambda x: -x["qtd"])
         ranking[lid] = itens[:top]
 
+        cores_sorted = sorted(cor_totals.items(), key=lambda x: -x[1])
+        ranking_cores[lid] = [{"cor": c, "qtd": q} for c, q in cores_sorted[:top]]
+
     return {
         "dias": dias,
         "lojas": [{"id": lid, "nome": LOJAS.get(str(lid), str(lid))} for lid in loja_ids],
         "ranking": ranking,
+        "ranking_cores": ranking_cores,
     }
 
 

@@ -438,6 +438,81 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
                 pdf.cell(_col_w, _row_h, _s(f"{_ri+1:<3} {_nome:<30} {_q:>5}  {_pp:>4}"))
                 _row_in_col += 1
 
+            # Página de cores
+            _itens_cores = (ranking_res.get("ranking_cores") or {}).get(_lid, [])
+            if _itens_cores:
+                pdf.add_page()
+                pdf.set_font(FNORM, "B", 13)
+                pdf.cell(0, 8, _s(f"CORES — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
+                pdf.ln(2)
+
+                _top_c = _itens_cores[:14]
+                _resto_c = sum(i.get("qtd", 0) for i in _itens_cores[14:])
+                _labels_c = [_s(i["cor"][:22]) for i in _top_c]
+                _sizes_c  = [i.get("qtd", 0) for i in _top_c]
+                if _resto_c > 0:
+                    _labels_c.append("Outras"); _sizes_c.append(_resto_c)
+
+                _cores_c = plt.cm.tab20b.colors[:len(_labels_c)]
+                fig_c, ax_c = plt.subplots(figsize=(5, 4))
+                ax_c.pie(_sizes_c, labels=None, colors=_cores_c, startangle=140,
+                         autopct="%1.0f%%", pctdistance=0.75, textprops={"fontsize": 7})
+                fig_c.tight_layout(pad=0.5)
+                _tmp_c = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                fig_c.savefig(_tmp_c.name, dpi=130, bbox_inches="tight")
+                plt.close(fig_c)
+
+                pdf.image(_tmp_c.name, x=10, y=pdf.get_y(), w=90, h=72)
+                _os_pdf.unlink(_tmp_c.name)
+
+                # Legenda cores (lado direito)
+                _y_leg_c = pdf.get_y() + 4
+                _leg_max_c = _y_leg_c + 74
+                _tot_c = sum(_sizes_c)
+                pdf.set_xy(105, _y_leg_c)
+                pdf.set_font(FNORM, "B", 7)
+                pdf.cell(0, 5, _s("Cor / Variação                Vend.  %"), ln=True)
+                _y_cur_c = _y_leg_c + 6
+                for _ci, (lbl_c, sz_c, cor_c) in enumerate(zip(_labels_c, _sizes_c, _cores_c)):
+                    if _y_cur_c + 4 > _leg_max_c:
+                        break
+                    r_c, g_c, b_c = int(cor_c[0]*255), int(cor_c[1]*255), int(cor_c[2]*255)
+                    pdf.set_fill_color(r_c, g_c, b_c)
+                    pdf.set_xy(105, _y_cur_c)
+                    pdf.cell(4, 4, "", fill=True)
+                    pdf.set_xy(111, _y_cur_c)
+                    pdf.set_font(FNORM, "B", 6.5)
+                    _pct_c = f"{sz_c/_tot_c*100:.0f}%" if _tot_c else ""
+                    pdf.cell(0, 4, _s(f"{lbl_c[:24]:<24}  {sz_c:>4}  {_pct_c}"), ln=False)
+                    _y_cur_c += 5.3
+
+                # Ranking compacto de cores abaixo
+                _y_tab_c = max(_y_leg_c + 77, _y_cur_c + 3)
+                _page_h_c = pdf.h - pdf.b_margin
+                pdf.set_font(FNORM, "B", 6.5)
+                pdf.set_xy(10, _y_tab_c)
+                pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Cor / Variação':<30} {'Vend':>5}  {'%':>4}"), ln=False)
+                pdf.set_xy(10 + _col_w, _y_tab_c)
+                pdf.cell(0, _row_h, _s(f"{'#':<3} {'Cor / Variação':<30} {'Vend':>5}  {'%':>4}"), ln=True)
+                pdf.set_font(FNORM, "", 6)
+                _col_c = 0
+                _row_c = 0
+                _tot_all_c = sum(i.get("qtd", 0) for i in _itens_cores)
+                for _ci2, _item_c in enumerate(_itens_cores):
+                    _y_row_c = _y_tab_c + _row_h + _row_c * _row_h
+                    if _y_row_c + _row_h > _page_h_c:
+                        if _col_c == 0:
+                            _col_c = 1; _row_c = 0
+                            _y_row_c = _y_tab_c + _row_h
+                        else:
+                            break
+                    _x_row_c = 10 if _col_c == 0 else 10 + _col_w
+                    _q_c = _item_c.get("qtd", 0)
+                    _pp_c = f"{_q_c/_tot_all_c*100:.0f}%" if _tot_all_c else ""
+                    pdf.set_xy(_x_row_c, _y_row_c)
+                    pdf.cell(_col_w, _row_h, _s(f"{_ci2+1:<3} {_s(_item_c['cor'][:30]):<30} {_q_c:>5}  {_pp_c:>4}"))
+                    _row_c += 1
+
     return bytes(pdf.output())
 
 # ── Tema fixo claro (ignora preferência do sistema) ──
