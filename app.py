@@ -326,192 +326,188 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
         pdf.set_font(FNORM, "", 11)
         pdf.cell(0, 8, _s("Nenhum item para separar."), ln=True, align="C")
 
-    # Anexa ranking de vendas por loja — pizza + legenda compacta
+    # Anexa ranking de vendas por loja — uma página por loja com pizzas empilhadas
     if ranking_res and ranking_res.get("ranking"):
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-        import io as _io_plt
         import tempfile, os as _os_pdf
 
         _dias_rk = ranking_res.get("dias", 90)
         _nomes_rk = {l["id"]: l["nome"] for l in ranking_res.get("lojas", [])}
+        _row_h = 4.0
+        _col_w = 85
+
+        def _pizza_png(itens, n, colormap):
+            """Gera PNG de pizza e retorna caminho temporário."""
+            _top = itens[:n]
+            _resto = sum(i.get("qtd", 0) for i in itens[n:])
+            _lbs = [_s(i.get("produto") or i.get("cor", "")[:20]) for i in _top]
+            _szs = [i.get("qtd", 0) for i in _top]
+            if _resto > 0:
+                _lbs.append("Outros"); _szs.append(_resto)
+            _cls = colormap[:len(_lbs)]
+            fig, ax = plt.subplots(figsize=(4, 3.2))
+            ax.pie(_szs, labels=None, colors=_cls, startangle=140,
+                   autopct="%1.0f%%", pctdistance=0.75, textprops={"fontsize": 6.5})
+            fig.tight_layout(pad=0.3)
+            _t = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            fig.savefig(_t.name, dpi=130, bbox_inches="tight")
+            plt.close(fig)
+            return _t.name, _lbs, _szs, _cls
+
+        def _legenda(pdf, x, y, labels, sizes, colors, max_y, key_field="produto"):
+            """Desenha legenda compacta no PDF; retorna Y final."""
+            tot = sum(sizes)
+            _y = y
+            pdf.set_xy(x, _y)
+            pdf.set_font(FNORM, "B", 6.5)
+            pdf.cell(0, 4, _s("Cor/Modelo                   Vend.  %"), ln=False)
+            _y += 5
+            for lbl, sz, cor in zip(labels, sizes, colors):
+                if _y + 4 > max_y:
+                    break
+                r, g, b = int(cor[0]*255), int(cor[1]*255), int(cor[2]*255)
+                pdf.set_fill_color(r, g, b)
+                pdf.set_xy(x, _y)
+                pdf.cell(3, 3.5, "", fill=True)
+                pdf.set_xy(x + 4, _y)
+                pdf.set_font(FNORM, "B", 6)
+                _pct = f"{sz/tot*100:.0f}%" if tot else ""
+                pdf.cell(0, 3.5, _s(f"{lbl[:22]:<22}  {sz:>4}  {_pct}"), ln=False)
+                _y += 4.5
+            return _y
+
+        def _ranking_compacto(pdf, y, page_h, itens, key, tot_all):
+            """Tabela de ranking em duas colunas até o fim da página."""
+            pdf.set_font(FNORM, "B", 6)
+            pdf.set_xy(10, y)
+            pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Nome':<30} {'Vend':>5}  {'%':>4}"), ln=False)
+            pdf.set_xy(10 + _col_w, y)
+            pdf.cell(0, _row_h, _s(f"{'#':<3} {'Nome':<30} {'Vend':>5}  {'%':>4}"), ln=True)
+            pdf.set_font(FNORM, "", 5.8)
+            col, row = 0, 0
+            for ri, item in enumerate(itens):
+                y_row = y + _row_h + row * _row_h
+                if y_row + _row_h > page_h:
+                    if col == 0:
+                        col = 1; row = 0
+                        y_row = y + _row_h
+                    else:
+                        break
+                x_row = 10 if col == 0 else 10 + _col_w
+                q = item.get("qtd", 0)
+                pp = f"{q/tot_all*100:.0f}%" if tot_all else ""
+                nome = _s((item.get("produto") or item.get("cor", ""))[:30])
+                pdf.set_xy(x_row, y_row)
+                pdf.cell(_col_w, _row_h, _s(f"{ri+1:<3} {nome:<30} {q:>5}  {pp:>4}"))
+                row += 1
 
         for _lid, _itens_rk in ranking_res.get("ranking", {}).items():
             if not _itens_rk:
                 continue
+            _itens_cores = (ranking_res.get("ranking_cores") or {}).get(_lid, [])
+
             pdf.add_page()
-            pdf.set_font(FNORM, "B", 13)
-            pdf.cell(0, 8, _s(f"VENDAS — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
-            pdf.ln(2)
+            _page_h = pdf.h - pdf.b_margin
+            pdf.set_font(FNORM, "B", 12)
+            pdf.cell(0, 7, _s(f"VENDAS — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
+            pdf.ln(1)
 
-            # Gera gráfico pizza com matplotlib
-            _top = _itens_rk[:12]
-            _resto = sum(i.get("qtd", 0) for i in _itens_rk[12:])
-            _labels = [_s(i["produto"][:22]) for i in _top]
-            _sizes  = [i.get("qtd", 0) for i in _top]
-            if _resto > 0:
-                _labels.append("Outros")
-                _sizes.append(_resto)
+            # ── Seção MODELOS ──────────────────────────────────────────
+            _PW, _PH = 82, 58   # pizza width/height em mm
+            _y0 = pdf.get_y()
 
-            _cores = plt.cm.tab20.colors[:len(_labels)]
-            fig, ax = plt.subplots(figsize=(5, 4))
-            ax.pie(_sizes, labels=None, colors=_cores, startangle=140,
-                   autopct="%1.0f%%", pctdistance=0.75,
-                   textprops={"fontsize": 7})
-            ax.set_title("")
-            fig.tight_layout(pad=0.5)
+            _cm_mod = list(plt.cm.tab20.colors)
+            _png_mod, _lbs_mod, _szs_mod, _cls_mod = _pizza_png(_itens_rk, 12, _cm_mod)
+            pdf.set_font(FNORM, "B", 8)
+            pdf.set_xy(10, _y0)
+            pdf.cell(_PW, 5, _s("Modelos"), ln=False, align="C")
+            pdf.image(_png_mod, x=10, y=_y0 + 5, w=_PW, h=_PH)
+            _os_pdf.unlink(_png_mod)
 
-            # Salva como PNG temporário
-            _tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-            fig.savefig(_tmp.name, dpi=130, bbox_inches="tight")
-            plt.close(fig)
-
-            # Insere pizza no PDF (lado esquerdo)
-            pdf.image(_tmp.name, x=10, y=pdf.get_y(), w=90, h=72)
-            _os_pdf.unlink(_tmp.name)
-
-            # Legenda compacta (lado direito) com sub-linhas de variação
-            _y_leg = pdf.get_y() + 4
-            _tot_rk = sum(_sizes)
-            _leg_max_y = _y_leg + 74  # não ultrapassar a área da pizza
-            pdf.set_xy(105, _y_leg)
-            pdf.set_font(FNORM, "B", 7)
-            pdf.cell(0, 5, _s("Modelo                        Vend.  %"), ln=True)
-            _y_cur = _y_leg + 6
-            for _i, (_item_leg, sz, cor) in enumerate(zip(_top, _sizes, _cores)):
-                if _y_cur + 4 > _leg_max_y:
+            # Legenda modelos (à direita da pizza) com sub-linha de variações
+            _x_leg = 10 + _PW + 4
+            _y_leg = _y0 + 5
+            _leg_max = _y_leg + _PH
+            _tot_mod = sum(_szs_mod)
+            _y_leg_cur = _y_leg + 1
+            pdf.set_font(FNORM, "B", 6.5)
+            pdf.set_xy(_x_leg, _y_leg_cur)
+            pdf.cell(0, 4, _s("Modelo                   Vend.  %"), ln=False)
+            _y_leg_cur += 5
+            _top_mod = _itens_rk[:12]
+            for _item_leg, sz, cor in zip(_top_mod, _szs_mod, _cls_mod):
+                if _y_leg_cur + 4 > _leg_max:
                     break
-                lbl = _s(_item_leg["produto"][:22])
+                lbl = _s(_item_leg["produto"][:20])
                 r, g, b = int(cor[0]*255), int(cor[1]*255), int(cor[2]*255)
                 pdf.set_fill_color(r, g, b)
-                pdf.set_xy(105, _y_cur)
-                pdf.cell(4, 4, "", fill=True)
-                pdf.set_xy(111, _y_cur)
-                pdf.set_font(FNORM, "B", 6.5)
-                _pct = f"{sz/_tot_rk*100:.0f}%" if _tot_rk else ""
-                pdf.cell(0, 4, _s(f"{lbl[:22]:<22}  {sz:>4}  {_pct}"), ln=False)
-                _y_cur += 4.5
-                # Sub-linha única com todas as variações separadas por vírgula
+                pdf.set_xy(_x_leg, _y_leg_cur)
+                pdf.cell(3, 3.5, "", fill=True)
+                pdf.set_xy(_x_leg + 4, _y_leg_cur)
+                pdf.set_font(FNORM, "B", 6)
+                _pct = f"{sz/_tot_mod*100:.0f}%" if _tot_mod else ""
+                pdf.cell(0, 3.5, _s(f"{lbl:<20}  {sz:>4}  {_pct}"), ln=False)
+                _y_leg_cur += 4
                 _tvs = _item_leg.get("top_vars", [])
-                if _tvs and _y_cur + 3 <= _leg_max_y:
-                    pdf.set_font(FNORM, "", 5.5)
-                    pdf.set_text_color(90, 90, 90)
+                if _tvs and _y_leg_cur + 3 <= _leg_max:
                     _vars_txt = ", ".join(
-                        f"{_s(_tv['nome'][:18])} ({_tv['qtd']})" for _tv in _tvs if _tv.get("nome")
+                        f"{_s(_tv['nome'][:16])} ({_tv['qtd']})" for _tv in _tvs if _tv.get("nome")
                     )
-                    pdf.set_xy(113, _y_cur)
+                    pdf.set_font(FNORM, "", 5.2)
+                    pdf.set_text_color(90, 90, 90)
+                    pdf.set_xy(_x_leg + 4, _y_leg_cur)
                     pdf.cell(0, 3, _s(f"↳ {_vars_txt}"), ln=False)
                     pdf.set_text_color(0, 0, 0)
-                    _y_cur += 3.5
-                _y_cur += 0.8
+                    _y_leg_cur += 3.2
+                _y_leg_cur += 0.5
 
-            # Fill remaining page space with compact full ranking
-            _y_tabela = max(_y_leg + 77, _y_cur + 3)
-            _page_h = pdf.h - pdf.b_margin  # usable bottom
-            _row_h = 4.2
-            _col_w = 85  # two columns
-            pdf.set_font(FNORM, "B", 6.5)
-            pdf.set_xy(10, _y_tabela)
-            pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Modelo':<30} {'Vend':>5}  {'%':>4}"), ln=False)
-            pdf.set_xy(10 + _col_w, _y_tabela)
-            pdf.cell(0, _row_h, _s(f"{'#':<3} {'Modelo':<30} {'Vend':>5}  {'%':>4}"), ln=True)
-            pdf.set_font(FNORM, "", 6)
-            _col = 0  # 0=left, 1=right
-            _row_in_col = 0
-            _tot_all = sum(i.get("qtd", 0) for i in _itens_rk)
-            for _ri, _item in enumerate(_itens_rk):
-                _y_row = _y_tabela + _row_h + _row_in_col * _row_h
-                if _y_row + _row_h > _page_h:
-                    if _col == 0:
-                        _col = 1
-                        _row_in_col = 0
-                        _y_row = _y_tabela + _row_h
-                    else:
-                        break  # page full
-                _x_row = 10 if _col == 0 else 10 + _col_w
-                _q = _item.get("qtd", 0)
-                _pp = f"{_q/_tot_all*100:.0f}%" if _tot_all else ""
-                _nome = _s(_item["produto"][:30])
-                pdf.set_xy(_x_row, _y_row)
-                pdf.cell(_col_w, _row_h, _s(f"{_ri+1:<3} {_nome:<30} {_q:>5}  {_pp:>4}"))
-                _row_in_col += 1
+            _y_after_mod = _y0 + 5 + _PH + 3
 
-            # Página de cores
-            _itens_cores = (ranking_res.get("ranking_cores") or {}).get(_lid, [])
+            # ── Seção CORES ────────────────────────────────────────────
             if _itens_cores:
-                pdf.add_page()
-                pdf.set_font(FNORM, "B", 13)
-                pdf.cell(0, 8, _s(f"CORES — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
-                pdf.ln(2)
+                _y1 = _y_after_mod
+                _cm_cor = list(plt.cm.tab20b.colors)
+                _png_cor, _lbs_cor, _szs_cor, _cls_cor = _pizza_png(
+                    [{"produto": i["cor"], "qtd": i["qtd"]} for i in _itens_cores], 14, _cm_cor
+                )
+                pdf.set_font(FNORM, "B", 8)
+                pdf.set_xy(10, _y1)
+                pdf.cell(_PW, 5, _s("Cores"), ln=False, align="C")
+                pdf.image(_png_cor, x=10, y=_y1 + 5, w=_PW, h=_PH)
+                _os_pdf.unlink(_png_cor)
 
-                _top_c = _itens_cores[:14]
-                _resto_c = sum(i.get("qtd", 0) for i in _itens_cores[14:])
-                _labels_c = [_s(i["cor"][:22]) for i in _top_c]
-                _sizes_c  = [i.get("qtd", 0) for i in _top_c]
-                if _resto_c > 0:
-                    _labels_c.append("Outras"); _sizes_c.append(_resto_c)
-
-                _cores_c = plt.cm.tab20b.colors[:len(_labels_c)]
-                fig_c, ax_c = plt.subplots(figsize=(5, 4))
-                ax_c.pie(_sizes_c, labels=None, colors=_cores_c, startangle=140,
-                         autopct="%1.0f%%", pctdistance=0.75, textprops={"fontsize": 7})
-                fig_c.tight_layout(pad=0.5)
-                _tmp_c = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                fig_c.savefig(_tmp_c.name, dpi=130, bbox_inches="tight")
-                plt.close(fig_c)
-
-                pdf.image(_tmp_c.name, x=10, y=pdf.get_y(), w=90, h=72)
-                _os_pdf.unlink(_tmp_c.name)
-
-                # Legenda cores (lado direito)
-                _y_leg_c = pdf.get_y() + 4
-                _leg_max_c = _y_leg_c + 74
-                _tot_c = sum(_sizes_c)
-                pdf.set_xy(105, _y_leg_c)
-                pdf.set_font(FNORM, "B", 7)
-                pdf.cell(0, 5, _s("Cor / Variação                Vend.  %"), ln=True)
-                _y_cur_c = _y_leg_c + 6
-                for _ci, (lbl_c, sz_c, cor_c) in enumerate(zip(_labels_c, _sizes_c, _cores_c)):
-                    if _y_cur_c + 4 > _leg_max_c:
+                _y_leg_c = _y1 + 5
+                _leg_max_c = _y_leg_c + _PH
+                _tot_cor = sum(_szs_cor)
+                _y_lc = _y_leg_c + 1
+                pdf.set_font(FNORM, "B", 6.5)
+                pdf.set_xy(_x_leg, _y_lc)
+                pdf.cell(0, 4, _s("Cor / Variação           Vend.  %"), ln=False)
+                _y_lc += 5
+                for lbl_c, sz_c, cor_c in zip(_lbs_cor, _szs_cor, _cls_cor):
+                    if _y_lc + 4 > _leg_max_c:
                         break
                     r_c, g_c, b_c = int(cor_c[0]*255), int(cor_c[1]*255), int(cor_c[2]*255)
                     pdf.set_fill_color(r_c, g_c, b_c)
-                    pdf.set_xy(105, _y_cur_c)
-                    pdf.cell(4, 4, "", fill=True)
-                    pdf.set_xy(111, _y_cur_c)
-                    pdf.set_font(FNORM, "B", 6.5)
-                    _pct_c = f"{sz_c/_tot_c*100:.0f}%" if _tot_c else ""
-                    pdf.cell(0, 4, _s(f"{lbl_c[:24]:<24}  {sz_c:>4}  {_pct_c}"), ln=False)
-                    _y_cur_c += 5.3
+                    pdf.set_xy(_x_leg, _y_lc)
+                    pdf.cell(3, 3.5, "", fill=True)
+                    pdf.set_xy(_x_leg + 4, _y_lc)
+                    pdf.set_font(FNORM, "B", 6)
+                    _pct_c = f"{sz_c/_tot_cor*100:.0f}%" if _tot_cor else ""
+                    pdf.cell(0, 3.5, _s(f"{lbl_c[:22]:<22}  {sz_c:>4}  {_pct_c}"), ln=False)
+                    _y_lc += 4.5
 
-                # Ranking compacto de cores abaixo
-                _y_tab_c = max(_y_leg_c + 77, _y_cur_c + 3)
-                _page_h_c = pdf.h - pdf.b_margin
-                pdf.set_font(FNORM, "B", 6.5)
-                pdf.set_xy(10, _y_tab_c)
-                pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Cor / Variação':<30} {'Vend':>5}  {'%':>4}"), ln=False)
-                pdf.set_xy(10 + _col_w, _y_tab_c)
-                pdf.cell(0, _row_h, _s(f"{'#':<3} {'Cor / Variação':<30} {'Vend':>5}  {'%':>4}"), ln=True)
-                pdf.set_font(FNORM, "", 6)
-                _col_c = 0
-                _row_c = 0
-                _tot_all_c = sum(i.get("qtd", 0) for i in _itens_cores)
-                for _ci2, _item_c in enumerate(_itens_cores):
-                    _y_row_c = _y_tab_c + _row_h + _row_c * _row_h
-                    if _y_row_c + _row_h > _page_h_c:
-                        if _col_c == 0:
-                            _col_c = 1; _row_c = 0
-                            _y_row_c = _y_tab_c + _row_h
-                        else:
-                            break
-                    _x_row_c = 10 if _col_c == 0 else 10 + _col_w
-                    _q_c = _item_c.get("qtd", 0)
-                    _pp_c = f"{_q_c/_tot_all_c*100:.0f}%" if _tot_all_c else ""
-                    pdf.set_xy(_x_row_c, _y_row_c)
-                    pdf.cell(_col_w, _row_h, _s(f"{_ci2+1:<3} {_s(_item_c['cor'][:30]):<30} {_q_c:>5}  {_pp_c:>4}"))
-                    _row_c += 1
+                _y_after_cores = _y1 + 5 + _PH + 4
+            else:
+                _y_after_cores = _y_after_mod + 4
+
+            # ── Ranking compacto (modelos + cores) no espaço restante ──
+            _y_tab = _y_after_cores
+            if _y_tab + 10 < _page_h:
+                _tot_all_m = sum(i.get("qtd", 0) for i in _itens_rk)
+                _ranking_compacto(pdf, _y_tab, _page_h, _itens_rk, "produto", _tot_all_m)
 
     return bytes(pdf.output())
 
