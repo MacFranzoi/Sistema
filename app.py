@@ -393,17 +393,18 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
                 _pct = f"{sz/_tot_rk*100:.0f}%" if _tot_rk else ""
                 pdf.cell(0, 4, _s(f"{lbl[:22]:<22}  {sz:>4}  {_pct}"), ln=False)
                 _y_cur += 4.5
-                # Sub-linhas de variação
-                pdf.set_font(FNORM, "", 5.5)
-                pdf.set_text_color(90, 90, 90)
-                for _tv in _item_leg.get("top_vars", [])[:3]:
-                    if _y_cur + 3 > _leg_max_y:
-                        break
-                    _tv_nome = _s(_tv["nome"][:28]) if _tv["nome"] else "—"
+                # Sub-linha única com todas as variações separadas por vírgula
+                _tvs = _item_leg.get("top_vars", [])
+                if _tvs and _y_cur + 3 <= _leg_max_y:
+                    pdf.set_font(FNORM, "", 5.5)
+                    pdf.set_text_color(90, 90, 90)
+                    _vars_txt = ", ".join(
+                        f"{_s(_tv['nome'][:18])} ({_tv['qtd']})" for _tv in _tvs if _tv.get("nome")
+                    )
                     pdf.set_xy(113, _y_cur)
-                    pdf.cell(0, 3, _s(f"↳ {_tv_nome}  {_tv['qtd']}"), ln=False)
-                    _y_cur += 3.2
-                pdf.set_text_color(0, 0, 0)
+                    pdf.cell(0, 3, _s(f"↳ {_vars_txt}"), ln=False)
+                    pdf.set_text_color(0, 0, 0)
+                    _y_cur += 3.5
                 _y_cur += 0.8
 
             # Fill remaining page space with compact full ranking
