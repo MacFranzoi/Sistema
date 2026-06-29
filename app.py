@@ -522,11 +522,28 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
             else:
                 _y_after_cores = _y_after_mod + 4
 
-            # ── Ranking compacto (modelos + cores) no espaço restante ──
+            # ── Ranking compacto modelos (espaço restante, metade esquerda) ──
             _y_tab = _y_after_cores
             if _y_tab + 10 < _page_h:
                 _tot_all_m = sum(i.get("qtd", 0) for i in _itens_rk)
                 _ranking_compacto(pdf, _y_tab, _page_h, _itens_rk, "produto", _tot_all_m)
+
+            # ── Página extra: ranking de cores com sub-linhas de modelos ──
+            if _itens_cores:
+                pdf.add_page()
+                _page_h2 = pdf.h - pdf.b_margin
+                pdf.set_font(FNORM, "B", 10)
+                pdf.cell(0, 6, _s(f"CORES — {_nomes_rk.get(_lid, _lid)} ({_dias_rk} dias)"), ln=True, align="C")
+                pdf.ln(1)
+                _tot_all_c = sum(i.get("qtd", 0) for i in _itens_cores)
+                # converte para formato esperado por _ranking_compacto
+                _itens_cores_rk = [
+                    {"produto": i["cor"], "qtd": i["qtd"], "top_vars": [
+                        {"nome": m["nome"], "qtd": m["qtd"]} for m in i.get("top_modelos", [])
+                    ]}
+                    for i in _itens_cores
+                ]
+                _ranking_compacto(pdf, pdf.get_y(), _page_h2, _itens_cores_rk, "produto", _tot_all_c)
 
     return bytes(pdf.output())
 

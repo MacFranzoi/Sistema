@@ -906,6 +906,7 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
         model_totals = {}
         model_vars = {}
         cor_totals = {}
+        cor_modelos = {}  # cor -> {modelo: qtd}
         for vid, qtd in por_var.items():
             if str(vid) in vmap:
                 nome, var_nome = vmap[str(vid)]
@@ -917,9 +918,10 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
                     model_totals[nome] = model_totals.get(nome, 0) + q
                     mv = model_vars.setdefault(nome, {})
                     mv[var_nome] = mv.get(var_nome, 0) + q
-                    # agrupa cor: variação nome como cor
                     cor = var_nome or "—"
                     cor_totals[cor] = cor_totals.get(cor, 0) + q
+                    cm = cor_modelos.setdefault(cor, {})
+                    cm[nome] = cm.get(nome, 0) + q
         itens = []
         for nome, total in model_totals.items():
             top_vars = sorted(model_vars.get(nome, {}).items(), key=lambda x: -x[1])[:6]
@@ -931,7 +933,16 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
         ranking[lid] = itens[:top]
 
         cores_sorted = sorted(cor_totals.items(), key=lambda x: -x[1])
-        ranking_cores[lid] = [{"cor": c, "qtd": q} for c, q in cores_sorted[:top]]
+        ranking_cores[lid] = [
+            {
+                "cor": c, "qtd": q,
+                "top_modelos": [
+                    {"nome": m, "qtd": mq}
+                    for m, mq in sorted(cor_modelos.get(c, {}).items(), key=lambda x: -x[1])[:6]
+                ],
+            }
+            for c, q in cores_sorted[:top]
+        ]
 
     return {
         "dias": dias,
