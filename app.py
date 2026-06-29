@@ -379,29 +379,48 @@ def gerar_pdf_separacao(movimentos, origem_filtro=None, observacao="", ranking_r
             return _y
 
         def _ranking_compacto(pdf, y, page_h, itens, key, tot_all):
-            """Tabela de ranking em duas colunas até o fim da página."""
+            """Tabela de ranking em duas colunas com sub-linhas de variação."""
+            _rh = 3.8   # altura linha modelo
+            _vh = 3.0   # altura sub-linha variação
             pdf.set_font(FNORM, "B", 6)
             pdf.set_xy(10, y)
-            pdf.cell(_col_w, _row_h, _s(f"{'#':<3} {'Nome':<30} {'Vend':>5}  {'%':>4}"), ln=False)
+            pdf.cell(_col_w, _rh, _s(f"{'#':<3} {'Nome':<28} {'Vend':>5}  {'%':>4}"), ln=False)
             pdf.set_xy(10 + _col_w, y)
-            pdf.cell(0, _row_h, _s(f"{'#':<3} {'Nome':<30} {'Vend':>5}  {'%':>4}"), ln=True)
-            pdf.set_font(FNORM, "", 5.8)
-            col, row = 0, 0
+            pdf.cell(0, _rh, _s(f"{'#':<3} {'Nome':<28} {'Vend':>5}  {'%':>4}"), ln=True)
+            col, y_col = [0, 0], [y + _rh, y + _rh]  # cursor Y por coluna
             for ri, item in enumerate(itens):
-                y_row = y + _row_h + row * _row_h
-                if y_row + _row_h > page_h:
-                    if col == 0:
-                        col = 1; row = 0
-                        y_row = y + _row_h
-                    else:
+                tvs = item.get("top_vars", [])
+                bloco_h = _rh + len(tvs) * _vh  # altura do bloco (modelo + vars)
+                # verifica se cabe na coluna atual
+                c = col[0] if col[0] < col[1] or col[1] >= 2 else 1
+                # escolhe a coluna com mais espaço
+                c = 0 if y_col[0] <= y_col[1] else 1
+                if y_col[c] + bloco_h > page_h:
+                    # tenta a outra coluna
+                    c2 = 1 - c
+                    if y_col[c2] + bloco_h > page_h:
                         break
-                x_row = 10 if col == 0 else 10 + _col_w
+                    c = c2
+                x_row = 10 if c == 0 else 10 + _col_w
                 q = item.get("qtd", 0)
                 pp = f"{q/tot_all*100:.0f}%" if tot_all else ""
-                nome = _s((item.get("produto") or item.get("cor", ""))[:30])
-                pdf.set_xy(x_row, y_row)
-                pdf.cell(_col_w, _row_h, _s(f"{ri+1:<3} {nome:<30} {q:>5}  {pp:>4}"))
-                row += 1
+                nome = _s((item.get("produto") or item.get("cor", ""))[:28])
+                # linha do modelo
+                pdf.set_font(FNORM, "B", 6)
+                pdf.set_xy(x_row, y_col[c])
+                pdf.cell(_col_w, _rh, _s(f"{ri+1:<3} {nome:<28} {q:>5}  {pp:>4}"))
+                y_col[c] += _rh
+                # sub-linhas de variação
+                pdf.set_font(FNORM, "", 5.2)
+                pdf.set_text_color(70, 70, 70)
+                for tv in tvs:
+                    if not tv.get("nome"):
+                        continue
+                    pdf.set_xy(x_row + 5, y_col[c])
+                    pdf.cell(_col_w - 5, _vh, _s(f"↳ {_s(tv['nome'][:30])}  {tv['qtd']}"), ln=False)
+                    y_col[c] += _vh
+                pdf.set_text_color(0, 0, 0)
+                y_col[c] += 0.5
 
         for _lid, _itens_rk in ranking_res.get("ranking", {}).items():
             if not _itens_rk:

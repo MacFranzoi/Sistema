@@ -922,7 +922,7 @@ def ranking_vendas_lojas(loja_ids, grupos=None, modelos=None, dias=90, top=50):
                     cor_totals[cor] = cor_totals.get(cor, 0) + q
         itens = []
         for nome, total in model_totals.items():
-            top_vars = sorted(model_vars.get(nome, {}).items(), key=lambda x: -x[1])[:3]
+            top_vars = sorted(model_vars.get(nome, {}).items(), key=lambda x: -x[1])[:6]
             itens.append({
                 "label": nome, "produto": nome, "variacao": "", "qtd": total,
                 "top_vars": [{"nome": v, "qtd": q} for v, q in top_vars],
