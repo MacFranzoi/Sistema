@@ -40,6 +40,7 @@ DISPONIBILIDADE_FILE = os.path.join(DIR, "disponibilidade_lojas.json")
 CUSTOS_TIPO_FILE     = os.path.join(DIR, "custos_tipo.json")
 USUARIOS_FILE        = os.path.join(DIR, "usuarios.json")
 SETORES_FILE         = os.path.join(DIR, "setores.json")
+TAREFAS_FILE         = os.path.join(DIR, "tarefas.json")
 
 _SETORES_PADRAO = {
     "admin": {
@@ -196,9 +197,84 @@ def salvar_usuarios(usuarios):
     conteudo = json.dumps(usuarios, ensure_ascii=False, indent=2)
     with open(USUARIOS_FILE, "w", encoding="utf-8") as f:
         f.write(conteudo)
-    # Push pro GitHub para persistir entre restarts do container.
-    # Não bloqueia a operação se falhar (GITHUB_TOKEN ausente, etc).
     _gh_push_arquivo("usuarios.json", conteudo, "Atualiza usuarios")
+
+
+# ── Tarefas ────────────────────────────────────────────────────────────────────
+
+def carregar_tarefas():
+    if os.path.exists(TAREFAS_FILE):
+        with open(TAREFAS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"tarefas": []}
+
+def salvar_tarefas(dados):
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
+    with open(TAREFAS_FILE, "w", encoding="utf-8") as f:
+        f.write(conteudo)
+    _gh_push_arquivo("tarefas.json", conteudo, "Atualiza tarefas")
+
+def criar_tarefa(texto, criado_por, atribuido_para, prioridade="normal"):
+    import uuid as _uuid
+    dados = carregar_tarefas()
+    tarefa = {
+        "id": str(_uuid.uuid4()),
+        "texto": texto.strip(),
+        "criado_por": criado_por,
+        "atribuido_para": atribuido_para,
+        "status": "pendente",
+        "prioridade": prioridade,
+        "criado_em": _agora_br_str(),
+        "concluido_em": None,
+    }
+    dados["tarefas"].append(tarefa)
+    salvar_tarefas(dados)
+    return tarefa
+
+def atualizar_tarefa(tarefa_id, campos):
+    dados = carregar_tarefas()
+    for t in dados["tarefas"]:
+        if t["id"] == tarefa_id:
+            t.update(campos)
+            if campos.get("status") == "concluido" and not t.get("concluido_em"):
+                t["concluido_em"] = _agora_br_str()
+            break
+    salvar_tarefas(dados)
+
+def excluir_tarefa(tarefa_id):
+    dados = carregar_tarefas()
+    dados["tarefas"] = [t for t in dados["tarefas"] if t["id"] != tarefa_id]
+    salvar_tarefas(dados)
+
+def tarefas_do_usuario(login):
+    return [t for t in carregar_tarefas()["tarefas"] if t["atribuido_para"] == login]
+
+def parse_tarefas_ia(texto, ant_key):
+    """Converte texto livre (transcrição de voz) em lista de tarefas via Claude."""
+    import anthropic as _ant
+    client = _ant.Anthropic(api_key=ant_key)
+    prompt = (
+        "Você recebe a transcrição de uma gravação de voz de um gerente de loja.\n"
+        "Extraia todas as tarefas, ações ou lembretes mencionados e retorne como JSON.\n"
+        "Formato: {\"tarefas\": [{\"texto\": \"...\", \"prioridade\": \"alta|normal|baixa\"}]}\n"
+        "- Cada tarefa deve ser uma frase clara e acionável\n"
+        "- Não invente tarefas que não foram mencionadas\n"
+        "- Prioridade alta: urgente, hoje, agora. Baixa: quando puder, sem pressa.\n\n"
+        f"Transcrição:\n{texto}"
+    )
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = msg.content[0].text.strip()
+    # extrai JSON mesmo que venha com markdown
+    import re as _re
+    m = _re.search(r'\{.*\}', raw, _re.DOTALL)
+    if m:
+        return json.loads(m.group())
+    return {"tarefas": []}
+
 
 CUSTOS_TIPO_PADRAO = {
     "Aveludada":        "25.00",

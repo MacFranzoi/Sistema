@@ -21,7 +21,9 @@
       "relatorios",
       "sincronizacao",
       "listas",
-      "usuarios"
+      "usuarios",
+      "tarefas",
+      "minhas_tarefas"
     ]
   },
   "gerencia": {
@@ -44,7 +46,9 @@
       "compras_hist",
       "financeiro",
       "relatorios",
-      "listas"
+      "listas",
+      "tarefas",
+      "minhas_tarefas"
     ]
   },
   "estoque": {
@@ -58,7 +62,8 @@
       "etiquetas",
       "pedido",
       "compras_hist",
-      "listas"
+      "listas",
+      "minhas_tarefas"
     ]
   },
   "compras": {
@@ -69,7 +74,8 @@
       "compras_hist",
       "estoque_loja",
       "disponibilidade",
-      "listas"
+      "listas",
+      "minhas_tarefas"
     ]
   },
   "vendas": {
@@ -80,7 +86,8 @@
       "orcamentos",
       "estoque_loja",
       "disponibilidade",
-      "etiquetas"
+      "etiquetas",
+      "minhas_tarefas"
     ]
   }
 }
