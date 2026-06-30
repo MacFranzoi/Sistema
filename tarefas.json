@@ -199,6 +199,36 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T19:23:08",
       "concluido_em": null
+    },
+    {
+      "id": "91348383-4ba4-44e3-a81e-3563c2438391",
+      "texto": "Varrer a frente",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:09",
+      "concluido_em": null
+    },
+    {
+      "id": "ea4a0289-55b7-4d39-b972-c92ff049fdc6",
+      "texto": "Limpar as capas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:10",
+      "concluido_em": null
+    },
+    {
+      "id": "262f128e-05ad-4e6f-a04a-a282775a739b",
+      "texto": "Conferir as etiquetas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:10",
+      "concluido_em": null
     }
   ]
 }
