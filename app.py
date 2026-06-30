@@ -8189,9 +8189,11 @@ def _main_content():
             else:
                 st.info("💡 Configure `OPENAI_API_KEY` para habilitar gravação de áudio.")
     
+            _tf_transcricao_pronta = st.session_state.pop("tf_transcricao", "")
+            if _tf_transcricao_pronta:
+                st.session_state["tf_texto_area"] = _tf_transcricao_pronta
             _tf_texto = st.text_area(
                 "Texto das tarefas (edite ou cole aqui)",
-                value=st.session_state.get("tf_transcricao", ""),
                 height=120,
                 key="tf_texto_area",
                 placeholder="Ex: Ligar para o fornecedor, repor estoque de capas azuis, verificar entrada do dia...",
