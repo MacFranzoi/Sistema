@@ -319,6 +319,16 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T19:23:15",
       "concluido_em": null
+    },
+    {
+      "id": "6352c427-ba20-4641-a792-56331083b5f4",
+      "texto": "Conferir as etiquetas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:16",
+      "concluido_em": null
     }
   ]
 }
