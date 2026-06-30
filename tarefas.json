@@ -189,6 +189,16 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T16:15:15",
       "concluido_em": null
+    },
+    {
+      "id": "61b51b81-80e8-4258-b0ee-56b7d68dc046",
+      "texto": "Passar pano na loja",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:08",
+      "concluido_em": null
     }
   ]
 }
