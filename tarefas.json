@@ -1,0 +1,14 @@
+{
+  "tarefas": [
+    {
+      "id": "45133991-2de9-4d0c-982a-edb20aba933b",
+      "texto": "Verificar se vai chegar todas as peças das manutenções",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T14:59:57",
+      "concluido_em": null
+    }
+  ]
+}
