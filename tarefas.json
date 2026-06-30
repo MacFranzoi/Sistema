@@ -169,6 +169,16 @@
       "prioridade": "alta",
       "criado_em": "2026-06-30T16:15:12",
       "concluido_em": null
+    },
+    {
+      "id": "d7337c74-97e8-439b-af60-9465008e303b",
+      "texto": "Avisar o cliente que o celular vai ficar pronto somente amanhã",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:14",
+      "concluido_em": null
     }
   ]
 }
