@@ -99,6 +99,16 @@
       "prioridade": "alta",
       "criado_em": "2026-06-30T16:15:05",
       "concluido_em": null
+    },
+    {
+      "id": "3ea6b9a6-aed6-4a74-a746-8d79183efd11",
+      "texto": "Realizar atualização e troca de pasta térmica do celular",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T16:15:06",
+      "concluido_em": null
     }
   ]
 }
