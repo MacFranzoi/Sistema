@@ -8,5 +8,6 @@ pandas
 openpyxl
 fpdf2
 anthropic
+openai
 Pillow
 apscheduler

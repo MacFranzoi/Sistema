@@ -273,7 +273,37 @@ def balanco_ia_status(job_id: str, request: Request):
     return job
 
 
-# ── Frontend estático (SPA) ──────────────────────────────────────────────────
+# ── Voz / Whisper ────────────────────────────────────────────────────────────
+@app.post("/api/voz/transcrever")
+async def voz_transcrever(request: Request):
+    from fastapi import UploadFile, File
+    import tempfile, os as _os_voz
+    openai_key = _os_voz.environ.get("OPENAI_API_KEY", "")
+    if not openai_key:
+        raise HTTPException(400, "OPENAI_API_KEY não configurada")
+    form = await request.form()
+    audio_file = form.get("audio")
+    if not audio_file:
+        raise HTTPException(400, "Campo 'audio' ausente")
+    data = await audio_file.read()
+    suffix = ".webm"
+    fname = getattr(audio_file, "filename", "audio.webm") or "audio.webm"
+    if "." in fname:
+        suffix = "." + fname.rsplit(".", 1)[-1]
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        import openai as _openai
+        client = _openai.OpenAI(api_key=openai_key)
+        with open(tmp_path, "rb") as f:
+            resp = client.audio.transcriptions.create(model="whisper-1", file=f)
+        return {"texto": resp.text}
+    finally:
+        _os_voz.unlink(tmp_path)
+
+
+# ── Frontend estático (SPA) ───────────────────────────────────────────────────
 @app.get("/")
 def index():
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
