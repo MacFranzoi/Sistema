@@ -8170,30 +8170,24 @@ def _main_content():
             import os as _os_tf
 
             _ant_key_tf = _os_tf.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
-            _openai_key_tf = _os_tf.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", "")
-            _v2_url_tf = _os_tf.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
-    
-            # ── Gravar / transcrever ─────────────────────────────
+            _has_openai_tf = bool(_os_tf.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", ""))
+
+            # ── Gravar / transcrever (mesmo padrão do Pedido de Compra) ──
             st.subheader("🎙️ Gravar ou digitar tarefas")
-            _tf_audio = st.audio_input("Clique para gravar sua voz", key="tf_audio")
-            _tf_texto_rec = st.session_state.get("tf_transcricao", "")
-    
-            if _tf_audio:
-                if _openai_key_tf:
-                    with st.spinner("Transcrevendo áudio..."):
-                        import requests as _req_tf
-                        try:
-                            _r_tf = _req_tf.post(
-                                f"{_v2_url_tf}/api/voz/transcrever",
-                                files={"audio": ("audio.webm", _tf_audio.getvalue(), "audio/webm")},
-                                timeout=30,
-                            )
-                            _r_tf.raise_for_status()
-                            st.session_state["tf_transcricao"] = _r_tf.json().get("texto", "")
-                        except Exception as _e_tf:
-                            st.warning(f"Erro na transcrição: {_e_tf}")
-                else:
-                    st.info("Configure OPENAI_API_KEY para transcrição de áudio automática.")
+            if _has_openai_tf:
+                _tf_audio = st.audio_input("Gravar tarefas por áudio", key="tf_audio", label_visibility="collapsed")
+                if _tf_audio is not None:
+                    if st.button("📝 Transcrever áudio", key="tf_transcrever", type="secondary"):
+                        with st.spinner("Transcrevendo áudio…"):
+                            try:
+                                from api import transcrever_audio as _transcrever_tf
+                                _transcricao_tf = _transcrever_tf(_tf_audio.read(), filename="audio.webm")
+                                st.session_state["tf_transcricao"] = _transcricao_tf
+                                st.success("Transcrição concluída!")
+                            except Exception as _e_tf:
+                                st.error(f"Erro na transcrição: {_e_tf}")
+            else:
+                st.info("💡 Configure `OPENAI_API_KEY` para habilitar gravação de áudio.")
     
             _tf_texto = st.text_area(
                 "Texto das tarefas (edite ou cole aqui)",
