@@ -3631,6 +3631,48 @@ def _main_content():
                     unsafe_allow_html=True,
                 )
 
+            # ── Desfazer última ação ─────────────────────────────────────────
+            _ent_hist = st.session_state.setdefault("_ent_historico", [])
+            # Salva snapshot sempre que a lista mudar
+            _ent_snapshot = [dict(i) for i in st.session_state.itens_entrada]
+            if not _ent_hist or _ent_hist[-1] != _ent_snapshot:
+                _ent_hist.append(_ent_snapshot)
+                if len(_ent_hist) > 30:
+                    _ent_hist.pop(0)
+
+            _und1, _und2 = st.columns([1, 1])
+            with _und1:
+                _pode_undo = len(_ent_hist) >= 2
+                if st.button("↩️ Desfazer última ação", disabled=not _pode_undo,
+                             use_container_width=True, key="ent_undo_geral"):
+                    _ent_hist.pop()  # remove estado atual
+                    st.session_state.itens_entrada = [dict(i) for i in _ent_hist[-1]]
+                    st.rerun()
+
+            # ── Remover duplicatas com outra lista salva ──────────────────────
+            with _und2:
+                with st.popover("🔍 Remover duplicatas de outra lista", use_container_width=True):
+                    _listas_disp = api.listar_listas_salvas(tipo="entrada")
+                    _nomes_listas = [l.get("nome", l.get("arquivo", "")) for l in _listas_disp]
+                    if not _nomes_listas:
+                        st.caption("Nenhuma lista de entrada salva.")
+                    else:
+                        _lista_ref = st.selectbox("Comparar com lista:", _nomes_listas, key="ent_dup_lista")
+                        if st.button("🗑️ Remover duplicatas", key="ent_dup_btn", type="primary", use_container_width=True):
+                            _idx_ref = _nomes_listas.index(_lista_ref)
+                            _arq_ref = _listas_disp[_idx_ref].get("_arquivo", "")
+                            _dados_ref = api.carregar_lista(_arq_ref) if _arq_ref else {}
+                            _itens_ref = _dados_ref.get("itens", []) if isinstance(_dados_ref, dict) else (_dados_ref or [])
+                            _vids_ref = {str(i.get("variacao_id", "")) for i in _itens_ref if i.get("variacao_id")}
+                            _antes = len(st.session_state.itens_entrada)
+                            st.session_state.itens_entrada = [
+                                i for i in st.session_state.itens_entrada
+                                if str(i.get("variacao_id", "")) not in _vids_ref
+                            ]
+                            _removidos = _antes - len(st.session_state.itens_entrada)
+                            st.success(f"✅ {_removidos} item(ns) duplicado(s) removido(s).")
+                            st.rerun()
+
             # ── Barra de salvar SEMPRE VISÍVEL (fácil de achar) ───────────────
             _arq_aberto_ent = st.session_state.get("lista_arq_ent")
             st.markdown("##### 💾 Salvar")
