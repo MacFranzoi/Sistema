@@ -8165,7 +8165,7 @@ def _main_content():
     # PÁGINA: GERENCIAR TAREFAS (admin / gerencia)
     # ══════════════════════════════════════════════════════════
     if _pg == "tarefas":
-        with _page("tarefas"):
+        with _guard("tarefas"):
             st.title("📝 Gerenciar Tarefas")
     
             _ant_key_tf = _os.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -8286,7 +8286,7 @@ def _main_content():
     # PÁGINA: MINHAS TAREFAS (todos os usuários)
     # ══════════════════════════════════════════════════════════════
     if _pg == "minhas_tarefas":
-        with _page("minhas_tarefas"):
+        with _guard("minhas_tarefas"):
             _minhas_tf = api.tarefas_do_usuario(_user)
             _pendentes_tf = [t for t in _minhas_tf if t["status"] == "pendente"]
             _concluidas_tf = [t for t in _minhas_tf if t["status"] == "concluido"]
