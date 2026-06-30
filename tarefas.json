@@ -49,6 +49,26 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T15:38:19",
       "concluido_em": null
+    },
+    {
+      "id": "d1c1b8d4-7763-4629-b16b-1aa25bedc4ca",
+      "texto": "Limpar o display do iPhone",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T15:38:20",
+      "concluido_em": null
+    },
+    {
+      "id": "8ed977a9-5db1-4d52-8bb8-2732472bc7e2",
+      "texto": "Limpar os banheiros",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T15:38:21",
+      "concluido_em": null
     }
   ]
 }
