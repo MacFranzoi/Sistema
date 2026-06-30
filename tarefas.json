@@ -139,6 +139,36 @@
       "prioridade": "alta",
       "criado_em": "2026-06-30T16:15:10",
       "concluido_em": null
+    },
+    {
+      "id": "956479e5-044f-487a-9a3d-aa640bea654e",
+      "texto": "Verificar o crédito na hora que o Motoboy chegar",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:11",
+      "concluido_em": null
+    },
+    {
+      "id": "8fdd02eb-d6ea-4f2f-adbc-e54b4b4a97dd",
+      "texto": "Realizar atualização e troca de pasta térmica do celular",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T16:15:11",
+      "concluido_em": null
+    },
+    {
+      "id": "244af4ec-1b28-4ac0-b80d-0d1396c0ea13",
+      "texto": "Verificar as peças",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:12",
+      "concluido_em": null
     }
   ]
 }
