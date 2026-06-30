@@ -9,6 +9,26 @@
       "prioridade": "alta",
       "criado_em": "2026-06-30T14:59:57",
       "concluido_em": null
+    },
+    {
+      "id": "cddac2c1-0904-4604-869a-7b61ad9fbf8e",
+      "texto": "Verificar a manutenção do A31",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T14:59:58",
+      "concluido_em": null
+    },
+    {
+      "id": "bed403ad-2cee-4d74-a7d6-90f70ebeda78",
+      "texto": "Avisar o cliente",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T14:59:58",
+      "concluido_em": null
     }
   ]
 }
