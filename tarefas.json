@@ -39,6 +39,16 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T15:38:18",
       "concluido_em": null
+    },
+    {
+      "id": "9c75ebc6-6c84-46e7-8910-7bff6241def9",
+      "texto": "Passar pano nas capas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T15:38:19",
+      "concluido_em": null
     }
   ]
 }
