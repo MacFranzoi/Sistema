@@ -8168,9 +8168,9 @@ def _main_content():
         with _guard("tarefas"):
             st.title("📝 Gerenciar Tarefas")
     
-            _ant_key_tf = _os.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
-            _openai_key_tf = _os.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", "")
-            _v2_url_tf = _os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
+            _ant_key_tf = os.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
+            _openai_key_tf = os.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", "")
+            _v2_url_tf = os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
     
             # ── Gravar / transcrever ─────────────────────────────
             st.subheader("🎙️ Gravar ou digitar tarefas")
