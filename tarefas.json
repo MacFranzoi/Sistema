@@ -75,10 +75,10 @@
       "texto": "Verificar o crédito na hora que o Motoboy chegar",
       "criado_por": "gustavo",
       "atribuido_para": "gustavo",
-      "status": "pendente",
+      "status": "concluido",
       "prioridade": "alta",
       "criado_em": "2026-06-30T16:15:03",
-      "concluido_em": null
+      "concluido_em": "2026-06-30T19:23:42"
     },
     {
       "id": "0544d692-5a36-4c0f-addb-d53cf8e4ba1f",
@@ -328,6 +328,16 @@
       "status": "pendente",
       "prioridade": "normal",
       "criado_em": "2026-06-30T19:23:16",
+      "concluido_em": null
+    },
+    {
+      "id": "322e527d-b8d3-46b5-8766-5f57ee2a96e8",
+      "texto": "Lavar o banheiro",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:17",
       "concluido_em": null
     }
   ]
