@@ -8161,180 +8161,179 @@ def _main_content():
                 st.success("Permissões salvas! Usuários desse setor verão as mudanças no próximo login.")
                 st.rerun()
 
-
-# ══════════════════════════════════════════════════════════════
-# PÁGINA: GERENCIAR TAREFAS (admin / gerencia)
-# ══════════════════════════════════════════════════════════════
-if _pg == "tarefas":
-    with _page("tarefas"):
-        st.title("📝 Gerenciar Tarefas")
-
-        _ant_key_tf = _os.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
-        _openai_key_tf = _os.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", "")
-        _v2_url_tf = _os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
-
-        # ── Gravar / transcrever ─────────────────────────────
-        st.subheader("🎙️ Gravar ou digitar tarefas")
-        _tf_audio = st.audio_input("Clique para gravar sua voz", key="tf_audio")
-        _tf_texto_rec = st.session_state.get("tf_transcricao", "")
-
-        if _tf_audio:
-            if _openai_key_tf:
-                with st.spinner("Transcrevendo áudio..."):
-                    import requests as _req_tf
-                    try:
-                        _r_tf = _req_tf.post(
-                            f"{_v2_url_tf}/api/voz/transcrever",
-                            files={"audio": ("audio.webm", _tf_audio.getvalue(), "audio/webm")},
-                            timeout=30,
-                        )
-                        _r_tf.raise_for_status()
-                        st.session_state["tf_transcricao"] = _r_tf.json().get("texto", "")
-                    except Exception as _e_tf:
-                        st.warning(f"Erro na transcrição: {_e_tf}")
-            else:
-                st.info("Configure OPENAI_API_KEY para transcrição de áudio automática.")
-
-        _tf_texto = st.text_area(
-            "Texto das tarefas (edite ou cole aqui)",
-            value=st.session_state.get("tf_transcricao", ""),
-            height=120,
-            key="tf_texto_area",
-            placeholder="Ex: Ligar para o fornecedor, repor estoque de capas azuis, verificar entrada do dia...",
-        )
-
-        _col_ia, _col_manual = st.columns([1, 1])
-        with _col_ia:
-            if st.button("🤖 Extrair tarefas com IA", disabled=not _tf_texto.strip(), use_container_width=True):
-                if not _ant_key_tf:
-                    st.error("Configure ANTHROPIC_API_KEY.")
-                else:
-                    with st.spinner("Processando com IA..."):
+    # ══════════════════════════════════════════════════════════
+    # PÁGINA: GERENCIAR TAREFAS (admin / gerencia)
+    # ══════════════════════════════════════════════════════════
+    if _pg == "tarefas":
+        with _page("tarefas"):
+            st.title("📝 Gerenciar Tarefas")
+    
+            _ant_key_tf = _os.environ.get("ANTHROPIC_API_KEY", "") or st.secrets.get("ANTHROPIC_API_KEY", "")
+            _openai_key_tf = _os.environ.get("OPENAI_API_KEY", "") or st.secrets.get("OPENAI_API_KEY", "")
+            _v2_url_tf = _os.environ.get("V2_URL", "http://localhost:8000").rstrip("/")
+    
+            # ── Gravar / transcrever ─────────────────────────────
+            st.subheader("🎙️ Gravar ou digitar tarefas")
+            _tf_audio = st.audio_input("Clique para gravar sua voz", key="tf_audio")
+            _tf_texto_rec = st.session_state.get("tf_transcricao", "")
+    
+            if _tf_audio:
+                if _openai_key_tf:
+                    with st.spinner("Transcrevendo áudio..."):
+                        import requests as _req_tf
                         try:
-                            _res_ia_tf = api.parse_tarefas_ia(_tf_texto, _ant_key_tf)
-                            st.session_state["tf_tarefas_ia"] = _res_ia_tf.get("tarefas", [])
-                        except Exception as _e_ia_tf:
-                            st.error(f"Erro IA: {_e_ia_tf}")
-
-        with _col_manual:
-            if st.button("➕ Adicionar como tarefa única", disabled=not _tf_texto.strip(), use_container_width=True):
-                st.session_state["tf_tarefas_ia"] = [{"texto": _tf_texto.strip(), "prioridade": "normal"}]
-
-        # ── Editar e atribuir tarefas extraídas ─────────────
-        _tf_lista = st.session_state.get("tf_tarefas_ia", [])
-        if _tf_lista:
-            st.divider()
-            st.subheader("📋 Tarefas extraídas — revise e atribua")
-            _usuarios_tf = api.carregar_usuarios()
-            _opcoes_usuarios = [u for u in _usuarios_tf.keys()]
-            _tf_para_salvar = []
-            for _ti, _tt in enumerate(_tf_lista):
-                with st.container(border=True):
-                    _tc1, _tc2, _tc3, _tc4 = st.columns([3, 1, 1, 0.3])
-                    _tt_texto = _tc1.text_input("Tarefa", value=_tt.get("texto", ""), key=f"tf_txt_{_ti}", label_visibility="collapsed")
-                    _tt_prio = _tc2.selectbox("Prioridade", ["alta", "normal", "baixa"],
-                                               index=["alta", "normal", "baixa"].index(_tt.get("prioridade", "normal")),
-                                               key=f"tf_prio_{_ti}", label_visibility="collapsed")
-                    _tt_atrib = _tc3.selectbox("Atribuir a", _opcoes_usuarios, key=f"tf_atrib_{_ti}", label_visibility="collapsed")
-                    _tt_inc = _tc4.checkbox("", value=True, key=f"tf_inc_{_ti}")
-                    if _tt_inc and _tt_texto.strip():
-                        _tf_para_salvar.append({"texto": _tt_texto, "prioridade": _tt_prio, "atribuido_para": _tt_atrib})
-
-            st.markdown(f"**{len(_tf_para_salvar)}** tarefa(s) selecionada(s)")
-            if st.button("💾 Criar tarefas", disabled=not _tf_para_salvar, type="primary", use_container_width=True):
-                for _tt_s in _tf_para_salvar:
-                    api.criar_tarefa(_tt_s["texto"], _user, _tt_s["atribuido_para"], _tt_s["prioridade"])
-                st.success(f"✅ {len(_tf_para_salvar)} tarefa(s) criada(s)!")
-                st.session_state.pop("tf_tarefas_ia", None)
-                st.session_state.pop("tf_transcricao", None)
-                st.rerun()
-
-        # ── Visão geral de todas as tarefas ─────────────────
-        st.divider()
-        st.subheader("📊 Todas as tarefas")
-        _dados_tf = api.carregar_tarefas()
-        _todas_tf = _dados_tf.get("tarefas", [])
-
-        _tf_filtro_status = st.radio("Status", ["pendente", "concluido", "todas"], horizontal=True, key="tf_fil_status")
-        _tf_filtro_usuario = st.selectbox("Funcionário", ["Todos"] + list(api.carregar_usuarios().keys()), key="tf_fil_usuario")
-
-        _tf_exibir = [
-            t for t in _todas_tf
-            if (_tf_filtro_status == "todas" or t["status"] == _tf_filtro_status)
-            and (_tf_filtro_usuario == "Todos" or t["atribuido_para"] == _tf_filtro_usuario)
-        ]
-        _tf_exibir.sort(key=lambda t: (t["status"] == "concluido", ["alta","normal","baixa"].index(t.get("prioridade","normal")), t["criado_em"]))
-
-        _prio_cor = {"alta": "🔴", "normal": "🟡", "baixa": "🟢"}
-        for _t in _tf_exibir:
-            _st_icon = "✅" if _t["status"] == "concluido" else "⬜"
-            _pr_icon = _prio_cor.get(_t.get("prioridade", "normal"), "🟡")
-            with st.expander(f"{_st_icon} {_pr_icon} {_t['texto'][:80]}  — para **{_t['atribuido_para']}**"):
-                st.caption(f"Criado por {_t['criado_por']} em {_t['criado_em'][:16]}")
-                _ec1, _ec2, _ec3 = st.columns(3)
-                if _t["status"] == "pendente":
-                    if _ec1.button("✅ Concluir", key=f"tf_done_{_t['id']}"):
-                        api.atualizar_tarefa(_t["id"], {"status": "concluido"})
-                        st.rerun()
+                            _r_tf = _req_tf.post(
+                                f"{_v2_url_tf}/api/voz/transcrever",
+                                files={"audio": ("audio.webm", _tf_audio.getvalue(), "audio/webm")},
+                                timeout=30,
+                            )
+                            _r_tf.raise_for_status()
+                            st.session_state["tf_transcricao"] = _r_tf.json().get("texto", "")
+                        except Exception as _e_tf:
+                            st.warning(f"Erro na transcrição: {_e_tf}")
                 else:
-                    _ec1.caption(f"Concluído em {(_t.get('concluido_em') or '')[:16]}")
-                if _ec2.button("🗑️ Excluir", key=f"tf_del_{_t['id']}"):
-                    api.excluir_tarefa(_t["id"])
+                    st.info("Configure OPENAI_API_KEY para transcrição de áudio automática.")
+    
+            _tf_texto = st.text_area(
+                "Texto das tarefas (edite ou cole aqui)",
+                value=st.session_state.get("tf_transcricao", ""),
+                height=120,
+                key="tf_texto_area",
+                placeholder="Ex: Ligar para o fornecedor, repor estoque de capas azuis, verificar entrada do dia...",
+            )
+    
+            _col_ia, _col_manual = st.columns([1, 1])
+            with _col_ia:
+                if st.button("🤖 Extrair tarefas com IA", disabled=not _tf_texto.strip(), use_container_width=True):
+                    if not _ant_key_tf:
+                        st.error("Configure ANTHROPIC_API_KEY.")
+                    else:
+                        with st.spinner("Processando com IA..."):
+                            try:
+                                _res_ia_tf = api.parse_tarefas_ia(_tf_texto, _ant_key_tf)
+                                st.session_state["tf_tarefas_ia"] = _res_ia_tf.get("tarefas", [])
+                            except Exception as _e_ia_tf:
+                                st.error(f"Erro IA: {_e_ia_tf}")
+    
+            with _col_manual:
+                if st.button("➕ Adicionar como tarefa única", disabled=not _tf_texto.strip(), use_container_width=True):
+                    st.session_state["tf_tarefas_ia"] = [{"texto": _tf_texto.strip(), "prioridade": "normal"}]
+    
+            # ── Editar e atribuir tarefas extraídas ─────────────
+            _tf_lista = st.session_state.get("tf_tarefas_ia", [])
+            if _tf_lista:
+                st.divider()
+                st.subheader("📋 Tarefas extraídas — revise e atribua")
+                _usuarios_tf = api.carregar_usuarios()
+                _opcoes_usuarios = [u for u in _usuarios_tf.keys()]
+                _tf_para_salvar = []
+                for _ti, _tt in enumerate(_tf_lista):
+                    with st.container(border=True):
+                        _tc1, _tc2, _tc3, _tc4 = st.columns([3, 1, 1, 0.3])
+                        _tt_texto = _tc1.text_input("Tarefa", value=_tt.get("texto", ""), key=f"tf_txt_{_ti}", label_visibility="collapsed")
+                        _tt_prio = _tc2.selectbox("Prioridade", ["alta", "normal", "baixa"],
+                                                   index=["alta", "normal", "baixa"].index(_tt.get("prioridade", "normal")),
+                                                   key=f"tf_prio_{_ti}", label_visibility="collapsed")
+                        _tt_atrib = _tc3.selectbox("Atribuir a", _opcoes_usuarios, key=f"tf_atrib_{_ti}", label_visibility="collapsed")
+                        _tt_inc = _tc4.checkbox("", value=True, key=f"tf_inc_{_ti}")
+                        if _tt_inc and _tt_texto.strip():
+                            _tf_para_salvar.append({"texto": _tt_texto, "prioridade": _tt_prio, "atribuido_para": _tt_atrib})
+    
+                st.markdown(f"**{len(_tf_para_salvar)}** tarefa(s) selecionada(s)")
+                if st.button("💾 Criar tarefas", disabled=not _tf_para_salvar, type="primary", use_container_width=True):
+                    for _tt_s in _tf_para_salvar:
+                        api.criar_tarefa(_tt_s["texto"], _user, _tt_s["atribuido_para"], _tt_s["prioridade"])
+                    st.success(f"✅ {len(_tf_para_salvar)} tarefa(s) criada(s)!")
+                    st.session_state.pop("tf_tarefas_ia", None)
+                    st.session_state.pop("tf_transcricao", None)
                     st.rerun()
-
-
-# ══════════════════════════════════════════════════════════════
-# PÁGINA: MINHAS TAREFAS (todos os usuários)
-# ══════════════════════════════════════════════════════════════
-if _pg == "minhas_tarefas":
-    with _page("minhas_tarefas"):
-        _minhas_tf = api.tarefas_do_usuario(_user)
-        _pendentes_tf = [t for t in _minhas_tf if t["status"] == "pendente"]
-        _concluidas_tf = [t for t in _minhas_tf if t["status"] == "concluido"]
-        _pendentes_tf.sort(key=lambda t: ["alta","normal","baixa"].index(t.get("prioridade","normal")))
-
-        st.title(f"✅ Minhas Tarefas")
-        _mt_p, _mt_c = st.columns(2)
-        _mt_p.metric("Pendentes", len(_pendentes_tf))
-        _mt_c.metric("Concluídas", len(_concluidas_tf))
-
-        # Usuários para reatribuição (excluindo setores admin/gerencia)
-        _udb_mt = api.carregar_usuarios()
-        _sdb_mt = api.carregar_setores()
-        _setores_restr = {"admin", "gerencia"}
-        _usuarios_reatrib = [
-            u for u, d in _udb_mt.items()
-            if u != _user and d.get("setor", "") not in _setores_restr
-        ]
-
-        _prio_cor = {"alta": "🔴", "normal": "🟡", "baixa": "🟢"}
-
-        if _pendentes_tf:
-            st.subheader("📋 Pendentes")
-            for _t in _pendentes_tf:
-                _pr = _prio_cor.get(_t.get("prioridade", "normal"), "🟡")
-                with st.container(border=True):
-                    _mc1, _mc2 = st.columns([5, 1])
-                    _mc1.markdown(f"{_pr} **{_t['texto']}**")
-                    _mc1.caption(f"Criado por {_t['criado_por']} · {_t['criado_em'][:16]}")
-                    if _mc2.button("✅ Feito", key=f"mt_done_{_t['id']}", use_container_width=True):
-                        api.atualizar_tarefa(_t["id"], {"status": "concluido"})
-                        st.rerun()
-                    if _usuarios_reatrib:
-                        _novo_resp = st.selectbox(
-                            "Passar para:", ["—"] + _usuarios_reatrib,
-                            key=f"mt_reatrib_{_t['id']}", label_visibility="collapsed"
-                        )
-                        if _novo_resp != "—":
-                            api.atualizar_tarefa(_t["id"], {"atribuido_para": _novo_resp})
+    
+            # ── Visão geral de todas as tarefas ─────────────────
+            st.divider()
+            st.subheader("📊 Todas as tarefas")
+            _dados_tf = api.carregar_tarefas()
+            _todas_tf = _dados_tf.get("tarefas", [])
+    
+            _tf_filtro_status = st.radio("Status", ["pendente", "concluido", "todas"], horizontal=True, key="tf_fil_status")
+            _tf_filtro_usuario = st.selectbox("Funcionário", ["Todos"] + list(api.carregar_usuarios().keys()), key="tf_fil_usuario")
+    
+            _tf_exibir = [
+                t for t in _todas_tf
+                if (_tf_filtro_status == "todas" or t["status"] == _tf_filtro_status)
+                and (_tf_filtro_usuario == "Todos" or t["atribuido_para"] == _tf_filtro_usuario)
+            ]
+            _tf_exibir.sort(key=lambda t: (t["status"] == "concluido", ["alta","normal","baixa"].index(t.get("prioridade","normal")), t["criado_em"]))
+    
+            _prio_cor = {"alta": "🔴", "normal": "🟡", "baixa": "🟢"}
+            for _t in _tf_exibir:
+                _st_icon = "✅" if _t["status"] == "concluido" else "⬜"
+                _pr_icon = _prio_cor.get(_t.get("prioridade", "normal"), "🟡")
+                with st.expander(f"{_st_icon} {_pr_icon} {_t['texto'][:80]}  — para **{_t['atribuido_para']}**"):
+                    st.caption(f"Criado por {_t['criado_por']} em {_t['criado_em'][:16]}")
+                    _ec1, _ec2, _ec3 = st.columns(3)
+                    if _t["status"] == "pendente":
+                        if _ec1.button("✅ Concluir", key=f"tf_done_{_t['id']}"):
+                            api.atualizar_tarefa(_t["id"], {"status": "concluido"})
                             st.rerun()
-        else:
-            st.success("Nenhuma tarefa pendente! 🎉")
-
-        if _concluidas_tf:
-            with st.expander(f"Ver {len(_concluidas_tf)} concluída(s)"):
-                for _t in sorted(_concluidas_tf, key=lambda t: t.get("concluido_em",""), reverse=True):
-                    st.markdown(f"~~{_t['texto']}~~  \n<small>Concluído em {(_t.get('concluido_em') or '')[:16]}</small>", unsafe_allow_html=True)
-
-
+                    else:
+                        _ec1.caption(f"Concluído em {(_t.get('concluido_em') or '')[:16]}")
+                    if _ec2.button("🗑️ Excluir", key=f"tf_del_{_t['id']}"):
+                        api.excluir_tarefa(_t["id"])
+                        st.rerun()
+    
+    
+    # ══════════════════════════════════════════════════════════════
+    # PÁGINA: MINHAS TAREFAS (todos os usuários)
+    # ══════════════════════════════════════════════════════════════
+    if _pg == "minhas_tarefas":
+        with _page("minhas_tarefas"):
+            _minhas_tf = api.tarefas_do_usuario(_user)
+            _pendentes_tf = [t for t in _minhas_tf if t["status"] == "pendente"]
+            _concluidas_tf = [t for t in _minhas_tf if t["status"] == "concluido"]
+            _pendentes_tf.sort(key=lambda t: ["alta","normal","baixa"].index(t.get("prioridade","normal")))
+    
+            st.title(f"✅ Minhas Tarefas")
+            _mt_p, _mt_c = st.columns(2)
+            _mt_p.metric("Pendentes", len(_pendentes_tf))
+            _mt_c.metric("Concluídas", len(_concluidas_tf))
+    
+            # Usuários para reatribuição (excluindo setores admin/gerencia)
+            _udb_mt = api.carregar_usuarios()
+            _sdb_mt = api.carregar_setores()
+            _setores_restr = {"admin", "gerencia"}
+            _usuarios_reatrib = [
+                u for u, d in _udb_mt.items()
+                if u != _user and d.get("setor", "") not in _setores_restr
+            ]
+    
+            _prio_cor = {"alta": "🔴", "normal": "🟡", "baixa": "🟢"}
+    
+            if _pendentes_tf:
+                st.subheader("📋 Pendentes")
+                for _t in _pendentes_tf:
+                    _pr = _prio_cor.get(_t.get("prioridade", "normal"), "🟡")
+                    with st.container(border=True):
+                        _mc1, _mc2 = st.columns([5, 1])
+                        _mc1.markdown(f"{_pr} **{_t['texto']}**")
+                        _mc1.caption(f"Criado por {_t['criado_por']} · {_t['criado_em'][:16]}")
+                        if _mc2.button("✅ Feito", key=f"mt_done_{_t['id']}", use_container_width=True):
+                            api.atualizar_tarefa(_t["id"], {"status": "concluido"})
+                            st.rerun()
+                        if _usuarios_reatrib:
+                            _novo_resp = st.selectbox(
+                                "Passar para:", ["—"] + _usuarios_reatrib,
+                                key=f"mt_reatrib_{_t['id']}", label_visibility="collapsed"
+                            )
+                            if _novo_resp != "—":
+                                api.atualizar_tarefa(_t["id"], {"atribuido_para": _novo_resp})
+                                st.rerun()
+            else:
+                st.success("Nenhuma tarefa pendente! 🎉")
+    
+            if _concluidas_tf:
+                with st.expander(f"Ver {len(_concluidas_tf)} concluída(s)"):
+                    for _t in sorted(_concluidas_tf, key=lambda t: t.get("concluido_em",""), reverse=True):
+                        st.markdown(f"~~{_t['texto']}~~  \n<small>Concluído em {(_t.get('concluido_em') or '')[:16]}</small>", unsafe_allow_html=True)
+    
+    
 _main_content()
