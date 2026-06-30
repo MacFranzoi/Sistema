@@ -1061,6 +1061,8 @@ if not _health.get("github_ok"):
 _MENU_FULL = [
     # GERAL
     ("dashboard",       "🏠", "Dashboard",           "GERAL",        None,  False),
+    ("tarefas",         "📝", "Gerenciar Tarefas",   "GERAL",        None,  False),
+    ("minhas_tarefas",  "✅", "Minhas Tarefas",      "GERAL",        None,  False),
     # CADASTROS
     ("clientes",        "👥", "Clientes",             "CADASTROS",    None,  False),
     ("fornecedores",    "🏭", "Fornecedores",         "CADASTROS",    None,  False),
@@ -1087,9 +1089,6 @@ _MENU_FULL = [
     # RELATÓRIOS
     ("relatorios",      "📊", "Relatórios",           "RELATÓRIOS",   None,  False),
     ("rel_estoque",     "📦", "Estoque",              "RELATÓRIOS",   None,  False),
-    # TAREFAS
-    ("tarefas",         "📝", "Gerenciar Tarefas",    "TAREFAS",      None,  False),
-    ("minhas_tarefas",  "✅", "Minhas Tarefas",       "TAREFAS",      None,  False),
     # CONFIG
     ("sincronizacao",   "🔄", "Sincronização",        "CONFIGURAÇÕES",None,  False),
     ("listas",          "📋", "Listas",               "CONFIGURAÇÕES",None,  False),

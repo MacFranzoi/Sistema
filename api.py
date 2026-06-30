@@ -46,7 +46,8 @@ _SETORES_PADRAO = {
     "admin": {
         "label": "Administrador",
         "paginas": [
-            "dashboard","clientes","fornecedores",
+            "dashboard","tarefas","minhas_tarefas",
+            "clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
             "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas","aprovacoes",
@@ -58,7 +59,8 @@ _SETORES_PADRAO = {
     "gerencia": {
         "label": "Gerência",
         "paginas": [
-            "dashboard","clientes","fornecedores",
+            "dashboard","tarefas","minhas_tarefas",
+            "clientes","fornecedores",
             "novo_modelo","clonar_modelo","precos",
             "vendas","orcamentos",
             "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas","aprovacoes",
@@ -70,7 +72,7 @@ _SETORES_PADRAO = {
     "estoque": {
         "label": "Estoque",
         "paginas": [
-            "dashboard",
+            "dashboard","minhas_tarefas",
             "entrada","acerto","estoque_loja","balanco_lojas","disponibilidade","etiquetas",
             "pedido","compras_hist",
             "rel_estoque",
@@ -79,7 +81,7 @@ _SETORES_PADRAO = {
     "compras": {
         "label": "Compras",
         "paginas": [
-            "dashboard",
+            "dashboard","minhas_tarefas",
             "pedido","compras_hist",
             "estoque_loja","disponibilidade",
         ],
@@ -87,7 +89,7 @@ _SETORES_PADRAO = {
     "vendas": {
         "label": "Vendas",
         "paginas": [
-            "dashboard",
+            "dashboard","minhas_tarefas",
             "vendas","orcamentos",
             "estoque_loja","disponibilidade","etiquetas",
         ],
