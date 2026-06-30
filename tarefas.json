@@ -79,6 +79,26 @@
       "prioridade": "alta",
       "criado_em": "2026-06-30T16:15:03",
       "concluido_em": null
+    },
+    {
+      "id": "0544d692-5a36-4c0f-addb-d53cf8e4ba1f",
+      "texto": "Verificar as peças",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:04",
+      "concluido_em": null
+    },
+    {
+      "id": "569e91a4-a372-48b9-a090-b4d9be53d9b9",
+      "texto": "Avisar o cliente que o celular vai ficar pronto somente amanhã",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:05",
+      "concluido_em": null
     }
   ]
 }
