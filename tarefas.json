@@ -269,6 +269,56 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T19:23:13",
       "concluido_em": null
+    },
+    {
+      "id": "270b38ae-4a34-47d8-acec-a9d44390a743",
+      "texto": "Passar pano na loja",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:14",
+      "concluido_em": null
+    },
+    {
+      "id": "503693f8-54dd-4307-8c25-7665d73dd591",
+      "texto": "Conferir as etiquetas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:14",
+      "concluido_em": null
+    },
+    {
+      "id": "01abadba-dcd8-47d2-b49f-c0487eb316c7",
+      "texto": "Lavar o banheiro",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:14",
+      "concluido_em": null
+    },
+    {
+      "id": "f24b5ff8-1aad-4144-870c-91795ba20b7e",
+      "texto": "Varrer a frente",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:14",
+      "concluido_em": null
+    },
+    {
+      "id": "1e2c206f-6b0f-4fd9-a045-df192f4884b1",
+      "texto": "Limpar as capas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:15",
+      "concluido_em": null
     }
   ]
 }
