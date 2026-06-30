@@ -239,6 +239,36 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T19:23:11",
       "concluido_em": null
+    },
+    {
+      "id": "bd25d498-c4a4-429c-aa7f-67cc274fea0e",
+      "texto": "Lavar o banheiro",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:11",
+      "concluido_em": null
+    },
+    {
+      "id": "11cf2079-8e0c-4138-a635-43cc2ce9ef82",
+      "texto": "Varrer a frente",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:12",
+      "concluido_em": null
+    },
+    {
+      "id": "27b7a702-83d6-41ce-8129-e1257e571e0d",
+      "texto": "Limpar as capas",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "normal",
+      "criado_em": "2026-06-30T19:23:13",
+      "concluido_em": null
     }
   ]
 }
