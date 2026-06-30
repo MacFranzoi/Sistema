@@ -69,6 +69,16 @@
       "prioridade": "normal",
       "criado_em": "2026-06-30T15:38:21",
       "concluido_em": null
+    },
+    {
+      "id": "e8683f19-cad7-4580-b9a5-d5e704814834",
+      "texto": "Verificar o crédito na hora que o Motoboy chegar",
+      "criado_por": "gustavo",
+      "atribuido_para": "gustavo",
+      "status": "pendente",
+      "prioridade": "alta",
+      "criado_em": "2026-06-30T16:15:03",
+      "concluido_em": null
     }
   ]
 }
