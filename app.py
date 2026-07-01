@@ -5897,6 +5897,18 @@ def _main_content():
                     "Estoque-alvo por cor", min_value=0, max_value=999, value=2, step=1, key="sug_alvo",
                     help="Considera em falta tudo abaixo deste nível.")
 
+                _sg_instrucao = ""
+                if _sg_usar_ia:
+                    _sg_instrucao = st.text_area(
+                        "💬 Como você quer a reposição? (opcional)",
+                        key="sug_instrucao",
+                        height=80,
+                        placeholder="Ex.: priorize fones KD 7019, KD 780 e T-666 que estão zerados; "
+                                    "inclua adaptador USB tipo C e cabos de borracha USB iOS e V8; "
+                                    "priorize Power Bank MagSafe Knc8885 5000mAh e caixas de som...",
+                        help="Descreva em texto livre o que a IA deve priorizar, itens específicos "
+                             "que estão zerados, ou qualquer regra especial para este pedido.")
+
                 _sgA, _sgB = st.columns(2)
                 _sg_qtd_modelo = _sgA.number_input(
                     "Capas por modelo (meta)", min_value=0, max_value=500, value=0, step=1,
@@ -5949,7 +5961,7 @@ def _main_content():
                                     max_modelos=int(_sg_max_modelos),
                                 )
                                 if _sg_usar_ia:
-                                    _sg_res = api.sugerir_pedido_ia(**_kw)
+                                    _sg_res = api.sugerir_pedido_ia(instrucao_extra=_sg_instrucao.strip(), **_kw)
                                 else:
                                     _sg_res = api.sugerir_pedido_reposicao(usar_vendas=True, **_kw)
                                 st.session_state["sug_resultado"] = _sg_res
