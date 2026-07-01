@@ -3779,15 +3779,24 @@ Retorne APENAS JSON válido:
 - retorne só o JSON, sem explicações"""
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1024,
+        max_tokens=4096,
         messages=[{"role":"user","content":prompt}]
     )
     import json as _j, re as _re
     raw = msg.content[0].text
     m = _re.search(r'\[.*\]', raw, _re.DOTALL)
-    if m:
-        return _j.loads(m.group())
-    return _j.loads(raw)
+    _json_str = m.group() if m else raw
+    try:
+        return _j.loads(_json_str, strict=False)
+    except _j.JSONDecodeError:
+        # Resposta truncada — recupera os itens completos e descarta o resto
+        # em vez de perder o pedido inteiro com uma exceção genérica.
+        _ultimo_ok = _json_str.rfind('},')
+        if _ultimo_ok == -1:
+            _ultimo_ok = _json_str.rfind('}')
+        if _ultimo_ok > 0:
+            return _j.loads(_json_str[:_ultimo_ok + 1] + ']', strict=False)
+        raise
 
 
 # ──────────────────────────────────────────────

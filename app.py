@@ -3434,10 +3434,18 @@ def _main_content():
                 else:
                     with st.spinner("Analisando com IA…"):
                         try:
-                            _cat_resumo = "\n".join(
-                                f"{p.get('codigo_interno','')} | {p.get('nome','')}"
-                                for p in cache.get("produtos",[])[:300]
-                            )
+                            # Catálogo completo (deduplicado por código) — antes cortava
+                            # nos primeiros 300 produtos, deixando acessórios (fones,
+                            # cabos, adaptadores, power bank) de fora e sempre "não
+                            # encontrado" para a IA.
+                            _cat_visto_ent = set()
+                            _cat_linhas_ent = []
+                            for _p_ent in cache.get("produtos", []):
+                                _cod_ent = _p_ent.get("codigo_interno", "")
+                                if _cod_ent and _cod_ent not in _cat_visto_ent:
+                                    _cat_visto_ent.add(_cod_ent)
+                                    _cat_linhas_ent.append(f"{_cod_ent} | {_p_ent.get('nome','')}")
+                            _cat_resumo = "\n".join(_cat_linhas_ent)[:30000]
                             _wpp_result = api.parse_entrada_whatsapp(_ent_wpp_txt, _cat_resumo)
                             _ci_map_wpp = {p.get("codigo_interno","").lower(): p for p in cache.get("produtos",[])}
                             _adicionados = 0
@@ -4798,12 +4806,21 @@ def _main_content():
                         _texto_proc = "\n".join(_linhas_ia)
 
                         _prods_all = cache.get("produtos", [])
-                        # Deduplica por nome e ordena: evita cortar modelos por limite de caracteres
-                        _nomes_cat = sorted({
-                            _p.get("nome", "").strip()
-                            for _p in _prods_all if _p.get("nome", "").strip()
-                        })
-                        _catalogo_txt = "\n".join(_nomes_cat)[:20000]
+                        # Deduplica por nome (mantendo o código real) e ordena:
+                        # evita cortar modelos por limite de caracteres. O código
+                        # enviado é o de verdade — antes mandávamos só o nome mas
+                        # dizíamos à IA "cod_interno | nome", fazendo ela inventar
+                        # códigos inexistentes (prejudicava sobretudo acessórios).
+                        _cat_por_nome = {}
+                        for _p in _prods_all:
+                            _nm_c = _p.get("nome", "").strip()
+                            if _nm_c and _nm_c not in _cat_por_nome:
+                                _cat_por_nome[_nm_c] = _p.get("codigo_interno", "") or ""
+                        _linhas_cat = [
+                            f"{_cat_por_nome[_nm_c] or '—'} | {_nm_c}"
+                            for _nm_c in sorted(_cat_por_nome)
+                        ]
+                        _catalogo_txt = "\n".join(_linhas_cat)[:30000]
 
                         _kits_disponiveis = list(_WPP_KITS.keys())
 
