@@ -1,0 +1,370 @@
+{
+  "nome": "bip",
+  "tipo": "entrada",
+  "loja_id": null,
+  "loja_nome": "Todas",
+  "criado_em": "2026-07-02T14:49:04.763729",
+  "ordem": 16,
+  "itens": [
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452190",
+      "variacao_cod": "iPhone14Plus0102",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452120",
+      "variacao_cod": "iPhone14Plus0033",
+      "variacao_nome": "Preto / Silicone Liquido",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56559240",
+      "produto_nome": "iPhone 15 Plus",
+      "cod_interno": "iPhone15Plus",
+      "variacao_id": "95725820",
+      "variacao_cod": "iPhone15Plus0102",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452108",
+      "variacao_cod": "iPhone14Plus0021",
+      "variacao_nome": "Rosa Claro / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452187",
+      "variacao_cod": "iPhone14Plus0099",
+      "variacao_nome": "R$49,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452125",
+      "variacao_cod": "iPhone14Plus0038",
+      "variacao_nome": "Azul Marinho / Silicone Liquido",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452197",
+      "variacao_cod": "iPhone14Plus0109",
+      "variacao_nome": "- / Silicone",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452161",
+      "variacao_cod": "iPhone14Plus0073",
+      "variacao_nome": "R$99,99 / MagSafe",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56407231",
+      "produto_nome": "iPhone 14 Plus",
+      "cod_interno": "iPhone14Plus",
+      "variacao_id": "95452160",
+      "variacao_cod": "iPhone14Plus0072",
+      "variacao_nome": "Transparente / MagSafe",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452341",
+      "variacao_cod": "iPhone14Pro0101",
+      "variacao_nome": "R$69,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452342",
+      "variacao_cod": "iPhone14Pro0102",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 7
+    },
+    {
+      "produto_id": "56507394",
+      "produto_nome": "iPhone 15 Pro",
+      "cod_interno": "iPhone15Pro",
+      "variacao_id": "95625887",
+      "variacao_cod": "iPhone15Pro0101",
+      "variacao_nome": "R$69,99 / Diversos",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452317",
+      "variacao_cod": "iPhone14Pro0077",
+      "variacao_nome": "R$139,99 / MagSafe",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56507400",
+      "produto_nome": "iPhone 15 Pro Max",
+      "cod_interno": "iPhone15ProMax",
+      "variacao_id": "95625975",
+      "variacao_cod": "iPhone15ProMax0076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56507400",
+      "produto_nome": "iPhone 15 Pro Max",
+      "cod_interno": "iPhone15ProMax",
+      "variacao_id": "95626003",
+      "variacao_cod": "iPhone15ProMax0104",
+      "variacao_nome": "R$99,99 / Diversos",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452318",
+      "variacao_cod": "iPhone14Pro0078",
+      "variacao_nome": "R$149,99 / MagSafe",
+      "quantidade": 4
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452333",
+      "variacao_cod": "iPhone14Pro0093",
+      "variacao_nome": "- / Couro",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452315",
+      "variacao_cod": "iPhone14Pro0075",
+      "variacao_nome": "R$119,99 / MagSafe",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56407259",
+      "produto_nome": "iPhone 14 Pro",
+      "cod_interno": "iPhone14Pro",
+      "variacao_id": "95452316",
+      "variacao_cod": "iPhone14Pro0076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457059",
+      "variacao_cod": "iPhone14ProMax0100",
+      "variacao_nome": "R$59,99 / Diversos",
+      "quantidade": 9
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456980",
+      "variacao_cod": "iPhone14ProMax0021",
+      "variacao_nome": "Rosa Claro / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456977",
+      "variacao_cod": "iPhone14ProMax0018",
+      "variacao_nome": "Pink / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456973",
+      "variacao_cod": "iPhone14ProMax0014",
+      "variacao_nome": "Lilás / Aveludada",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457035",
+      "variacao_cod": "iPhone14ProMax0076",
+      "variacao_nome": "R$129,99 / MagSafe",
+      "quantidade": 7
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457024",
+      "variacao_cod": "iPhone14ProMax0065",
+      "variacao_nome": "Preto / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457028",
+      "variacao_cod": "iPhone14ProMax0069",
+      "variacao_nome": "Lilás / Space 2",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "69938779",
+      "produto_nome": "Space",
+      "cod_interno": "Space",
+      "variacao_id": "118401432",
+      "variacao_cod": "SpaceIP14PROMAX",
+      "variacao_nome": "iPhone 14 Pro Max",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456964",
+      "variacao_cod": "iPhone14ProMax0005",
+      "variacao_nome": "Azul Claro / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457036",
+      "variacao_cod": "iPhone14ProMax0077",
+      "variacao_nome": "R$139,99 / MagSafe",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456992",
+      "variacao_cod": "iPhone14ProMax0033",
+      "variacao_nome": "Preto / Silicone Liquido",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457032",
+      "variacao_cod": "iPhone14ProMax0073",
+      "variacao_nome": "R$99,99 / MagSafe",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456989",
+      "variacao_cod": "iPhone14ProMax0030",
+      "variacao_nome": "Vermelho / Aveludada",
+      "quantidade": 2
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457005",
+      "variacao_cod": "iPhone14ProMax0046",
+      "variacao_nome": "Lilás / Silicone Liquido",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457060",
+      "variacao_cod": "iPhone14ProMax0101",
+      "variacao_nome": "R$69,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456965",
+      "variacao_cod": "iPhone14ProMax0006",
+      "variacao_nome": "Azul Marinho / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95456971",
+      "variacao_cod": "iPhone14ProMax0012",
+      "variacao_nome": "Fucsia / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56410199",
+      "produto_nome": "iPhone 14 Pro Max",
+      "cod_interno": "iPhone14ProMax",
+      "variacao_id": "95457061",
+      "variacao_cod": "iPhone14ProMax0102",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56507400",
+      "produto_nome": "iPhone 15 Pro Max",
+      "cod_interno": "iPhone15ProMax",
+      "variacao_id": "95625917",
+      "variacao_cod": "iPhone15ProMax0018",
+      "variacao_nome": "Pink / Aveludada",
+      "quantidade": 1
+    },
+    {
+      "produto_id": "56507400",
+      "produto_nome": "iPhone 15 Pro Max",
+      "cod_interno": "iPhone15ProMax",
+      "variacao_id": "95626001",
+      "variacao_cod": "iPhone15ProMax0102",
+      "variacao_nome": "R$79,99 / Diversos",
+      "quantidade": 3
+    },
+    {
+      "produto_id": "56507400",
+      "produto_nome": "iPhone 15 Pro Max",
+      "cod_interno": "iPhone15ProMax",
+      "variacao_id": "95625972",
+      "variacao_cod": "iPhone15ProMax0073",
+      "variacao_nome": "R$99,99 / MagSafe",
+      "quantidade": 1
+    }
+  ]
+}
